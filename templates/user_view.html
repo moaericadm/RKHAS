@@ -1,0 +1,209 @@
+{% extends "base.html" %} {% block title %}قائمة النقاط{% endblock %} {% block
+header_title %}قائمة نقاط الرخاص (تحديث مباشر){% endblock %} {% block content %}
+<div class="row g-4">
+  <!-- العمود الرئيسي للجدول -->
+  <div class="col-lg-8">
+    <div class="card shadow-lg h-100">
+      <div
+        class="card-header d-flex flex-wrap align-items-center justify-content-between"
+      >
+        <div class="d-flex align-items-center">
+          <i class="bi bi-bar-chart-line-fill me-2 fs-5"></i>
+          <span class="fs-5">الترتيب العام لكل رخيص</span>
+        </div>
+        <div class="mt-2 mt-md-0">
+          <input
+            type="search"
+            id="searchInput"
+            class="form-control form-control-sm"
+            placeholder="🔍 ابحث عن رخيص..."
+          />
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th scope="col" style="width: 10%">الترتيب</th>
+                <th scope="col">اسم الرخيص</th>
+                <th scope="col" class="text-center">النقاط</th>
+                <th scope="col" class="text-center" style="width: 20%">
+                  الإعجابات
+                </th>
+              </tr>
+            </thead>
+            <tbody id="user-table-body">
+              <!-- مؤشر التحميل الأولي -->
+              <tr>
+                <td colspan="4" class="text-center py-5">
+                  <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                  </div>
+                  <p class="mt-2 mb-0">جاري التحميل...</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- العمود الجانبي لقاعة المشاهير -->
+  <div class="col-lg-4">
+    <div class="card shadow-lg">
+      <div class="card-header bg-warning text-dark d-flex align-items-center">
+        <i class="bi bi-trophy-fill me-2 fs-5"></i>
+        <span class="fs-5">توب 3 لحيسة</span>
+      </div>
+      <ul class="list-group list-group-flush" id="hall-of-fame">
+        <!-- مؤشر التحميل الأولي -->
+        <li class="list-group-item text-center p-3">
+          <div
+            class="spinner-border spinner-border-sm text-secondary"
+            role="status"
+          ></div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<!-- Firebase JavaScript SDKs -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+      try {
+          const firebaseConfig = {{ firebase_config|tojson }};
+          if (!firebaseConfig.apiKey) throw new Error("إعدادات Firebase غير مكتملة.");
+          firebase.initializeApp(firebaseConfig);
+      } catch (e) {
+          console.error("خطأ في تهيئة Firebase:", e);
+          displayError("خطأ في الاتصال بإعدادات Firebase.");
+          return;
+      }
+
+      const database = firebase.database();
+      const usersRef = database.ref('users');
+      const leaderRef = database.ref('leader_info');
+      let likedUsers = JSON.parse(localStorage.getItem('likedUsers')) || {};
+      let allUsersCache = [];
+      let leaderInfoCache = {};
+
+      const userTableBody = document.getElementById('user-table-body');
+      const hallOfFameList = document.getElementById('hall-of-fame');
+      const searchInput = document.getElementById('searchInput');
+
+      function formatNumber(num) {
+          return new Intl.NumberFormat('en-US').format(num || 0);
+      }
+
+      function displayError(message) {
+          userTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-5"><strong>${message}</strong></td></tr>`;
+      }
+
+      window.handleLike = async function(button, username) {
+          const isCurrentlyLiked = likedUsers[username];
+          const action = isCurrentlyLiked ? 'unlike' : 'like';
+          button.disabled = true;
+          try {
+              const formData = new FormData();
+              formData.append('action', action);
+              const response = await fetch(`/like/${username}`, { method: 'POST', body: formData });
+              if (!response.ok) throw new Error('فشل الطلب إلى الخادم');
+              if (isCurrentlyLiked) { delete likedUsers[username]; }
+              else { likedUsers[username] = true; }
+              localStorage.setItem('likedUsers', JSON.stringify(likedUsers));
+          } catch (error) {
+              console.error("Failed to update like:", error);
+              button.disabled = false;
+          }
+      }
+
+      function renderUI() {
+          const searchTerm = searchInput.value.toLowerCase();
+          const filteredUsers = allUsersCache.filter(user => user.name.toLowerCase().includes(searchTerm));
+          renderMainTable(filteredUsers);
+          renderHallOfFame(allUsersCache);
+      }
+
+      function renderMainTable(usersToRender) {
+          userTableBody.innerHTML = '';
+          if (usersToRender.length > 0) {
+              usersToRender.forEach(user => {
+                  const originalIndex = allUsersCache.findIndex(u => u.name === user.name) + 1;
+                  const row = document.createElement('tr');
+                  let leaderBadge = '';
+                  if (originalIndex === 1 && user.name === leaderInfoCache.name) {
+                      const timeSinceLeader = (Date.now() / 1000) - leaderInfoCache.timestamp;
+                      if (timeSinceLeader < 600) {
+                          leaderBadge = '<span class="badge bg-danger ms-2">متصدر جديد!</span>';
+                      }
+                  }
+                  const isLiked = likedUsers[user.name];
+                  const likeButton = `<button class="btn btn-sm like-btn ${isLiked ? 'btn-primary liked' : 'btn-outline-primary'}" onclick="handleLike(this, '${user.name}')" title="${isLiked ? 'إلغاء الإعجاب' : 'إعجاب'}"><span class="fw-bold">() 👍 </span><span class="badge bg-light text-dark ms-1">${formatNumber(user.likes)}</span></button>`;
+                  row.innerHTML = `<th scope="row" class="fs-5 align-middle">#${originalIndex}</th><td class="align-middle">${user.name || ''} ${leaderBadge}</td><td class="fs-5 fw-bold text-center align-middle">${formatNumber(user.points)}</td><td class="text-center align-middle">${likeButton}</td>`;
+                  userTableBody.appendChild(row);
+              });
+          } else {
+              userTableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4">${searchInput.value ? 'لا يوجد مستخدم يطابق هذا البحث.' : 'لا يوجد بيانات لعرضها.'}</td></tr>`;
+          }
+      }
+
+      function renderHallOfFame(allUsers) {
+          hallOfFameList.innerHTML = '';
+          const medals = ['🥇', '🥈', '🥉'];
+          const topUsers = allUsers.slice(0, 3);
+          if (topUsers.length > 0) {
+              topUsers.forEach((user, index) => {
+                  const listItem = document.createElement('li');
+                  listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                  listItem.innerHTML = `<span>${medals[index] || '⭐'} ${user.name}</span><span class="badge bg-primary rounded-pill">${formatNumber(user.points)}</span>`;
+                  hallOfFameList.appendChild(listItem);
+              });
+          } else {
+              hallOfFameList.innerHTML = '<li class="list-group-item text-center">لا يوجد أبطال بعد.</li>';
+          }
+      }
+
+      function setupListeners() {
+          searchInput.addEventListener('input', renderUI);
+
+          usersRef.on('value', (userSnapshot) => {
+              const usersData = userSnapshot.val();
+
+              leaderRef.once('value').then(leaderSnapshot => {
+                  leaderInfoCache = leaderSnapshot.val() || {};
+
+                  if (usersData && typeof usersData === 'object') {
+                      // الطريقة الجديدة التي تستخدم المفتاح كاسم
+                      allUsersCache = Object.keys(usersData).map(key => {
+                          const userData = usersData[key];
+                          // نتأكد أن البيانات هي كائن
+                          if (userData && typeof userData === 'object') {
+                              return {
+                                  name: key, // <-- التعديل الأهم
+                                  points: userData.points || 0,
+                                  likes: userData.likes || 0
+                              };
+                          }
+                          return null;
+                      }).filter(Boolean).sort((a, b) => (b.points || 0) - (a.points || 0));
+                  } else {
+                      allUsersCache = [];
+                  }
+                  renderUI();
+              });
+          }, (error) => {
+              console.error("Firebase read failed:", error);
+              displayError("فشل تحديث البيانات. يرجى التحقق من الاتصال.");
+          });
+      }
+
+      setupListeners();
+  });
+</script>
+{% endblock %}

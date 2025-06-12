@@ -1,0 +1,80 @@
+{% extends "base.html" %} {% block title %}لوحة التحكم{% endblock %} {% block
+header_title %}لوحة تحكم المسؤول{% endblock %} {% block content %}
+<div class="card mb-4 shadow-lg">
+  <div class="card-header d-flex align-items-center">
+    <i class="bi bi-person-plus-fill me-2 fs-5"></i>
+    <span class="fs-5">إدارة المستخدمين</span>
+  </div>
+  <div class="card-body">
+    <form id="addUserForm">
+      <div class="row g-3 align-items-center">
+        <div class="col-md-5">
+          <div class="form-floating">
+            <input
+              type="text"
+              class="form-control"
+              id="nameInput"
+              name="name"
+              placeholder="اسم الرخيص"
+              required
+            />
+            <label for="nameInput">اسم الرخيص</label>
+          </div>
+        </div>
+        <div class="col-md-5">
+          <div class="form-floating">
+            <input
+              type="number"
+              class="form-control"
+              id="pointsInput"
+              name="points"
+              placeholder="النقاط"
+              required
+            />
+            <label for="pointsInput">النقاط</label>
+          </div>
+        </div>
+        <div class="col-md-2 d-grid">
+          <button type="submit" class="btn btn-primary btn-lg">إضافة</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-lg">
+  <div class="card-header d-flex align-items-center">
+    <i class="bi bi-list-stars me-2 fs-5"></i>
+    <span class="fs-5">قائمة المستخدمين</span>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th scope="col" style="width: 10%">الترتيب</th>
+            <th scope="col">اسم المستخدم</th>
+            <th scope="col" class="text-center" style="width: 30%">
+              النقاط (تعديل سريع)
+            </th>
+            <th scope="col" class="text-center">اللايكات</th>
+            <th scope="col" class="text-center">إجراء</th>
+          </tr>
+        </thead>
+        <tbody id="admin-table-body">
+          <!-- مؤشر التحميل الأولي -->
+          <tr>
+            <td colspan="5" class="text-center py-5">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %} {% block title %}تسجيل الدخول{% endblock %} {% block
+header_title %}نظام كلية (IT) لإدارة نقاط رخاص الكس الرسمي{% endblock %} {%
+block content %}
+<div class="row justify-content-center">
+  <!-- عمود لنموذج تسجيل الدخول -->
+  <div class="col-md-6 col-lg-5">
+    <div class="card p-4 shadow-lg">
+      <div class="card-body">
+        <h5 class="card-title text-center mb-4 fs-4">دخول المسؤول</h5>
+
+        <form id="loginForm">
+          <div class="form-floating mb-3">
+            <input
+              type="password"
+              class="form-control"
+              id="password"
+              name="password"
+              placeholder="كلمة المرور"
+              required
+            />
+            <label for="password">كلمة المرور</label>
+          </div>
+          <div class="d-grid gap-2 mt-4">
+            <button type="submit" class="btn btn-primary btn-lg">
+              دخول كمسؤول
+            </button>
+            <a href="{{ url_for('user_view') }}" class="btn btn-outline-success"
+              >عرض نقاط الرخاص</a
+            >
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- صف جديد للنص السفلي لضمان التنسيق الصحيح -->
+<div class="row justify-content-center mt-5">
+  <div class="col-lg-8">
+    <hr />
+    <p class="text-center text-muted mt-4">
+      تم انشاء هذا النظام من قبل مطورين الكلية IT للكشف عن كل من له علاقة برخصنة
+      الكس, وتم تسجيل ذلك بنقاط لتدل على اسباقيات اقوال تم اخذها من عامة طلاب
+      وطالبات كلية IT ليكون كل رخيص كس في عين الاعتبار مع الادلة والبراهين,
+      زيارة ممتعة.
+    </p>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const loginForm = document.getElementById("loginForm");
+
+    if (loginForm) {
+      loginForm.addEventListener("submit", async function (event) {
+        event.preventDefault(); // منع تحديث الصفحة
+
+        const form = event.target;
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        const originalButtonText = submitButton.innerHTML;
+
+        submitButton.disabled = true;
+        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جاري التحقق...`;
+
+        try {
+          const response = await fetch("{{ url_for('login') }}", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (
+            !response.headers.get("content-type")?.includes("application/json")
+          ) {
+            throw new Error("الخادم لم يرسل رداً صحيحاً!");
+          }
+
+          const result = await response.json();
+
+          if (result.success) {
+            window.location.href = result.redirect_url;
+          } else {
+            Swal.fire({
+              icon: "error",
+              title: "خطأ في الدخول",
+              text: result.message || "كلمة المرور غير صحيحة.",
+            });
+          }
+        } catch (error) {
+          console.error("Login Error:", error);
+          Swal.fire(
+            "خطأ!",
+            "حدث خطأ غير متوقع. يرجى التحقق من الطرفية (CMD).",
+            "error"
+          );
+        } finally {
+          submitButton.disabled = false;
+          submitButton.innerHTML = originalButtonText;
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}
