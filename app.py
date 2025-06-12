@@ -9,41 +9,32 @@ FIREBASE_DATABASE_URL = 'https://nnmy-9e611-default-rtdb.firebaseio.com/'
 SERVICE_ACCOUNT_FILE = 'serviceAccountKey.json'
 ADMIN_PASSWORD = 'WaRn123'
 
-# --- التعريف القياسي لـ Flask ---
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 app.config['JSON_AS_ASCII'] = False
 
 try:
-    # استخدام os.path.join لضمان توافق المسار مع كل الأنظمة
-    cred_path = os.path.join(os.path.dirname(__file__), SERVICE_ACCOUNT_FILE)
-    cred = credentials.Certificate(cred_path)
+    cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
     ref = db.reference('users/')
     leader_ref = db.reference('leader_info/')
     print("تم الاتصال بـ Firebase بنجاح!")
-except FileNotFoundError:
-    print(f"!!! خطأ فادح: لم يتم العثور على ملف المفتاح '{SERVICE_ACCOUNT_FILE}'. تأكد من وجوده بجانب app.py.")
 except Exception as e:
     print(f"!!! خطأ فادح: فشل الاتصال بـ Firebase: {e}")
 
-# --- دوال مساعدة (معدلة لتتوافق مع هيكلك) ---
 def get_users_sorted():
     """تجلب قائمة المستخدمين وتستخدم المفتاح الرئيسي كاسم."""
     users = ref.get()
     if not users: return []
     user_list = []
-    # نمر على كل مفتاح (key) وقيمة (data) في قاموس المستخدمين
     for key, data in users.items():
-        # نتأكد من أن البيانات ليست فارغة وأنها من النوع الصحيح (قاموس)
         if data and isinstance(data, dict):
             user_list.append({
-                'name': key,  # <-- هذا هو التعديل الأهم: نستخدم المفتاح كاسم
+                'name': key,
                 'points': int(data.get('points', 0)),
                 'likes': int(data.get('likes', 0))
             })
-            
     user_list.sort(key=lambda x: x['points'], reverse=True)
     return user_list
 
@@ -89,21 +80,20 @@ def logout():
     return redirect(url_for('login'))
 
 
-# --- API Routes (للتفاعل مع JavaScript) ---
+# --- API Routes ---
 @app.route('/api/users')
 def api_get_users():
-    # في بيئة الإنتاج، قد نحتاج لطريقة تحقق أخرى غير الجلسات للـ API
-    # للتبسيط الآن، سنسمح بالطلب
     users = get_users_sorted()
     return jsonify(users)
 
 @app.route('/add', methods=['POST'])
 def add_user():
-    # التحقق من الجلسة هنا مهم لأن هذه عملية حساسة
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-        
-        # نستخدم update لضمان إضافة/تحديث الحقول دون مسح الأخرى
-        # هذا سيحافظ على هيكل بياناتك القديم
+    try:
+        name = request.form.get('name')
+        points = int(request.form.get('points'))
+        user_data = ref.child(name).get()
+        current_likes = user_data.get('likes', 0) if user_data else 0
         ref.child(name).update({'points': points, 'likes': current_likes})
         
         all_users = get_users_sorted()
@@ -127,7 +117,6 @@ def delete_user(username):
 
 @app.route('/like/<username>', methods=['POST'])
 def like_user(username):
-    # هذا الطلب يأتي من المستخدمين العاديين، لذلك لا يجب أن يتطلب جلسة أدمن
     try:
         action = request.form.get('action', 'like')
         user_ref = ref.child(username).child('likes')
@@ -140,3 +129,6 @@ def like_user(username):
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0')
