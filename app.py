@@ -92,18 +92,15 @@ def logout():
 # --- API Routes (للتفاعل مع JavaScript) ---
 @app.route('/api/users')
 def api_get_users():
-    # تعديل: إزالة التحقق من الجلسة ليتمكن المستخدمون العاديون من رؤية البيانات في admin.js
+    # في بيئة الإنتاج، قد نحتاج لطريقة تحقق أخرى غير الجلسات للـ API
+    # للتبسيط الآن، سنسمح بالطلب
     users = get_users_sorted()
     return jsonify(users)
 
 @app.route('/add', methods=['POST'])
 def add_user():
+    # التحقق من الجلسة هنا مهم لأن هذه عملية حساسة
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        name = request.form.get('name')
-        points = int(request.form.get('points'))
-        user_data = ref.child(name).get()
-        current_likes = user_data.get('likes', 0) if user_data else 0
         
         # نستخدم update لضمان إضافة/تحديث الحقول دون مسح الأخرى
         # هذا سيحافظ على هيكل بياناتك القديم
@@ -130,6 +127,7 @@ def delete_user(username):
 
 @app.route('/like/<username>', methods=['POST'])
 def like_user(username):
+    # هذا الطلب يأتي من المستخدمين العاديين، لذلك لا يجب أن يتطلب جلسة أدمن
     try:
         action = request.form.get('action', 'like')
         user_ref = ref.child(username).child('likes')
@@ -142,6 +140,3 @@ def like_user(username):
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
