@@ -52,7 +52,7 @@ def login():
             session['admin_logged_in'] = True
             return jsonify(success=True, redirect_url=url_for('admin_panel'))
         else:
-            return jsonify(success=False, message="كلمة المرور غير صحيحة! مفكر حالك مشرف يرخيص الكس")
+            return jsonify(success=False, message="كلمة المرور غير صحيحة!! مفكر حالك مشرف يرخيص الكس")
     return render_template('login.html')
 
 @app.route('/admin')
