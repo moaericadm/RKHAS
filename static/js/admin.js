@@ -1,115 +1,48 @@
 document.addEventListener('DOMContentLoaded', function () {
-    // التأكد من أننا في صفحة الأدمن قبل تنفيذ أي شيء
-    const adminTableBody = document.getElementById('admin-table-body');
-    const addUserForm = document.getElementById('addUserForm');
-
-    // إذا لم تكن العناصر موجودة، فهذا يعني أننا لسنا في صفحة الأدمن، لذا توقف
-    if (!adminTableBody || !addUserForm) {
+    if (!document.getElementById('adminTab')) return;
+    const ui = {
+        tableBody: document.getElementById('admin-table-body'), userForm: document.getElementById('userForm'),
+        nameInput: document.getElementById('nameInput'), pointsInput: document.getElementById('pointsInput'),
+        originalNameInput: document.getElementById('originalNameInput'), saveUserBtn: document.getElementById('saveUserBtn'),
+        clearFormBtn: document.getElementById('clearFormBtn'), formTitle: document.getElementById('form-title'),
+        addCandidateBtn: document.getElementById('add-candidate-btn'), announcementForm: document.getElementById('announcementForm'),
+        announcementText: document.getElementById('announcementText'), notificationsList: document.getElementById('notifications-list'),
+        notifCountBadge: document.getElementById('notif-count-badge'), honorRollForm: document.getElementById('honorRollForm'),
+        honorNameInput: document.getElementById('honorNameInput'), honorRollList: document.getElementById('honorRollList'),
+        activityLogList: document.getElementById('activityLogList'),
+    };
+    let allUsersCache = [];
+    try {
+        if (!firebase.apps.length) firebase.initializeApp(window.firebaseConfig);
+    } catch (e) {
+        console.error("Admin Firebase Init Error:", e);
+        ui.tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">فشل تهيئة Firebase.</td></tr>';
         return;
     }
+    const db = firebase.database();
+    const formatNumber = (num) => new Intl.NumberFormat('en-US').format(num || 0);
+    const editUser = (user) => { if (!user) return; ui.nameInput.value = user.name; ui.pointsInput.value = user.points; ui.originalNameInput.value = user.name; ui.formTitle.innerText = `تعديل المستخدم: ${user.name}`; ui.saveUserBtn.innerText = 'حفظ التعديلات'; ui.saveUserBtn.classList.replace('btn-primary', 'btn-warning'); ui.clearFormBtn.style.display = 'inline-block'; window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    const clearForm = () => { ui.userForm.reset(); ui.originalNameInput.value = ''; ui.formTitle.innerText = 'إضافة مستخدم جديد'; ui.saveUserBtn.innerText = 'إضافة'; ui.saveUserBtn.classList.replace('btn-warning', 'btn-primary'); ui.clearFormBtn.style.display = 'none'; };
+    const renderAdminTable = (users) => { allUsersCache = users; ui.tableBody.innerHTML = ''; if (users && users.length > 0) { users.forEach((user, index) => { const row = document.createElement('tr'); row.innerHTML = `<th class="align-middle">#${index + 1}</th><td class="align-middle fw-bold" style="cursor: pointer;" title="اضغط للتعديل">${user.name}</td><td class="text-center align-middle">${formatNumber(user.points)}</td><td class="text-center align-middle"><i class="bi bi-heart-fill text-danger"></i> ${formatNumber(user.likes)}</td><td class="text-center align-middle"><button class="btn ${user.is_candidate ? 'btn-warning' : 'btn-outline-success'} btn-sm" onclick="window.toggleCandidate('${user.name}', ${user.is_candidate})" title="${user.is_candidate ? 'إزالة ترشيح' : 'إضافة كمرشح'}"><i class="bi ${user.is_candidate ? 'bi-person-x-fill' : 'bi-person-check-fill'}"></i></button><button class="btn btn-outline-danger btn-sm ms-2" onclick="window.confirmBan('${user.name}')" title="حظر المستخدم"><i class="bi bi-slash-circle-fill"></i></button><button class="btn btn-danger btn-sm ms-2" onclick="window.confirmDelete('${user.name}')" title="حذف نهائي"><i class="bi bi-trash-fill"></i></button></td>`; row.querySelector('td:nth-child(2)').addEventListener('click', () => editUser(user)); ui.tableBody.appendChild(row); }); } else { ui.tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">لا يوجد مستخدمين.</td></tr>'; } };
+    const renderNotifications = (notifications) => { ui.notificationsList.innerHTML = ''; let unreadCount = notifications.filter(n => n.status === 'unread').length; if (notifications.length > 0) { notifications.forEach(notif => { const item = document.createElement('li'); item.className = `list-group-item d-flex justify-content-between align-items-start ${notif.status === 'unread' ? 'fw-bold' : 'text-muted'}`; const iconClass = { "nomination": "bi-person-up text-success", "report": "bi-exclamation-triangle-fill text-danger", "violation": "bi-shield-slash-fill text-danger" }[notif.type] || 'bi-info-circle-fill'; item.innerHTML = `<div><i class="bi ${iconClass} me-2"></i>${notif.text || 'إشعار قديم'}</div><div class="text-end"><small>${new Date(notif.timestamp * 1000).toLocaleString('ar-EG')}</small>${notif.status === 'unread' ? `<br><button class="btn btn-sm btn-outline-secondary mt-1" onclick="window.markAsRead('${notif.id}')">كمقروء</button>` : ''}</div>`; ui.notificationsList.appendChild(item); }); } else { ui.notificationsList.innerHTML = '<li class="list-group-item text-center text-muted">لا توجد إشعارات.</li>'; } ui.notifCountBadge.textContent = unreadCount; ui.notifCountBadge.style.display = unreadCount > 0 ? 'inline-block' : 'none'; };
+    const renderHonorRoll = (honorList) => { ui.honorRollList.innerHTML = ''; if (honorList.length > 0) { honorList.forEach(item => { const li = document.createElement('li'); li.className = 'list-group-item d-flex justify-content-between align-items-center'; li.innerHTML = `<span>${item.name}</span><button class="btn btn-outline-danger btn-sm">×</button>`; li.querySelector('button').onclick = () => window.deleteFromHonorRoll(item.id, item.name); ui.honorRollList.appendChild(li); }); } else { ui.honorRollList.innerHTML = '<li class="list-group-item text-center text-muted">القائمة فارغة.</li>'; } };
+    const renderActivityLog = (log) => { ui.activityLogList.innerHTML = ''; if (log.length > 0) { log.forEach(item => { const li = document.createElement('li'); li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap'; const iconClass = { 'like': 'bi-heart-fill text-danger', 'nomination': 'bi-person-up text-success', 'report': 'bi-flag-fill text-warning', 'violation': 'bi-shield-slash-fill text-danger' }[item.type] || 'bi-info-circle-fill'; const banButtonHtml = item.visitor_name ? `<button class="btn btn-danger btn-sm ms-3" onclick="window.confirmBan('${item.visitor_name}')" title="حظر هذا الزائر"><i class="bi bi-slash-circle-fill"></i></button>` : ''; li.innerHTML = `<div class="me-auto"><i class="bi ${iconClass} me-2"></i>${item.text}</div><div class="d-flex align-items-center mt-2 mt-md-0"><small class="text-muted">${new Date(item.timestamp * 1000).toLocaleString('ar-EG')}</small>${banButtonHtml}</div>`; ui.activityLogList.appendChild(li); }); } else { ui.activityLogList.innerHTML = '<li class="list-group-item text-center text-muted">لا توجد أنشطة مسجلة.</li>'; } };
 
-    // دالة مساعدة لتنسيق الأرقام مع فواصل
-    function formatNumber(num) {
-        return new Intl.NumberFormat('en-US').format(num || 0);
-    }
+    window.toggleCandidate = async (name, isCandidate) => await fetch(`/api/admin/candidate/${isCandidate ? 'remove' : 'add'}/${name}`, { method: 'POST' });
+    window.confirmDelete = (name) => Swal.fire({ title: `هل أنت متأكد؟`, text: `سيتم حذف ${name} نهائياً!`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم!', cancelButtonText: 'إلغاء' }).then(r => r.isConfirmed && fetch(`/delete/${name}`, { method: 'POST' }));
+    window.markAsRead = async (id) => await fetch(`/api/admin/notifications/mark_read/${id}`, { method: 'POST' });
+    window.deleteFromHonorRoll = (id, name) => Swal.fire({ title: `هل أنت متأكد من حذف "${name}"؟`, icon: 'warning', showCancelButton: true, confirmButtonText: 'نعم!', cancelButtonText: 'إلغاء' }).then(r => r.isConfirmed && fetch(`/api/admin/honor_roll/delete/${id}`, { method: 'POST' }));
+    window.confirmBan = (nameToBan) => { Swal.fire({ title: `هل أنت متأكد من حظر "${nameToBan}"؟`, text: "سيتم إضافته لقائمة الحظر وحذفه من القوائم النشطة.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم، احظر!', cancelButtonText: 'إلغاء' }).then(async (result) => { if (result.isConfirmed) { const r = await fetch('/api/admin/ban_user', { method: 'POST', body: new URLSearchParams({ 'name_to_ban': nameToBan }) }); const j = await r.json(); Swal.fire(j.success ? 'تم الحظر!' : 'خطأ!', j.message, j.success ? 'success' : 'error'); } }); };
 
-    async function refreshAdminTable() {
-        try {
-            const response = await fetch('/api/users');
-            if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
-            
-            const users = await response.json();
-            
-            adminTableBody.innerHTML = ''; // مسح الجدول القديم
-            if (users && users.length > 0) {
-                users.forEach((user, index) => {
-                    const row = `
-                        <tr>
-                            <th scope="row" class="align-middle">#${index + 1}</th>
-                            <td class="align-middle">${user.name}</td>
-                            <td class="text-center align-middle">
-                                <button class="btn btn-outline-success btn-sm me-2" onclick="updatePoints('${user.name}', ${user.points + 1})">+</button>
-                                <span class="fw-bold fs-5 mx-2">${formatNumber(user.points)}</span>
-                                <button class="btn btn-outline-warning btn-sm ms-2" onclick="updatePoints('${user.name}', ${user.points - 1})">-</button>
-                            </td>
-                            <td class="text-center align-middle">
-                                <i class="bi bi-hand-thumbs-up-fill text-primary"></i>
-                                <span class="fw-bold ms-1">${formatNumber(user.likes)}</span>
-                            </td>
-                            <td class="text-center align-middle">
-                                <button class="btn btn-danger btn-sm" onclick="confirmDelete('${user.name}')">حذف</button>
-                            </td>
-                        </tr>`;
-                    adminTableBody.innerHTML += row;
-                });
-            } else {
-                adminTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">لا يوجد مستخدمين بعد.</td></tr>';
-            }
-        } catch (error) {
-            console.error('Failed to fetch users:', error);
-            Swal.fire('خطأ!', 'فشل تحديث قائمة المستخدمين.', 'error');
-        }
-    }
+    ui.userForm.addEventListener('submit', async e => { e.preventDefault(); try { await fetch('/add', { method: 'POST', body: new FormData(ui.userForm) }); clearForm(); Swal.fire('تم!', 'تم حفظ البيانات بنجاح.', 'success'); } catch { Swal.fire('خطأ!', 'فشل الحفظ.', 'error'); } });
+    ui.clearFormBtn.addEventListener('click', clearForm);
+    ui.announcementForm.addEventListener('submit', async e => { e.preventDefault(); const btn = e.submitter; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { await fetch('/api/admin/announcement', { method: 'POST', body: new FormData(ui.announcementForm) }); Swal.fire('تم!', 'تم حفظ الإعلان.', 'success'); } catch { Swal.fire('خطأ!', 'فشل الحفظ.', 'error'); } finally { btn.disabled = false; btn.innerHTML = 'حفظ الإعلان'; } });
+    ui.addCandidateBtn.addEventListener('click', () => Swal.fire({ title: 'ترشيح مستخدم جديد', input: 'text', inputLabel: 'اكتب اسم المستخدم لإضافته للمرشحين', inputPlaceholder: 'اسم المرشح...', showCancelButton: true, confirmButtonText: 'إضافة', cancelButtonText: 'إلغاء', inputValidator: (v) => !v && 'يجب كتابة اسم!' }).then(r => r.isConfirmed && r.value && window.toggleCandidate(r.value.trim(), false).then(() => Swal.fire('تم!', `تمت إضافة ${r.value} للمرشحين.`, 'success'))));
+    ui.honorRollForm.addEventListener('submit', async e => { e.preventDefault(); const name = ui.honorNameInput.value.trim(); if (!name) return; try { await fetch('/api/admin/honor_roll/add', { method: 'POST', body: new URLSearchParams({ name }) }); ui.honorNameInput.value = ''; } catch { Swal.fire('خطأ!', 'فشل إضافة الاسم.', 'error'); } });
 
-    addUserForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const formData = new FormData(addUserForm);
-        const submitButton = addUserForm.querySelector('button[type="submit"]');
-        const originalButtonText = submitButton.innerHTML;
-        submitButton.disabled = true;
-        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-
-        try {
-            const response = await fetch('/add', { method: 'POST', body: formData });
-            if (!response.ok) throw new Error('Server responded with an error');
-            addUserForm.reset();
-            await refreshAdminTable();
-            Swal.fire('تم!', 'تمت إضافة المستخدم بنجاح.', 'success');
-        } catch (error) {
-            Swal.fire('خطأ!', 'فشل إضافة المستخدم.', 'error');
-        } finally {
-            submitButton.disabled = false;
-            submitButton.innerHTML = originalButtonText;
-        }
-    });
-
-    window.updatePoints = async function(name, newPoints) {
-        try {
-            const formData = new FormData();
-            formData.append('name', name);
-            formData.append('points', newPoints);
-            const response = await fetch('/add', { method: 'POST', body: formData });
-            if (!response.ok) throw new Error('Server responded with an error');
-            await refreshAdminTable();
-        } catch (error) {
-            Swal.fire('خطأ!', 'فشل تحديث النقاط.', 'error');
-        }
-    }
-
-    window.confirmDelete = function(name) {
-        Swal.fire({
-            title: `هل أنت متأكد من حذف ${name}؟`,
-            text: "لا يمكن التراجع عن هذا الإجراء!",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'نعم، قم بالحذف!',
-            cancelButtonText: 'إلغاء'
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                try {
-                    const response = await fetch(`/delete/${name}`, { method: 'POST' });
-                    if (!response.ok) throw new Error('Server responded with an error');
-                    await refreshAdminTable();
-                    Swal.fire('تم الحذف!', 'تم حذف المستخدم بنجاح.', 'success');
-                } catch (error) {
-                    Swal.fire('خطأ!', 'فشل حذف المستخدم.', 'error');
-                }
-            }
-        });
-    }
-
-    // استدعاء الدالة عند تحميل الصفحة لأول مرة
-    refreshAdminTable();
+    db.ref('users').on('value', async () => { const r = await fetch('/api/users'); renderAdminTable(await r.json()); });
+    db.ref('notifications').on('value', async () => { const r = await fetch('/api/admin/notifications'); renderNotifications(await r.json()); });
+    db.ref('site_settings/honor_roll').on('value', async () => { const r = await fetch('/api/admin/honor_roll'); renderHonorRoll(await r.json()); });
+    db.ref('activity_log').on('value', async () => { const r = await fetch('/api/admin/activity_log'); renderActivityLog(await r.json()); });
+    db.ref('site_settings/announcement').once('value', (s) => { if (s.exists()) ui.announcementText.value = s.val().text || ''; });
 });
