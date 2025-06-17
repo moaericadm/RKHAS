@@ -1,209 +1,181 @@
-{% extends "base.html" %} {% block title %}قائمة النقاط{% endblock %} {% block
-header_title %}قائمة نقاط الرخاص (تحديث مباشر){% endblock %} {% block content %}
-<div class="row g-4">
-  <!-- العمود الرئيسي للجدول -->
-  <div class="col-lg-8">
-    <div class="card shadow-lg h-100">
-      <div
-        class="card-header d-flex flex-wrap align-items-center justify-content-between"
-      >
-        <div class="d-flex align-items-center">
-          <i class="bi bi-bar-chart-line-fill me-2 fs-5"></i>
-          <span class="fs-5">الترتيب العام لكل رخيص</span>
-        </div>
-        <div class="mt-2 mt-md-0">
-          <input
-            type="search"
-            id="searchInput"
-            class="form-control form-control-sm"
-            placeholder="🔍 ابحث عن رخيص..."
-          />
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead>
-              <tr>
-                <th scope="col" style="width: 10%">الترتيب</th>
-                <th scope="col">اسم الرخيص</th>
-                <th scope="col" class="text-center">النقاط</th>
-                <th scope="col" class="text-center" style="width: 20%">
-                  الإعجابات
-                </th>
-              </tr>
-            </thead>
-            <tbody id="user-table-body">
-              <!-- مؤشر التحميل الأولي -->
-              <tr>
-                <td colspan="4" class="text-center py-5">
-                  <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                  </div>
-                  <p class="mt-2 mb-0">جاري التحميل...</p>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
+{% extends "base.html" %}
+{% block title %}قائمة النقاط{% endblock %}
+{% block header_title %}قائمة الزواحف الرسمية (تحديث مباشر){% endblock %}
 
-  <!-- العمود الجانبي لقاعة المشاهير -->
-  <div class="col-lg-4">
-    <div class="card shadow-lg">
-      <div class="card-header bg-warning text-dark d-flex align-items-center">
-        <i class="bi bi-trophy-fill me-2 fs-5"></i>
-        <span class="fs-5">توب 3 لحيسة</span>
-      </div>
-      <ul class="list-group list-group-flush" id="hall-of-fame">
-        <!-- مؤشر التحميل الأولي -->
-        <li class="list-group-item text-center p-3">
-          <div
-            class="spinner-border spinner-border-sm text-secondary"
-            role="status"
-          ></div>
-        </li>
-      </ul>
+{% block styles %}
+<style>
+    .chart-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(10, 10, 20, 0.85);
+        backdrop-filter: blur(5px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1055;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease;
+    }
+
+        .chart-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+    .chart-container {
+        position: relative;
+        width: 90%;
+        max-width: 900px;
+        padding: 1.5rem 2rem;
+        transform: scale(0.9);
+        transition: transform 0.3s ease;
+    }
+
+    .chart-overlay.show .chart-container {
+        transform: scale(1);
+    }
+
+    .chart-close-btn {
+        position: absolute;
+        top: 10px;
+        left: 20px;
+        font-size: 2.5rem;
+        color: rgba(255, 255, 255, 0.7);
+        background: none;
+        border: none;
+        cursor: pointer;
+        z-index: 1060;
+        line-height: 1;
+    }
+
+        .chart-close-btn:hover {
+            color: #fff;
+        }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-lg h-100">
+            <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-bar-chart-line-fill me-2"></i>الترتيب العام للزواحف</span><input type="search" id="searchInput" class="form-control form-control-sm w-50" placeholder="🔍 ابحث..." /></div>
+            <div class="card-body table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead><tr><th>#</th><th> اسم الزاحف  </th><th class="text-center">النقاط</th><th class="text-center">الإجراءات</th></tr></thead>
+                    <tbody id="user-table-body"></tbody>
+                </table>
+                <div id="loading-spinner" class="text-center py-5"><div class="spinner-border text-danger"></div><p class="mt-2">جاري الزحف...</p></div>
+            </div>
+        </div>
     </div>
-  </div>
+    <div class="col-lg-4">
+        <div class="vstack gap-4">
+            <div class="card shadow-lg"><div class="card-header bg-warning text-dark"><i class="bi bi-trophy-fill me-2"></i>توب 3 بالزحف</div><ul class="list-group list-group-flush" id="hall-of-fame"></ul></div>
+            <div class="card shadow-lg"><div class="card-header" style="background: var(--primary-glow); color: #fff;"><i class="bi bi-award-fill me-2"></i> الزاحف الاكثر ذكراً</div><ul class="list-group list-group-flush" id="honor-roll-view-list"></ul></div>
+            <div class="card shadow-lg"><div class="card-header"><i class="bi bi-person-check-fill me-2 text-success"></i>مرشحون للدخول</div><ul class="list-group list-group-flush" id="candidates-list"></ul></div>
+            <div class="card shadow-lg"><div class="card-header"><i class="bi bi-joystick me-2"></i>تفاعل معنا</div><div class="card-body d-grid gap-2"><button class="btn btn-success" id="nominate-btn"><i class="bi bi-person-up me-2"></i>رشح نفسك</button><button class="btn btn-outline-danger" id="report-btn"><i class="bi bi-exclamation-triangle-fill me-2"></i>أبلغ عن زاحف</button></div></div>
+        </div>
+    </div>
 </div>
-{% endblock %} {% block scripts %}
-<!-- Firebase JavaScript SDKs -->
+<div class="chart-overlay" id="customChartOverlay">
+    <button class="chart-close-btn" id="customChartCloseBtn">×</button>
+    <div class="chart-container card">
+        <h5 class="mb-3" id="chartModalLabel"></h5>
+        <div style="height: 400px;"><canvas id="userPointsChart"></canvas></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-      try {
-          const firebaseConfig = {{ firebase_config|tojson }};
-          if (!firebaseConfig.apiKey) throw new Error("إعدادات Firebase غير مكتملة.");
-          firebase.initializeApp(firebaseConfig);
-      } catch (e) {
-          console.error("خطأ في تهيئة Firebase:", e);
-          displayError("خطأ في الاتصال بإعدادات Firebase.");
-          return;
-      }
-
-      const database = firebase.database();
-      const usersRef = database.ref('users');
-      const leaderRef = database.ref('leader_info');
-      let likedUsers = JSON.parse(localStorage.getItem('likedUsers')) || {};
-      let allUsersCache = [];
-      let leaderInfoCache = {};
-
-      const userTableBody = document.getElementById('user-table-body');
-      const hallOfFameList = document.getElementById('hall-of-fame');
-      const searchInput = document.getElementById('searchInput');
-
-      function formatNumber(num) {
-          return new Intl.NumberFormat('en-US').format(num || 0);
-      }
-
-      function displayError(message) {
-          userTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-5"><strong>${message}</strong></td></tr>`;
-      }
-
-      window.handleLike = async function(button, username) {
-          const isCurrentlyLiked = likedUsers[username];
-          const action = isCurrentlyLiked ? 'unlike' : 'like';
-          button.disabled = true;
-          try {
-              const formData = new FormData();
-              formData.append('action', action);
-              const response = await fetch(`/like/${username}`, { method: 'POST', body: formData });
-              if (!response.ok) throw new Error('فشل الطلب إلى الخادم');
-              if (isCurrentlyLiked) { delete likedUsers[username]; }
-              else { likedUsers[username] = true; }
-              localStorage.setItem('likedUsers', JSON.stringify(likedUsers));
-          } catch (error) {
-              console.error("Failed to update like:", error);
-              button.disabled = false;
-          }
-      }
-
-      function renderUI() {
-          const searchTerm = searchInput.value.toLowerCase();
-          const filteredUsers = allUsersCache.filter(user => user.name.toLowerCase().includes(searchTerm));
-          renderMainTable(filteredUsers);
-          renderHallOfFame(allUsersCache);
-      }
-
-      function renderMainTable(usersToRender) {
-          userTableBody.innerHTML = '';
-          if (usersToRender.length > 0) {
-              usersToRender.forEach(user => {
-                  const originalIndex = allUsersCache.findIndex(u => u.name === user.name) + 1;
-                  const row = document.createElement('tr');
-                  let leaderBadge = '';
-                  if (originalIndex === 1 && user.name === leaderInfoCache.name) {
-                      const timeSinceLeader = (Date.now() / 1000) - leaderInfoCache.timestamp;
-                      if (timeSinceLeader < 600) {
-                          leaderBadge = '<span class="badge bg-danger ms-2">متصدر جديد!</span>';
-                      }
-                  }
-                  const isLiked = likedUsers[user.name];
-                  const likeButton = `<button class="btn btn-sm like-btn ${isLiked ? 'btn-primary liked' : 'btn-outline-primary'}" onclick="handleLike(this, '${user.name}')" title="${isLiked ? 'إلغاء الإعجاب' : 'إعجاب'}"><span class="fw-bold">() 👍 </span><span class="badge bg-light text-dark ms-1">${formatNumber(user.likes)}</span></button>`;
-                  row.innerHTML = `<th scope="row" class="fs-5 align-middle">#${originalIndex}</th><td class="align-middle">${user.name || ''} ${leaderBadge}</td><td class="fs-5 fw-bold text-center align-middle">${formatNumber(user.points)}</td><td class="text-center align-middle">${likeButton}</td>`;
-                  userTableBody.appendChild(row);
-              });
-          } else {
-              userTableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4">${searchInput.value ? 'لا يوجد مستخدم يطابق هذا البحث.' : 'لا يوجد بيانات لعرضها.'}</td></tr>`;
-          }
-      }
-
-      function renderHallOfFame(allUsers) {
-          hallOfFameList.innerHTML = '';
-          const medals = ['🥇', '🥈', '🥉'];
-          const topUsers = allUsers.slice(0, 3);
-          if (topUsers.length > 0) {
-              topUsers.forEach((user, index) => {
-                  const listItem = document.createElement('li');
-                  listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
-                  listItem.innerHTML = `<span>${medals[index] || '⭐'} ${user.name}</span><span class="badge bg-primary rounded-pill">${formatNumber(user.points)}</span>`;
-                  hallOfFameList.appendChild(listItem);
-              });
-          } else {
-              hallOfFameList.innerHTML = '<li class="list-group-item text-center">لا يوجد أبطال بعد.</li>';
-          }
-      }
-
-      function setupListeners() {
-          searchInput.addEventListener('input', renderUI);
-
-          usersRef.on('value', (userSnapshot) => {
-              const usersData = userSnapshot.val();
-
-              leaderRef.once('value').then(leaderSnapshot => {
-                  leaderInfoCache = leaderSnapshot.val() || {};
-
-                  if (usersData && typeof usersData === 'object') {
-                      // الطريقة الجديدة التي تستخدم المفتاح كاسم
-                      allUsersCache = Object.keys(usersData).map(key => {
-                          const userData = usersData[key];
-                          // نتأكد أن البيانات هي كائن
-                          if (userData && typeof userData === 'object') {
-                              return {
-                                  name: key, // <-- التعديل الأهم
-                                  points: userData.points || 0,
-                                  likes: userData.likes || 0
-                              };
-                          }
-                          return null;
-                      }).filter(Boolean).sort((a, b) => (b.points || 0) - (a.points || 0));
-                  } else {
-                      allUsersCache = [];
-                  }
-                  renderUI();
-              });
-          }, (error) => {
-              console.error("Firebase read failed:", error);
-              displayError("فشل تحديث البيانات. يرجى التحقق من الاتصال.");
-          });
-      }
-
-      setupListeners();
-  });
+document.addEventListener('DOMContentLoaded', function() {
+    const ui = {
+        tableBody: document.getElementById('user-table-body'), hallOfFame: document.getElementById('hall-of-fame'),
+        candidatesList: document.getElementById('candidates-list'), honorRollList: document.getElementById('honor-roll-view-list'),
+        searchInput: document.getElementById('searchInput'), loadingSpinner: document.getElementById('loading-spinner'),
+        nominateBtn: document.getElementById('nominate-btn'), reportBtn: document.getElementById('report-btn'),
+        chartOverlay: document.getElementById('customChartOverlay'), chartCloseBtn: document.getElementById('customChartCloseBtn')
+    };
+    let allUsersCache = [], honorRollCache = [], candidatesCache = [], likedUsers = new Set(), chartInstance = null, visitorName = '';
+    const formatNumber = (num) => new Intl.NumberFormat('ar-EG').format(num || 0);
+    const displayError = (msg) => { if (ui.loadingSpinner) ui.loadingSpinner.innerHTML = `<p class="text-danger py-4">${msg}</p>`; };
+    const loadLikedUsers = () => { try { likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers')) || []); } catch { likedUsers = new Set(); }};
+    const showUserChart = async (username) => {
+        try {
+            const response = await fetch(`/api/user_history/${username}`);
+            if(!response.ok) throw new Error("Failed to fetch history");
+            const history = await response.json();
+            if(!history.length) return Swal.fire({icon: 'info', title: 'لا توجد بيانات', text: 'لا يوجد سجل نقاط لهذا الزاحف بعد.'});
+            document.getElementById('chartModalLabel').innerText = `تقدم الزاحف: ${username}`;
+            if (chartInstance) chartInstance.destroy();
+            const chartContext = document.getElementById('userPointsChart').getContext('2d');
+            const gradient = chartContext.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(0, 242, 255, 0.4)'); gradient.addColorStop(1, 'rgba(159, 122, 234, 0.1)');
+            chartInstance = new Chart(chartContext, {
+                type: 'line', data: { labels: history.map(h => new Date(h.timestamp * 1000).toLocaleDateString('ar-EG', { day: '2-digit', month: 'short' })), datasets: [{ label: 'النقاط', data: history.map(h => h.points), fill: true, backgroundColor: gradient, borderColor: '#00f2ff', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#00f2ff', pointRadius: 5, pointHoverRadius: 8, tension: 0.4 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }, x: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { display: false } } }, plugins: { legend: { display: false }, tooltip: { titleFont: { family: "Almarai" }, bodyFont: { family: "Almarai" } } } }
+            });
+            ui.chartOverlay.classList.add('show');
+        } catch(e) { console.error("Chart Error:", e); Swal.fire('خطأ', ' لم يتمكن من جلب أو عرض سجل للزواحف.', 'error'); }
+    };
+    const renderUI = () => {
+        loadLikedUsers();
+        const term = ui.searchInput.value.toLowerCase();
+        const filtered = allUsersCache.filter(u => u.name.toLowerCase().includes(term));
+        ui.tableBody.innerHTML = '';
+        if (filtered.length) {
+            ui.loadingSpinner.style.display = 'none';
+            filtered.forEach(user => {
+                const rank = allUsersCache.findIndex(u => u.name === user.name) + 1;
+                const honorBadge = honorRollCache.includes(user.name) ? `<span class="badge rounded-pill ms-2" style="background:var(--primary-glow);color:#fff;"><i class="bi bi-award-fill"></i></span>` : '';
+                const row = document.createElement('tr');
+                row.innerHTML = `<th class="align-middle">#${rank}</th><td class="align-middle fw-bold">${user.name}${honorBadge}</td><td class="text-center align-middle fs-5 fw-bold">${formatNumber(user.points)}</td>`;
+                const actionTd = document.createElement('td'); actionTd.className = 'text-center align-middle';
+                const likeBtn = document.createElement('button'); likeBtn.className = `btn btn-sm btn-outline-danger like-btn ${likedUsers.has(user.name) ? 'active' : ''}`; likeBtn.disabled = likedUsers.has(user.name); likeBtn.innerHTML = `<i class="bi bi-heart-fill"></i> ${formatNumber(user.likes)}`;
+                likeBtn.onclick = () => { fetch(`/like/${user.name}`,{method:'POST', body: new URLSearchParams({visitor_name: visitorName})}).then(()=>{likedUsers.add(user.name);localStorage.setItem('likedUsers',JSON.stringify([...likedUsers]));likeBtn.disabled=true;})};
+                const chartBtn = document.createElement('button'); chartBtn.className = 'btn btn-sm btn-outline-info ms-2'; chartBtn.title = 'عرض تقدم الزحاف '; chartBtn.innerHTML = `<i class="bi bi-graph-up-arrow"></i>`;
+                chartBtn.onclick = () => showUserChart(user.name);
+                actionTd.appendChild(likeBtn); actionTd.appendChild(chartBtn); row.appendChild(actionTd); ui.tableBody.appendChild(row);
+            });
+        } else { ui.loadingSpinner.style.display = 'block'; ui.loadingSpinner.innerHTML = `<p class="text-muted py-4">${term ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد بيانات.'}</p>`; }
+        ui.hallOfFame.innerHTML = ''; allUsersCache.slice(0, 3).forEach((u, i) => ui.hallOfFame.innerHTML += `<li class="list-group-item d-flex justify-content-between"><span>${['🥇','🥈','🥉'][i]} ${u.name}</span><span class="badge rounded-pill" style="background-color:var(--primary-glow)">${formatNumber(u.points)}</span></li>`);
+        ui.candidatesList.innerHTML = ''; if(candidatesCache.length) candidatesCache.forEach(name => ui.candidatesList.innerHTML += `<li class="list-group-item"><i class="bi bi-person-check-fill me-2"></i>${name}</li>`); else ui.candidatesList.innerHTML = `<li class="list-group-item text-muted text-center">لا يوجد مرشحون.</li>`;
+        ui.honorRollList.innerHTML = ''; if(honorRollCache.length) honorRollCache.forEach(name => ui.honorRollList.innerHTML += `<li class="list-group-item fw-bold text-center"><i class="bi bi-star-fill text-warning me-2"></i>${name}</li>`); else ui.honorRollList.innerHTML = `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`;
+    };
+    const initApp = async () => {
+        visitorName = localStorage.getItem('visitorNickname');
+        if (!visitorName) {
+            const { value: name } = await Swal.fire({ title: 'مرحباً بك!', input: 'text', inputLabel: 'الرجاء إدخال اسم مستعار للمتابعة', inputPlaceholder: 'اسمك المستعار...', allowOutsideClick: false, allowEscapeKey: false, inputValidator: (v) => !v && 'يجب إدخال اسم حتى لو زاحف !' });
+            if (name) { visitorName = name.trim(); localStorage.setItem('visitorNickname', visitorName); }
+        }
+        try {
+            const banStatusRes = await fetch(`/api/check_ban_status/${visitorName}`);
+            const banStatus = await banStatusRes.json();
+            if(banStatus.is_banned) { document.body.innerHTML = `<div class="container text-center mt-5"><div class="card p-5"><h1 class="text-danger">لقد تم حظرك يا ابن القحبة </h1><p class="fs-5"> حظرتك من استخدام  الموقع يا رخيص.</p></div></div>`; return; }
+            const config = JSON.parse('{{ firebase_config|tojson|safe }}');
+            if (!config?.apiKey) throw new Error("إعدادات Firebase غير صحيحة.");
+            if (!firebase.apps.length) firebase.initializeApp(config);
+            const db = firebase.database();
+            const handleNomination = async () => { const { value: name } = await Swal.fire({ title: ' رشح نفسك كزاحف', input: 'text', inputLabel: 'اكتب اسمك', showCancelButton: true, confirmButtonText: 'إرسال', cancelButtonText: 'إلغاء', inputValidator: (v) => !v && 'يجب كتابة اسم!' }); if (name) { const r = await fetch('/api/nominate', { method: 'POST', body: new URLSearchParams({name, visitor_name: visitorName}) }); const j = await r.json(); if(j.action === 'ban'){ localStorage.setItem('isBanned','true'); Swal.fire({icon:'error',title:'تم الحظر!',text:j.message}).then(()=>window.location.reload()); } else { Swal.fire({ icon: j.success ? 'success' : 'error', title: j.message }); } } };
+            const handleUserReport = () => { if (!allUsersCache.length) return Swal.fire('لا يوجد زواحف للإبلاغ.', '', 'info'); const opts = allUsersCache.reduce((a, u) => ({ ...a, [u.name]: u.name }), {}); Swal.fire({ title: 'الإبلاغ عن زاحف او ارسال رسالة', html: `<select id="swal-in1" class="swal2-select"></select><textarea id="swal-in2" class="swal2-textarea" placeholder="اشرح المشكلة..."></textarea>`, showCancelButton: true, confirmButtonText: 'إرسال', didOpen: () => Object.keys(opts).forEach(k => document.getElementById('swal-in1').add(new Option(opts[k], k))), preConfirm: () => ({ user: document.getElementById('swal-in1').value, reason: document.getElementById('swal-in2').value }) }).then(async (res) => { if (res.isConfirmed && res.value.reason) { const r = await fetch('/api/report', { method: 'POST', body: new URLSearchParams({ reported_user: res.value.user, reason: res.value.reason, visitor_name: visitorName }) }); const j = await r.json(); if(j.action === 'ban'){ localStorage.setItem('isBanned','true'); Swal.fire({icon:'error',title:'تم الحظر!',text:j.message}).then(()=>window.location.reload()); } else { Swal.fire({ icon: j.success ? 'success' : 'error', title: j.message }); } } else if(res.isConfirmed && !res.value.reason) { Swal.showValidationMessage('يجب كتابة سبب البلاغ!'); } }); };
+            ui.nominateBtn.onclick = handleNomination;
+            ui.reportBtn.onclick = handleUserReport;
+            ui.searchInput.oninput = renderUI;
+            ui.chartCloseBtn.onclick = () => ui.chartOverlay.classList.remove('show');
+            ui.chartOverlay.onclick = (e) => { if(e.target === ui.chartOverlay) ui.chartOverlay.classList.remove('show'); };
+            db.ref('users').on('value', s => { const data = s.val()||{}; allUsersCache = Object.keys(data).map(k=>({name:k, ...data[k]})).sort((a,b)=>b.points-a.points); renderUI(); });
+            db.ref('site_settings/honor_roll').on('value', s => { honorRollCache = Object.values(s.val()||{}).map(i => i.name); renderUI(); });
+            db.ref('candidates').on('value', s => { candidatesCache = Object.keys(s.val()||{}); renderUI(); });
+        } catch (e) { console.error(e); displayError("فشل تهيئة الاتصال."); }
+    };
+    initApp();
+});
 </script>
 {% endblock %}
