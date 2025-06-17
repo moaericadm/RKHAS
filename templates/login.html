@@ -1,104 +1,73 @@
 {% extends "base.html" %} {% block title %}تسجيل الدخول{% endblock %} {% block
-header_title %}نظام كلية (IT) لإدارة نقاط رخاص الكس الرسمي{% endblock %} {%
-block content %}
-<div class="row justify-content-center">
-  <!-- عمود لنموذج تسجيل الدخول -->
-  <div class="col-md-6 col-lg-5">
-    <div class="card p-4 shadow-lg">
-      <div class="card-body">
-        <h5 class="card-title text-center mb-4 fs-4">دخول المسؤول</h5>
+header_title %}نظام إدارة نقاط الزواحف الرسمية (IT){% endblock %} {% block content %}
 
-        <form id="loginForm">
-          <div class="form-floating mb-3">
-            <input
-              type="password"
-              class="form-control"
-              id="password"
-              name="password"
-              placeholder="كلمة المرور"
-              required
-            />
-            <label for="password">كلمة المرور</label>
-          </div>
-          <div class="d-grid gap-2 mt-4">
-            <button type="submit" class="btn btn-primary btn-lg">
-              دخول كمسؤول
-            </button>
-            <a href="{{ url_for('user_view') }}" class="btn btn-outline-success"
-              >عرض نقاط الرخاص</a
-            >
-          </div>
-        </form>
-      </div>
+{% if announcement and announcement.text %}
+<div class="row justify-content-center mb-4">
+    <div class="col-lg-8">
+        <div class="card text-center" style="background: linear-gradient(45deg, #e94560, #ff8c00); color: white; border: none; text-shadow: 1px 1px 2px rgba(0,0,0,0.4);">
+            <div class="card-header fw-bold" style="background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.2);">
+                <i class="bi bi-megaphone-fill me-2"></i> إعلان هام
+            </div>
+            <div class="card-body"><p class="card-text fs-5" style="font-weight: bold;">{{ announcement.text }}</p></div>
+        </div>
     </div>
-  </div>
 </div>
+{% endif %}
 
-<!-- صف جديد للنص السفلي لضمان التنسيق الصحيح -->
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card p-4 shadow-lg">
+            <div class="card-body">
+                <h5 class="card-title text-center mb-4 fs-4">دخول المسؤول</h5>
+                <form id="loginForm">
+                    <div class="form-floating mb-3">
+                        <input type="password" class="form-control" id="password" name="password" placeholder="كلمة المرور" required />
+                        <label for="password">كلمة المرور</label>
+                    </div>
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-shield-lock-fill me-2"></i> دخول كمسؤول</button>
+                        <a href="{{ url_for('user_view') }}" class="btn btn-outline-success btn-lg"><i class="bi bi-eye-fill me-2"></i> عرض قائمة نقاط لزواحف</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- *** القسم الجديد هنا: النص التقديمي *** -->
 <div class="row justify-content-center mt-5">
-  <div class="col-lg-8">
-    <hr />
-    <p class="text-center text-muted mt-4">
-      تم انشاء هذا النظام من قبل مطورين الكلية IT للكشف عن كل من له علاقة برخصنة
-      الكس, وتم تسجيل ذلك بنقاط لتدل على اسباقيات اقوال تم اخذها من عامة طلاب
-      وطالبات كلية IT ليكون كل رخيص كس في عين الاعتبار مع الادلة والبراهين,
-      زيارة ممتعة.
-    </p>
-  </div>
+    <div class="col-lg-8">
+        <div class="card bg-transparent border-0 text-center">
+            <div class="card-body">
+                <hr style="border-color: var(--card-border); opacity: 0.5;">
+                <p class="text-muted mt-4 fs-6 lh-lg">
+                    هذا النظام مخصص لمتابعة وتحديث نقاط الزواحف في كلية ال  بشكل دوري و نظم معينة و حقائق تم 
+                    جمعها من قبل اشخاص و شهود قائمة على ادله و براهين.
+                    <br>
+                    يمكنم مشاركة الاسماء و سيتم رفعها مع وجود ادلة و براهين  و سيتم حسابها بمعادلة معينة.
+                    <br>
+                    الرجاء اخذ الموقع على بمزح و دون شخنة و دون الاساءة باي الحالات  عشان ما افضح عرض رخيص او زاحف
+                    <br />
+                    نأمل أن يعجبكم النظام و يكون مفيدًا وسهل الاستخدام.
+                </p>
+            </div>
+        </div>
+    </div>
 </div>
-{% endblock %} {% block scripts %}
+{% endblock %}
+
+{% block scripts %}
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const loginForm = document.getElementById("loginForm");
-
-    if (loginForm) {
-      loginForm.addEventListener("submit", async function (event) {
-        event.preventDefault(); // منع تحديث الصفحة
-
-        const form = event.target;
-        const formData = new FormData(form);
-        const submitButton = form.querySelector('button[type="submit"]');
-        const originalButtonText = submitButton.innerHTML;
-
-        submitButton.disabled = true;
-        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جاري التحقق...`;
-
-        try {
-          const response = await fetch("{{ url_for('login') }}", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (
-            !response.headers.get("content-type")?.includes("application/json")
-          ) {
-            throw new Error("الخادم لم يرسل رداً صحيحاً!");
-          }
-
-          const result = await response.json();
-
-          if (result.success) {
-            window.location.href = result.redirect_url;
-          } else {
-            Swal.fire({
-              icon: "error",
-              title: "خطأ في الدخول",
-              text: result.message || "كلمة المرور غير صحيحة.",
-            });
-          }
-        } catch (error) {
-          console.error("Login Error:", error);
-          Swal.fire(
-            "خطأ!",
-            "حدث خطأ غير متوقع. يرجى التحقق من الطرفية (CMD).",
-            "error"
-          );
-        } finally {
-          submitButton.disabled = false;
-          submitButton.innerHTML = originalButtonText;
-        }
-      });
-    }
+  document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.submitter, original = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+    try {
+      const res = await fetch("{{ url_for('login') }}", { method: "POST", body: new FormData(e.target) });
+      const j = await res.json();
+      if (j.success) window.location.href = j.redirect_url;
+      else Swal.fire({ icon: "error", title: "خطأ", text: j.message });
+    } catch { Swal.fire("خطأ!", "فشل الاتصال بالخادم.", "error"); }
+    finally { btn.disabled = false; btn.innerHTML = original; }
   });
 </script>
 {% endblock %}
