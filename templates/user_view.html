@@ -493,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function() {
             visitorName = localStorage.getItem('visitorNickname');
             if (!visitorName) {
                 const { value: name } = await Swal.fire({
-                    title: 'مرحباً بك!', input: 'text', inputLabel: 'الرجاء إدخال اسم مستعار للمتابعة',
+                    title: 'مرحباً بك!', input: 'text', inputLabel: 'الرجاء إدخال اسم مستعار للمتابعة و عدم استخدام النقطة ( . ) كاسم او اي لفظ سيء تجنباً للحظر',
                     inputPlaceholder: 'اسمك المستعار...', allowOutsideClick: false, allowEscapeKey: false,
                     inputValidator: (v) => !v && 'يجب إدخال اسم!'
                 });
@@ -1059,7 +1059,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (existingUser) {
             const maxPoints = Math.max(...allUsersCache.map(u => u.points || 0), 1);
             percentage = Math.min(Math.round(((existingUser.points || 0) / maxPoints) * 100), 100);
-            title = `نتيجة الزاحف الأصلي: ${existingUser.name}`; text = `🦎 زاحف معتمد بنسبة ${percentage}%. أصلي والباقي تقليد!`; color = '#8e44ad';
+            title = `نتيجة الزاحف الأصلي: ${existingUser.name}`; text = ` زاحف معتمد بنسبة🦎 ${percentage}%. ولدَ زاحفاً و  سيبقى زاحف  محتل هذه اللوحة!`; color = '#8e44ad';
         } else {
             let hash = 0;
             for (let i = 0; i < name.length; i++) {
@@ -1069,9 +1069,10 @@ document.addEventListener('DOMContentLoaded', function() {
             percentage = (Math.abs(hash) % 100) + 1;
 
             title = `نتيجة فحص الزحف لـِ "${name}"`;
-            if (percentage < 30) { text = `نسبة زحفك ${percentage}%. زاحف تحت التمرين، أمامك مستقبل واعد!`; color = '#2ecc71'; }
-            else if (percentage < 70) { text = `نسبة زحفك ${percentage}%. موهوب بالفطرة، استمر في العطاء!`; color = '#f1c40f'; }
-            else { text = `نسبة زحفك ${percentage}%. خطر على المجتمع! زاحف من الطراز الرفيع!`; color = '#e74c3c'; }
+            if (percentage < 30) { text = `نسبة زحفك ${percentage}%. زاحف مبتدئ، أمامك طريق للتوبة !`; color = '#2ecc71'; }
+            else if (percentage < 50) { text = `نسبة زحفك ${percentage}%. زاحف الايزي ، كلنا عارفين قصصك لا تحاول تتغير!`; color = '#f1c40f'; }
+            else if (percentage < 70) { text = `نسبة زحفك ${percentage}%. زاحف خرائي ، بديت تغوص ولا عودة بعد اليوم!`; color = '#f1c40f'; }
+            else { text = `نسبة زحفك ${percentage}%. خطر على المجتمع! الله يعوض عليها بشوال رز!`; color = '#e74c3c'; }
         }
         ui.crawlModalTitle.textContent = "جاري الفحص..."; ui.crawlModalText.textContent = "";
         if (crawlChartInstance) { crawlChartInstance.destroy(); }
