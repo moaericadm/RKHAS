@@ -1,18 +1,121 @@
 {% extends "base.html" %} {% block title %}تسجيل الدخول{% endblock %} {% block
-header_title %}نظام إدارة نقاط الزواحف الرسمية (IT){% endblock %} {% block content %}
+header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% endblock %}
 
-{% if announcement and announcement.text %}
-<div class="row justify-content-center mb-4">
-    <div class="col-lg-8">
-        <div class="card text-center" style="background: linear-gradient(45deg, #e94560, #ff8c00); color: white; border: none; text-shadow: 1px 1px 2px rgba(0,0,0,0.4);">
-            <div class="card-header fw-bold" style="background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.2);">
-                <i class="bi bi-megaphone-fill me-2"></i> إعلان هام
+{% block styles %}
+<style>
+    /* --- START: NEW ANNOUNCEMENTS CAROUSEL STYLES --- */
+    .announcements-wrapper {
+        opacity: 0;
+        transform: translateY(20px);
+        animation: fadeInSlideUp 0.8s ease-out forwards;
+    }
+
+    @keyframes fadeInSlideUp {
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    #announcementsCarousel {
+        background: linear-gradient(135deg, rgba(159, 122, 234, 0.2), rgba(0, 242, 255, 0.1));
+        border-radius: 0.75rem;
+        border: 1px solid var(--card-border);
+        box-shadow: 0 0 25px rgba(159, 122, 234, 0.1);
+        backdrop-filter: blur(10px);
+    }
+
+    html:not(.dark-mode) #announcementsCarousel {
+        background: linear-gradient(135deg, #6b46c1, #2b6cb0);
+    }
+
+
+    #announcementsCarousel .carousel-inner {
+        padding: 2.5rem 4rem;
+        text-align: center;
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    html:not(.dark-mode) #announcementsCarousel .carousel-inner {
+        color: #fff;
+    }
+
+    /* Improved carousel item fade transition */
+    #announcementsCarousel .carousel-item {
+        transition: opacity 0.8s ease-in-out;
+        opacity: 0;
+        position: absolute;
+        width: 100%;
+        display: block; /* Override Bootstrap's display none */
+    }
+
+        #announcementsCarousel .carousel-item.active {
+            opacity: 1;
+            position: relative;
+        }
+
+    .announcement-icon {
+        font-size: 2rem;
+        color: var(--secondary-glow);
+        margin-bottom: 0.75rem;
+        text-shadow: 0 0 15px var(--secondary-glow);
+    }
+
+    html:not(.dark-mode) .announcement-icon {
+        color: #fff;
+        text-shadow: none;
+    }
+
+    #announcementsCarousel .carousel-control-prev,
+    #announcementsCarousel .carousel-control-next {
+        width: 5%;
+        background: rgba(0,0,0,0.1);
+    }
+
+    #announcementsCarousel .carousel-control-prev {
+        border-top-right-radius: 0.75rem;
+        border-bottom-right-radius: 0.75rem;
+    }
+
+    #announcementsCarousel .carousel-control-next {
+        border-top-left-radius: 0.75rem;
+        border-bottom-left-radius: 0.75rem;
+    }
+    /* --- END: NEW ANNOUNCEMENTS CAROUSEL STYLES --- */
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if announcements and announcements|length > 0 %}
+<div class="row justify-content-center mb-5 announcements-wrapper">
+    <div class="col-lg-10 col-xl-8">
+        <div id="announcementsCarousel" class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-inner">
+                {% for ann in announcements %}
+                <div class="carousel-item {% if loop.first %}active{% endif %}">
+                    <div class="announcement-icon"><i class="bi bi-megaphone-fill"></i></div>
+                    <p class="fs-5 fw-bold mb-0">{{ ann.text }}</p>
+                </div>
+                {% endfor %}
             </div>
-            <div class="card-body"><p class="card-text fs-5" style="font-weight: bold;">{{ announcement.text }}</p></div>
+            {% if announcements|length > 1 %}
+            <button class="carousel-control-prev" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
+            {% endif %}
         </div>
     </div>
 </div>
 {% endif %}
+
 
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-5">
@@ -33,19 +136,18 @@ header_title %}نظام إدارة نقاط الزواحف الرسمية (IT){%
         </div>
     </div>
 </div>
-<!-- *** القسم الجديد هنا: النص التقديمي *** -->
 <div class="row justify-content-center mt-5">
     <div class="col-lg-8">
         <div class="card bg-transparent border-0 text-center">
             <div class="card-body">
                 <hr style="border-color: var(--card-border); opacity: 0.5;">
                 <p class="text-muted mt-4 fs-6 lh-lg">
-                    هذا النظام مخصص لمتابعة وتحديث نقاط الزواحف في كلية ال  بشكل دوري و نظم معينة و حقائق تم 
+                    هذا النظام مخصص لمتابعة وتحديث نقاط الزواحف في كلية ال IT بشكل دوري و نظم معينة و حقائق تم
                     جمعها من قبل اشخاص و شهود قائمة على ادله و براهين.
                     <br>
                     يمكنم مشاركة الاسماء و سيتم رفعها مع وجود ادلة و براهين  و سيتم حسابها بمعادلة معينة.
                     <br>
-                    الرجاء اخذ الموقع على بمزح و دون شخنة و دون الاساءة باي الحالات  عشان ما افضح عرض رخيص او زاحف
+                    الرجاء اخذ الموقع  بمزح و دون شخصنة و دون الاساءة باي الحالات  عشان ما افضح عرض رخيص او زاحف
                     <br />
                     نأمل أن يعجبكم النظام و يكون مفيدًا وسهل الاستخدام.
                 </p>
@@ -56,6 +158,7 @@ header_title %}نظام إدارة نقاط الزواحف الرسمية (IT){%
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
   document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
