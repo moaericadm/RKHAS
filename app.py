@@ -6,38 +6,45 @@ import time
 import sys
 from dotenv import load_dotenv
 import re
+import random
 
 # --- تحميل متغيرات البيئة ---
 load_dotenv()
 
-# --- الإعدادات الأولية والتأكد من المتغيرات ---
+# --- الإعدادات الأولية ---
 try:
     FIREBASE_DATABASE_URL = os.getenv('FIREBASE_DATABASE_URL')
     SERVICE_ACCOUNT_FILE = os.getenv('FIREBASE_SERVICE_ACCOUNT')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
-    SITE_OWNER_NAME = "صاحب"
+    
     firebase_config = {
-        "apiKey": os.getenv("FIREBASE_API_KEY"), "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
-        "databaseURL": FIREBASE_DATABASE_URL, "projectId": os.getenv("FIREBASE_PROJECT_ID"),
-        "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET"), "messagingSenderId": os.getenv("FIREBASE_MESSAGING_SENDER_ID"),
-        "appId": os.getenv("FIREBASE_APP_ID"), "measurementId": os.getenv("FIREBASE_MEASUREMENT_ID")
+        "apiKey": os.getenv("FIREBASE_API_KEY"), 
+        "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
+        "databaseURL": FIREBASE_DATABASE_URL, 
+        "projectId": os.getenv("FIREBASE_PROJECT_ID"),
+        "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET"), 
+        "messagingSenderId": os.getenv("FIREBASE_MESSAGING_SENDER_ID"),
+        "appId": os.getenv("FIREBASE_APP_ID"), 
+        "measurementId": os.getenv("FIREBASE_MEASUREMENT_ID")
     }
-    if not all(firebase_config.values()) or not SERVICE_ACCOUNT_FILE or not ADMIN_PASSWORD:
-        missing = [k for k, v in firebase_config.items() if not v]
-        if not SERVICE_ACCOUNT_FILE: missing.append("FIREBASE_SERVICE_ACCOUNT")
-        if not ADMIN_PASSWORD: missing.append("ADMIN_PASSWORD")
-        raise ValueError(f"متغيرات البيئة التالية مفقودة أو فارغة في ملف .env: {', '.join(missing)}")
+    
+    required_config_keys = ["apiKey", "authDomain", "databaseURL", "projectId"]
+    missing_keys = [key for key, value in firebase_config.items() if key in required_config_keys and not value]
+    if missing_keys:
+        raise ValueError(f"متغيرات البيئة التالية لـ Firebase مفقودة أو فارغة: {', '.join(missing_keys)}")
+    
+    if not SERVICE_ACCOUNT_FILE or not ADMIN_PASSWORD:
+        raise ValueError("متغيرات FIREBASE_SERVICE_ACCOUNT أو ADMIN_PASSWORD مفقودة.")
+
 except Exception as e:
-    print(f"!!! خطأ حاسم في إعدادات البيئة: {e}", file=sys.stderr)
+    print(f"!!! خطأ حاسم في إعدادات البيئة (app.py): {e}", file=sys.stderr)
     sys.exit(1)
 
-BANNED_WORDS = ["صاحب الصفحة المنيك", "يا ابن الشرموطة", "يا منيك", "انت بتنتاك", "بنيك اختك", "كس اختك", "كسختك", "امك", "اختك"]
-def is_abusive_towards_owner(text):
-    lower_text = text.lower()
-    if SITE_OWNER_NAME.lower() not in lower_text: return False
-    for word in BANNED_WORDS:
-        if re.search(r'\b' + re.escape(word.lower()) + r'\b', lower_text): return True
-    return False
+BANNED_WORDS = ["منيك", "شرموطة", "بتنتاك", "بنيك", "كس اختك", "كسختك", "امك", "اختك"]
+def is_abusive(text):
+    if not text: return False
+    pattern = r'\b(' + '|'.join(re.escape(word) for word in BANNED_WORDS) + r')\b'
+    return bool(re.search(pattern, text, re.IGNORECASE))
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
@@ -47,25 +54,17 @@ try:
     cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
-    ref = db.reference('users/')
-    announcement_ref = db.reference('site_settings/announcement')
-    notifications_ref = db.reference('notifications/')
-    candidates_ref = db.reference('candidates/')
-    honor_roll_ref = db.reference('site_settings/honor_roll')
-    points_history_ref = db.reference('points_history/')
-    activity_log_ref = db.reference('activity_log/')
-    banned_users_ref = db.reference('banned_users/')
-    print("تم الاتصال بـ Firebase بنجاح!")
+    ref_users = db.reference('users/')
+    ref_banned_visitors = db.reference('banned_visitors/')
+    ref_site_settings = db.reference('site_settings/')
+    ref_candidates = db.reference('candidates/')
+    ref_activity_log = db.reference('activity_log/')
+    ref_points_history = db.reference('points_history/')
+    ref_visitor_messages = db.reference('visitor_messages/')
+    print("تم الاتصال بـ Firebase بنجاح (app.py)!")
 except Exception as e:
-    print(f"!!! خطأ فادح: فشل الاتصال بـ Firebase: {e}", file=sys.stderr)
+    print(f"!!! خطأ فادح: فشل الاتصال بـ Firebase (app.py): {e}", file=sys.stderr)
     sys.exit(1)
-
-def get_users_sorted():
-    users = ref.get() or {}
-    candidates = candidates_ref.get() or {}
-    user_list = [{'name': key, 'points': int(data.get('points', 0)), 'likes': int(data.get('likes', 0)), 'is_candidate': key in candidates} for key, data in users.items() if data and isinstance(data, dict)]
-    user_list.sort(key=lambda x: x['points'], reverse=True)
-    return user_list
 
 @app.route('/')
 def home(): return redirect(url_for('login'))
@@ -78,8 +77,9 @@ def login():
             session['admin_logged_in'] = True
             return jsonify(success=True, redirect_url=url_for('admin_panel'))
         return jsonify(success=False, message="كلمة المرور غير صحيحة.")
-    announcement = announcement_ref.get()
-    return render_template('login.html', announcement=announcement)
+    announcements_data = ref_site_settings.child('announcements').get() or {}
+    announcements = list(announcements_data.values())
+    return render_template('login.html', announcements=announcements)
 
 @app.route('/admin')
 def admin_panel():
@@ -87,7 +87,8 @@ def admin_panel():
     return render_template('admin.html', firebase_config=firebase_config)
 
 @app.route('/users')
-def user_view(): return render_template('user_view.html', firebase_config=firebase_config)
+def user_view():
+    return render_template('user_view.html', firebase_config=firebase_config)
 
 @app.route('/logout')
 def logout(): session.pop('admin_logged_in', None); return redirect(url_for('login'))
@@ -95,170 +96,250 @@ def logout(): session.pop('admin_logged_in', None); return redirect(url_for('log
 @app.route('/add', methods=['POST'])
 def add_user():
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        name = request.form.get('name', '').strip()
-        points = int(request.form.get('points', 0))
-        original_name = request.form.get('original_name', '').strip()
-        if not name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
-        if original_name and original_name != name:
-            old_data = ref.child(original_name).get()
-            if old_data:
-                ref.child(name).set(old_data)
-                ref.child(original_name).delete()
-            if candidates_ref.child(original_name).get():
-                candidates_ref.child(name).set(True)
-                candidates_ref.child(original_name).delete()
-        user_data = ref.child(name).get()
-        current_likes = user_data.get('likes', 0) if user_data else 0
-        ref.child(name).update({'points': points, 'likes': current_likes})
-        points_history_ref.child(name).push({'points': points, 'timestamp': int(time.time())})
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    name = request.form.get('name', '').strip()
+    points_str = request.form.get('points', '0')
+    original_name = request.form.get('original_name', '').strip()
+    if not name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
+    try: points = int(points_str)
+    except (ValueError, TypeError): return jsonify(success=False, message="النقاط يجب أن تكون رقماً صحيحاً."), 400
+    
+    if original_name and original_name != name:
+        old_data = ref_users.child(original_name).get()
+        if old_data:
+            ref_users.child(name).set(old_data)
+            ref_users.child(original_name).delete()
+            
+            old_history = ref_points_history.child(original_name).get()
+            if old_history:
+                ref_points_history.child(name).set(old_history)
+                ref_points_history.child(original_name).delete()
+            
+            if ref_candidates.child(original_name).get():
+                ref_candidates.child(name).set(True)
+                ref_candidates.child(original_name).delete()
 
-@app.route('/api/user_history/<username>')
-def get_user_history(username):
-    history_data = points_history_ref.child(username).get()
-    if not history_data:
-        user_data = ref.child(username).get()
-        current_points = user_data.get('points', 0) if user_data else 0
-        dummy_history = [{'timestamp': int(time.time()) - (86400 * 2), 'points': int(current_points * 0.7)}, {'timestamp': int(time.time()) - 86400, 'points': int(current_points * 0.9)}, {'timestamp': int(time.time()), 'points': current_points}]
-        return jsonify(dummy_history)
-    return jsonify(sorted(history_data.values(), key=lambda x: x.get('timestamp', 0)))
-
-@app.route('/api/users')
-def api_get_users(): return jsonify(get_users_sorted())
+    user_data = ref_users.child(name).get() or {}
+    current_likes = user_data.get('likes', 0) 
+    ref_users.child(name).update({'points': points, 'likes': current_likes})
+    
+    updated_user_data = ref_users.child(name).get()
+    new_total_points = updated_user_data.get('points', points) if updated_user_data else points
+    ref_points_history.child(name).push({'points': new_total_points, 'timestamp': int(time.time())})
+    
+    return jsonify(success=True)
 
 @app.route('/delete/<username>', methods=['POST'])
 def delete_user(username):
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        ref.child(username).delete(); candidates_ref.child(username).delete(); points_history_ref.child(username).delete()
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    ref_users.child(username).delete()
+    ref_candidates.child(username).delete()
+    ref_points_history.child(username).delete()
+    return jsonify(success=True)
 
 @app.route('/like/<username>', methods=['POST'])
 def like_user(username):
-    try:
-        visitor_name = request.form.get('visitor_name', 'زائر').strip()
-        ref.child(f'{username}/likes').transaction(lambda current: (current or 0) + 1)
-        activity_log_ref.push({'type': 'like', 'text': f"'{visitor_name}' أعجب بـ '{username}'", 'timestamp': int(time.time()), 'visitor_name': visitor_name})
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    visitor_name = request.form.get('visitor_name', 'زائر').strip()
+    action = request.args.get('action', 'like') 
+    if action == 'unlike':
+        ref_users.child(f'{username}/likes').transaction(lambda current: (current or 1) - 1)
+    else:
+        ref_users.child(f'{username}/likes').transaction(lambda current: (current or 0) + 1)
+        ref_activity_log.push({'type': 'like', 'text': f"'{visitor_name}' أعجب بـ '{username}'", 'timestamp': int(time.time()), 'visitor_name': visitor_name})
+    return jsonify(success=True)
 
 @app.route('/api/nominate', methods=['POST'])
 def nominate_user():
-    try:
-        name = request.form.get('name', '').strip()
-        visitor_name = request.form.get('visitor_name', 'زائر').strip()
-        if is_abusive_towards_owner(name):
-            text = f"محاولة إساءة من '{visitor_name}': {name}"
-            notifications_ref.push({'type': 'violation', 'text': text, 'timestamp': int(time.time()), 'status': 'unread'})
-            activity_log_ref.push({'type': 'violation', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
-            return jsonify(success=False, message="انحظرت يا ساقط", action="ban"), 403
-        if not name: return jsonify(success=False, message="الاسم مطلوب للترشيح."), 400
-        text = f"'{visitor_name}' رشح '{name}' للانضمام"
-        notifications_ref.push({'type': 'nomination', 'text': text, 'timestamp': int(time.time()), 'status': 'unread'})
-        activity_log_ref.push({'type': 'nomination', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
-        return jsonify(success=True, message="تم إرسال طلب الترشيح بنجاح!")
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    name = request.form.get('name', '').strip()
+    visitor_name = request.form.get('visitor_name', 'زائر').strip()
+    if is_abusive(name) or is_abusive(visitor_name):
+        ref_banned_visitors.child(visitor_name).set({'banned': True, 'timestamp': int(time.time())})
+        return jsonify(success=False, message="تم حظرك لاستخدام كلمات غير لائقة.", action="ban"), 403
+    if not name: return jsonify(success=False, message="الاسم مطلوب للترشيح."), 400
+    text = f"'{visitor_name}' رشح '{name}' للانضمام"
+    ref_activity_log.push({'type': 'nomination', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
+    return jsonify(success=True, message="تم إرسال طلب الترشيح بنجاح!")
 
 @app.route('/api/report', methods=['POST'])
 def report_user():
-    try:
-        reason = request.form.get('reason', '').strip()
-        visitor_name = request.form.get('visitor_name', 'الطالب').strip()
-        if is_abusive_towards_owner(reason):
-            text = f"محاولة إساءة من '{visitor_name}': {reason}"
-            notifications_ref.push({'type': 'violation', 'text': text, 'timestamp': int(time.time()), 'status': 'unread'})
-            activity_log_ref.push({'type': 'violation', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
-            return jsonify(success=False, message="بتسب يبن القحبة طيب حظرتك.", action="ban"), 403
-        reported_user = request.form.get('reported_user', '').strip()
-        if not reason: return jsonify(success=False, message="سبب الإبلاغ مطلوب."), 400
-        text = f"بلاغ من '{visitor_name}' ضد '{reported_user}': {reason}"
-        notifications_ref.push({'type': 'report', 'text': text, 'timestamp': int(time.time()), 'status': 'unread'})
-        activity_log_ref.push({'type': 'report', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
-        return jsonify(success=True, message=f"تم إرسال بلاغك بخصوص {reported_user}. شكراً لك.")
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    reason = request.form.get('reason', '').strip()
+    visitor_name = request.form.get('visitor_name', 'الطالب').strip()
+    reported_user = request.form.get('reported_user', '').strip()
+    if is_abusive(reason) or is_abusive(visitor_name) or is_abusive(reported_user):
+        ref_banned_visitors.child(visitor_name).set({'banned': True, 'timestamp': int(time.time())})
+        return jsonify(success=False, message="تم حظرك لاستخدام كلمات غير لائقة.", action="ban"), 403
+    if not reason: return jsonify(success=False, message="سبب الإبلاغ مطلوب."), 400
+    if not reported_user: return jsonify(success=False, message="يجب اختيار زاحف للإبلاغ عنه."), 400
+    text = f"بلاغ من '{visitor_name}' ضد '{reported_user}': {reason}"
+    ref_activity_log.push({'type': 'report', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
+    return jsonify(success=True, message=f"تم إرسال بلاغك بخصوص {reported_user}. شكراً لك.")
 
-@app.route('/api/admin/announcement', methods=['POST'])
-def set_announcement():
+@app.route('/api/user_history/<username>')
+def get_user_history(username):
+    history_data = ref_points_history.child(username).get()
+    if isinstance(history_data, dict):
+        history_list = list(history_data.values())
+        if len(history_list) == 1:
+             history_list.insert(0,{'points': history_list[0]['points'], 'timestamp': history_list[0]['timestamp'] - (3600*24) }) 
+        return jsonify(sorted(history_list, key=lambda x: x.get('timestamp', 0)))
+    else: 
+        user_data = ref_users.child(username).get() or {}
+        current_points = user_data.get('points', 0)
+        current_time = int(time.time())
+        return jsonify([
+            {'timestamp': current_time - (3600*24), 'points': current_points},
+            {'timestamp': current_time, 'points': current_points}
+        ])
+
+@app.route('/api/check_ban_status/<visitor_name>')
+def check_ban_status(visitor_name):
+    return jsonify({'is_banned': ref_banned_visitors.child(visitor_name).get() is not None})
+
+@app.route('/api/admin/ban_visitor', methods=['POST'])
+def ban_visitor():
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        text = request.form.get('text', '').strip()
-        if text: announcement_ref.set({'text': text, 'timestamp': int(time.time())})
-        else: announcement_ref.delete()
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    name_to_ban = request.form.get('name_to_ban', '').strip()
+    if not name_to_ban: return jsonify(success=False, message="اسم الزائر مطلوب للحظر."), 400
+    ref_banned_visitors.child(name_to_ban).set({'banned': True, 'timestamp': int(time.time())})
+    return jsonify(success=True, message=f"تم حظر الزائر '{name_to_ban}' بنجاح.")
+
+@app.route('/api/admin/unban_visitor/<visitor_name>', methods=['POST'])
+def unban_visitor(visitor_name):
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    ref_banned_visitors.child(visitor_name).delete()
+    return jsonify(success=True, message=f"تم رفع الحظر عن '{visitor_name}'.")
 
 @app.route('/api/admin/candidate/<action>/<username>', methods=['POST'])
 def manage_candidate(action, username):
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        if action == 'add': candidates_ref.child(username).set(True)
-        elif action == 'remove': candidates_ref.child(username).delete()
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    if action == 'add': ref_candidates.child(username).set(True)
+    elif action == 'remove': ref_candidates.child(username).delete()
+    return jsonify(success=True)
 
-@app.route('/api/admin/notifications')
-def get_notifications():
+@app.route('/api/admin/announcements/add', methods=['POST'])
+def add_announcement():
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    notifications = notifications_ref.get() or {}
-    return jsonify(sorted(list({'id': k, **v} for k, v in notifications.items()), key=lambda x: x.get('timestamp', 0), reverse=True))
+    text = request.form.get('text', '').strip()
+    if not text: return jsonify(success=False, message="نص الإعلان مطلوب."), 400
+    ref_site_settings.child('announcements').push({'text': text})
+    return jsonify(success=True)
 
-@app.route('/api/admin/notifications/mark_read/<notif_id>', methods=['POST'])
-def mark_notification_read(notif_id):
+@app.route('/api/admin/announcements/delete/<item_id>', methods=['POST'])
+def delete_announcement(item_id):
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        notifications_ref.child(f'{notif_id}/status').set('read')
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
-    
-@app.route('/api/admin/honor_roll', methods=['GET'])
-def get_honor_roll():
-    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    honor_roll = honor_roll_ref.get() or {}
-    return jsonify([{'id': k, 'name': v['name']} for k, v in honor_roll.items()])
+    ref_site_settings.child(f'announcements/{item_id}').delete()
+    return jsonify(success=True)
 
 @app.route('/api/admin/honor_roll/add', methods=['POST'])
 def add_to_honor_roll():
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        name = request.form.get('name', '').strip()
-        if not name: return jsonify(success=False, message="الاسم مطلوب."), 400
-        honor_roll_ref.push({'name': name})
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    name = request.form.get('name', '').strip()
+    if name: ref_site_settings.child('honor_roll').push({'name': name})
+    return jsonify(success=True)
 
 @app.route('/api/admin/honor_roll/delete/<item_id>', methods=['POST'])
 def delete_from_honor_roll(item_id):
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    try:
-        honor_roll_ref.child(item_id).delete()
-        return jsonify(success=True)
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+    ref_site_settings.child(f'honor_roll/{item_id}').delete()
+    return jsonify(success=True)
 
-@app.route('/api/admin/activity_log')
-def get_activity_log():
+@app.route('/api/admin/visitor_message/send', methods=['POST'])
+def send_visitor_message():
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
-    log = activity_log_ref.get() or {}
-    return jsonify(sorted(list({'id': k, **v} for k, v in log.items()), key=lambda x: x.get('timestamp', 0), reverse=True))
+    visitor_name = request.form.get('visitor_name', '').strip()
+    message = request.form.get('message', '').strip()
+    if not visitor_name or not message: return jsonify(success=False, message="اسم الزائر والرسالة مطلوبان."), 400
+    ref_visitor_messages.child(visitor_name).push({'text': message, 'timestamp': int(time.time())})
+    return jsonify(success=True, message=f"تم إرسال الرسالة إلى {visitor_name}")
 
-@app.route('/api/admin/ban_user', methods=['POST'])
-def ban_user():
-    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+@app.route('/api/admin/settings/toggle_spin_wheel', methods=['POST'])
+def toggle_spin_wheel_setting():
+    if 'admin_logged_in' not in session:
+        return jsonify(success=False, message="غير مصرح به"), 401
+    
+    enabled_str = request.form.get('enabled')
+    if enabled_str is None:
+        return jsonify(success=False, message="لم يتم إرسال حالة التفعيل."), 400
+    
+    enabled = enabled_str.lower() == 'true'
+    
     try:
-        name_to_ban = request.form.get('name_to_ban', '').strip()
-        if not name_to_ban: return jsonify(success=False, message="الاسم مطلوب للحظر."), 400
-        banned_users_ref.child(name_to_ban).set(True)
-        if ref.child(name_to_ban).get():
-            ref.child(name_to_ban).delete()
-        return jsonify(success=True, message=f"تم حظر ابن العايب  '{name_to_ban}' وحذفه من القوائم.")
-    except Exception as e: return jsonify(success=False, message=str(e)), 500
+        ref_site_settings.child('spin_wheel_enabled').set(enabled)
+        message = f"تم {'تفعيل' if enabled else 'تعطيل'} ميزة عجلة الحظ بنجاح."
+        return jsonify(success=True, message=message)
+    except Exception as e:
+        print(f"Error toggling spin wheel setting: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ أثناء تحديث الإعداد."), 500
 
-@app.route('/api/check_ban_status/<visitor_name>')
-def check_ban_status(visitor_name):
-    is_banned = banned_users_ref.child(visitor_name).get() is not None
-    return jsonify({'is_banned': is_banned})
+@app.route('/api/spin_wheel', methods=['POST'])
+def spin_wheel_api():
+    spin_wheel_enabled = ref_site_settings.child('spin_wheel_enabled').get()
+    if not spin_wheel_enabled:
+        return jsonify(success=False, message="عذراً، ميزة عجلة الحظ معطلة حالياً من قبل الإدارة."), 403
+
+    prizes =    [100,    250,   500,   1000,  2500,  5000,  10000, 50000, 1000000]
+    weights =   [35,     25,    18,    10,    6,     3,     1.5,   1,     0.5]
+
+    if len(prizes) != len(weights):
+        print("Error: Prizes and weights array lengths do not match in /api/spin_wheel", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
+
+    chosen_prize = random.choices(prizes, weights=weights, k=1)[0]
+    
+    return jsonify(success=True, prize=chosen_prize)
+
+@app.route('/api/donate_points', methods=['POST'])
+def donate_points_api():
+    username_to_donate = request.form.get('username', '').strip()
+    points_str = request.form.get('points', '0').strip()
+    visitor_name = request.form.get('visitor_name', 'زائر مجهول').strip()
+
+    if not username_to_donate or not points_str:
+        return jsonify(success=False, message="البيانات المطلوبة (اسم المستخدم والنقاط) غير مكتملة."), 400
+
+    try:
+        points_to_add = int(points_str)
+        if points_to_add <= 0:
+            raise ValueError("Points must be a positive integer.")
+    except ValueError:
+        return jsonify(success=False, message="قيمة النقاط غير صالحة."), 400
+
+    user_to_donate_ref = ref_users.child(username_to_donate)
+    user_exists = user_to_donate_ref.get()
+
+    if not user_exists:
+        return jsonify(success=False, message=f"المستخدم '{username_to_donate}' غير موجود للتبرع له."), 404
+
+    try:
+        def transaction_update(current_points_data):
+            if current_points_data is None: 
+                current_points_data = {'points': 0, 'likes': 0} 
+            current_points_data['points'] = current_points_data.get('points', 0) + points_to_add
+            return current_points_data
+
+        user_to_donate_ref.transaction(transaction_update)
+        
+        timestamp = int(time.time())
+        activity_text = f"'{visitor_name}' تبرع بـ {points_to_add:,} نقطة إلى '{username_to_donate}' عن طريق عجلة الحظ."
+        ref_activity_log.push({
+            'type': 'gift', 
+            'text': activity_text, 
+            'timestamp': timestamp,
+            'visitor_name': visitor_name
+        })
+
+        final_points_data = user_to_donate_ref.get()
+        final_points = final_points_data.get('points', 0) if final_points_data else points_to_add
+
+        ref_points_history.child(username_to_donate).push({
+            'points': final_points,
+            'timestamp': timestamp
+        })
+        
+        return jsonify(success=True, message=f"تم التبرع بـ {points_to_add:,} نقطة إلى {username_to_donate} بنجاح! شكراً لك.")
+    except Exception as e:
+        print(f"Error donating points: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ أثناء عملية التبرع."), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
