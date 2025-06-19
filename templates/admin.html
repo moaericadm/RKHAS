@@ -1,9 +1,24 @@
 {% extends "base.html" %} {% block title %}لوحة التحكم{% endblock %} {% block
-header_title %}لوحة تحكم المسؤول{% endblock %} {% block content %}
+header_title %}لوحة تحكم المسؤول{% endblock %}
+{% block styles %}
+<style>
+    .table thead th {
+        background-color: var(--primary-glow) !important;
+        color: white !important;
+        text-shadow: 0 0 5px rgba(0,0,0,0.5);
+        border-color: var(--primary-glow) !important;
+    }
+
+    html:not(.dark-mode) .table thead th {
+        background-color: var(--header-color) !important;
+    }
+</style>
+{% endblock %}
+{% block content %}
 <ul class="nav nav-tabs nav-justified mb-4" id="adminTab" role="tablist">
     <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#users-panel" type="button"><i class="bi bi-people-fill me-2"></i>إدارة المستخدمين</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#notifications-panel" type="button"><i class="bi bi-bell-fill me-2"></i>الإشعارات <span id="notif-count-badge" class="badge bg-danger ms-1" style="display: none;"></span></button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity-log-panel" type="button"><i class="bi bi-journals me-2"></i>سجل النشاط</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity-log-panel" type="button"><i class="bi bi-person-lines-fill me-2"></i>سجل نشاط الزوار</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#banned-visitors-panel" type="button"><i class="bi bi-person-x-fill me-2"></i>قائمة الحظر</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#settings-panel" type="button"><i class="bi bi-gear-fill me-2"></i>الإعدادات</button></li>
 </ul>
 <div class="tab-content" id="adminTabContent">
@@ -23,8 +38,8 @@ header_title %}لوحة تحكم المسؤول{% endblock %} {% block content %
         </div>
         <div class="card shadow-lg">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <div><i class="bi bi-list-stars me-2"></i>قائمة الزاحف</div>
-                <button class="btn btn-outline-info btn-sm" id="add-candidate-btn"><i class="bi bi-person-up"></i> ترشيح الزاحف</button>
+                <div><i class="bi bi-list-stars me-2"></i>قائمة الزواحف</div>
+                <button class="btn btn-outline-info btn-sm" id="add-candidate-btn"><i class="bi bi-person-up"></i> ترشيح زاحف</button>
             </div>
             <div class="card-body table-responsive">
                 <table class="table table-hover align-middle">
@@ -34,35 +49,57 @@ header_title %}لوحة تحكم المسؤول{% endblock %} {% block content %
             </div>
         </div>
     </div>
-    <div class="tab-pane fade" id="notifications-panel" role="tabpanel">
-        <div class="card shadow-lg"><div class="card-header"><i class="bi bi-envelope-open-fill me-2"></i>صندوق الوارد</div><div class="card-body"><ul class="list-group" id="notifications-list"></ul></div></div>
-    </div>
     <div class="tab-pane fade" id="activity-log-panel" role="tabpanel">
         <div class="card shadow-lg">
             <div class="card-header"><i class="bi bi-list-check me-2"></i>سجل تفاعلات الزوار</div>
             <div class="card-body"><ul class="list-group" id="activityLogList"></ul></div>
         </div>
     </div>
-    <div class="tab-pane fade" id="settings-panel" role="tabpanel">
-        <div class="card shadow-lg mb-4">
-            <div class="card-header"><i class="bi bi-megaphone-fill me-2"></i>إدارة إعلان صفحة الدخول</div>
+    <div class="tab-pane fade" id="banned-visitors-panel" role="tabpanel">
+        <div class="card shadow-lg">
+            <div class="card-header"><i class="bi bi-shield-slash-fill me-2"></i>الزوار المحظورون</div>
             <div class="card-body">
-                <form id="announcementForm">
-                    <div class="mb-3"><label for="announcementText" class="form-label">نص الإعلان (اتركه فارغاً للحذف)</label><textarea class="form-control" id="announcementText" name="text" rows="3"></textarea></div>
-                    <button type="submit" class="btn btn-primary">حفظ الإعلان</button>
-                </form>
+                <ul class="list-group" id="banned-visitors-list"></ul>
             </div>
         </div>
-        <div class="card shadow-lg">
-            <div class="card-header"><i class="bi bi-award-fill me-2"></i>إدارة قائمة الزاحف الاكثر ذكراً</div>
+    </div>
+    <div class="tab-pane fade" id="settings-panel" role="tabpanel">
+        <div class="card shadow-lg mb-4">
+            <div class="card-header"><i class="bi bi-megaphone-fill me-2"></i>إدارة الإعلانات</div>
+            <div class="card-body">
+                <form id="announcementForm" class="mb-4">
+                    <label for="announcementText" class="form-label">إضافة إعلان جديد:</label>
+                    <div class="input-group"><input type="text" class="form-control" id="announcementText" name="text" placeholder="اكتب نص الإعلان هنا..." required><button class="btn btn-success" type="submit">إضافة <i class="bi bi-plus-lg"></i></button></div>
+                </form>
+                <hr><h6 class="mb-3">الإعلانات الحالية:</h6><ul class="list-group" id="announcements-list"></ul>
+            </div>
+        </div>
+        <div class="card shadow-lg mb-4">
+            <div class="card-header"><i class="bi bi-award-fill me-2"></i>إدارة قائمة "الأكثر ذكراً"</div>
             <div class="card-body">
                 <form id="honorRollForm" class="mb-4">
                     <label for="honorNameInput" class="form-label">إضافة زاحف جديد للقائمة:</label>
-                    <div class="input-group"><input type="text" class="form-control" id="honorNameInput" placeholder="اكتب الاسم هنا..." required><button class="btn btn-success" type="submit">إضافة <i class="bi bi-plus-lg"></i></button></div>
+                    <div class="input-group"><input type="text" class="form-control" id="honorNameInput" name="name" placeholder="اكتب الاسم هنا..." required><button class="btn btn-success" type="submit">إضافة <i class="bi bi-plus-lg"></i></button></div>
                 </form>
                 <hr><h6 class="mb-3">الأسماء الحالية في القائمة:</h6><ul class="list-group" id="honorRollList"></ul>
             </div>
         </div>
+        <!-- ======================================================= -->
+        <!-- == الكود الخاص بإدارة عجلة الحظ (تأكد من وجود هذا الجزء) == -->
+        <!-- ======================================================= -->
+        <div class="card shadow-lg">
+            <div class="card-header"><i class="bi bi-bullseye me-2"></i>إدارة عجلة الحظ</div>
+            <div class="card-body">
+                <div class="form-check form-switch fs-5">
+                    <input class="form-check-input" type="checkbox" role="switch" id="spin-wheel-toggle">
+                    <label class="form-check-label" for="spin-wheel-toggle">تفعيل ميزة عجلة الحظ للزوار</label>
+                </div>
+                <div class="form-text mt-2">عند تفعيلها، سيتمكن كل زائر و زاحف من لف العجلة مرة كل 24 ساعة للحصول على نقاط والتبرع بها.</div>
+            </div>
+        </div>
+        <!-- ======================================================= -->
+        <!-- ============= نهاية الكود الخاص بالعجلة =============== -->
+        <!-- ======================================================= -->
     </div>
 </div>
 {% endblock %}
@@ -71,8 +108,25 @@ header_title %}لوحة تحكم المسؤول{% endblock %} {% block content %
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script>
-  try { window.firebaseConfig = JSON.parse('{{ firebase_config|tojson|safe }}'); if (!window.firebaseConfig?.apiKey) throw new Error("Config missing"); }
-  catch(e) { console.error("Config Error:", e); document.body.innerHTML = '<div class="alert alert-danger">فشل حاسم في تحميل إعدادات التطبيق.</div>'; }
+  try {
+    const firebaseConfigStr = '{{ firebase_config|tojson|safe }}';
+    if (!firebaseConfigStr || firebaseConfigStr === '{}' || firebaseConfigStr.trim() === "") {
+        throw new Error("Firebase config string is missing or empty in admin.html template.");
+    }
+
+    window.firebaseConfig = JSON.parse(firebaseConfigStr);
+
+    if (!window.firebaseConfig?.apiKey) {
+        console.error("Firebase API Key is missing from window.firebaseConfig in admin.html after parsing.");
+        throw new Error("Parsed Firebase config is missing apiKey.");
+    }
+  } catch(e) {
+    console.error("Critical Firebase Config Error in admin.html:", e.message, e.stack);
+    const errorContainer = document.getElementById('adminTabContent') || document.body;
+    if (errorContainer) {
+        errorContainer.innerHTML = `<div class="alert alert-danger m-3">فشل حاسم في تحميل إعدادات Firebase. تحقق من Console. التفاصيل: ${e.message}</div>`;
+    }
+  }
 </script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 {% endblock %}
