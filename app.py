@@ -1,3 +1,5 @@
+
+
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import firebase_admin
 from firebase_admin import credentials, db
@@ -7,6 +9,7 @@ import sys
 from dotenv import load_dotenv
 import re
 import random
+import json
 
 # --- تحميل متغيرات البيئة ---
 load_dotenv()
@@ -251,41 +254,91 @@ def send_visitor_message():
     ref_visitor_messages.child(visitor_name).push({'text': message, 'timestamp': int(time.time())})
     return jsonify(success=True, message=f"تم إرسال الرسالة إلى {visitor_name}")
 
-@app.route('/api/admin/settings/toggle_spin_wheel', methods=['POST'])
-def toggle_spin_wheel_setting():
+# --- START: NEW AND UPDATED SPIN WHEEL ROUTES ---
+
+def get_default_spin_wheel_settings():
+    return {
+        "enabled": True,
+        "cooldownHours": 24,
+        "maxAttempts": 1,
+        "prizes": [
+            {"value": 100, "weight": 35},
+            {"value": 250, "weight": 25},
+            {"value": 500, "weight": 18},
+            {"value": 1000, "weight": 10},
+            {"value": 2500, "weight": 6},
+            {"value": 5000, "weight": 3},
+            {"value": 10000, "weight": 1.5},
+            {"value": 50000, "weight": 1},
+            {"value": 1000000, "weight": 0.5}
+        ]
+    }
+
+@app.route('/api/settings/spin_wheel', methods=['GET'])
+def get_spin_wheel_settings():
+    settings = ref_site_settings.child('spin_wheel_settings').get()
+    if not settings:
+        settings = get_default_spin_wheel_settings()
+    return jsonify(settings)
+
+@app.route('/api/admin/settings/spin_wheel', methods=['POST'])
+def save_spin_wheel_settings():
     if 'admin_logged_in' not in session:
         return jsonify(success=False, message="غير مصرح به"), 401
     
-    enabled_str = request.form.get('enabled')
-    if enabled_str is None:
-        return jsonify(success=False, message="لم يتم إرسال حالة التفعيل."), 400
-    
-    enabled = enabled_str.lower() == 'true'
-    
     try:
-        ref_site_settings.child('spin_wheel_enabled').set(enabled)
-        message = f"تم {'تفعيل' if enabled else 'تعطيل'} ميزة عجلة الحظ بنجاح."
-        return jsonify(success=True, message=message)
+        data = request.get_json()
+        if not data:
+            return jsonify(success=False, message="لم يتم إرسال بيانات."), 400
+        
+        # Basic validation
+        cooldown = int(data.get('cooldownHours', 24))
+        attempts = int(data.get('maxAttempts', 1))
+        prizes = data.get('prizes', [])
+        enabled = data.get('enabled', True)
+
+        if cooldown <= 0 or attempts <= 0 or not prizes:
+             return jsonify(success=False, message="بيانات الإعدادات غير صالحة."), 400
+
+        settings_to_save = {
+            'enabled': enabled,
+            'cooldownHours': cooldown,
+            'maxAttempts': attempts,
+            'prizes': prizes
+        }
+
+        ref_site_settings.child('spin_wheel_settings').set(settings_to_save)
+        return jsonify(success=True, message="تم حفظ إعدادات عجلة الحظ بنجاح!")
     except Exception as e:
-        print(f"Error toggling spin wheel setting: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ أثناء تحديث الإعداد."), 500
+        print(f"Error saving spin wheel settings: {e}", file=sys.stderr)
+        return jsonify(success=False, message=f"حدث خطأ أثناء حفظ الإعدادات: {e}"), 500
 
 @app.route('/api/spin_wheel', methods=['POST'])
 def spin_wheel_api():
-    spin_wheel_enabled = ref_site_settings.child('spin_wheel_enabled').get()
-    if not spin_wheel_enabled:
+    settings = ref_site_settings.child('spin_wheel_settings').get()
+    if not settings:
+        settings = get_default_spin_wheel_settings()
+
+    if not settings.get('enabled', False):
         return jsonify(success=False, message="عذراً، ميزة عجلة الحظ معطلة حالياً من قبل الإدارة."), 403
+    
+    prize_config = settings.get('prizes', [])
+    if not prize_config:
+        return jsonify(success=False, message="خطأ في إعدادات الجوائز. يرجى مراجعة الإدارة."), 500
 
-    prizes =    [100,    250,   500,   1000,  2500,  5000,  10000, 50000, 1000000]
-    weights =   [35,     25,    18,    10,    6,     3,     1.5,   1,     0.5]
+    prizes = [p['value'] for p in prize_config]
+    weights = [p['weight'] for p in prize_config]
 
-    if len(prizes) != len(weights):
-        print("Error: Prizes and weights array lengths do not match in /api/spin_wheel", file=sys.stderr)
+    if not prizes or not weights or len(prizes) != len(weights):
+        print("Error: Prizes and weights mismatch or empty in /api/spin_wheel", file=sys.stderr)
         return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
 
     chosen_prize = random.choices(prizes, weights=weights, k=1)[0]
     
     return jsonify(success=True, prize=chosen_prize)
+
+# --- END: NEW AND UPDATED SPIN WHEEL ROUTES ---
+
 
 @app.route('/api/donate_points', methods=['POST'])
 def donate_points_api():
@@ -310,11 +363,15 @@ def donate_points_api():
         return jsonify(success=False, message=f"المستخدم '{username_to_donate}' غير موجود للتبرع له."), 404
 
     try:
-        def transaction_update(current_points_data):
-            if current_points_data is None: 
-                current_points_data = {'points': 0, 'likes': 0} 
-            current_points_data['points'] = current_points_data.get('points', 0) + points_to_add
-            return current_points_data
+        def transaction_update(current_data):
+            # This handles both old structure (just points) and new (dict with points and likes)
+            if current_data is None:
+                current_data = {'points': 0, 'likes': 0}
+            elif isinstance(current_data, int): # Handle legacy format
+                current_data = {'points': current_data, 'likes': 0}
+            
+            current_data['points'] = current_data.get('points', 0) + points_to_add
+            return current_data
 
         user_to_donate_ref.transaction(transaction_update)
         
@@ -328,7 +385,7 @@ def donate_points_api():
         })
 
         final_points_data = user_to_donate_ref.get()
-        final_points = final_points_data.get('points', 0) if final_points_data else points_to_add
+        final_points = final_points_data.get('points', 0) if isinstance(final_points_data, dict) else (final_points_data or points_to_add)
 
         ref_points_history.child(username_to_donate).push({
             'points': final_points,
