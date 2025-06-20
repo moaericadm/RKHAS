@@ -1,6 +1,8 @@
+// --- START OF FILE admin.js ---
 document.addEventListener('DOMContentLoaded', function () {
     if (!document.getElementById('adminTab')) return;
 
+    // --- UI Elements ---
     const ui = {
         tableBody: document.getElementById('admin-table-body'),
         userForm: document.getElementById('userForm'),
@@ -19,9 +21,15 @@ document.addEventListener('DOMContentLoaded', function () {
         honorRollForm: document.getElementById('honorRollForm'),
         honorNameInput: document.getElementById('honorNameInput'),
         honorRollList: document.getElementById('honorRollList'),
-        spinWheelToggle: document.getElementById('spin-wheel-toggle'),
+        spinWheelSettingsForm: document.getElementById('spin-wheel-settings-form'),
+        spinWheelEnabledToggle: document.getElementById('spin-wheel-enabled-toggle'),
+        spinCooldownHours: document.getElementById('spin-cooldown-hours'),
+        spinMaxAttempts: document.getElementById('spin-max-attempts'),
+        prizesContainer: document.getElementById('prizes-container'),
+        addPrizeBtn: document.getElementById('add-prize-btn'),
     };
 
+    // --- Firebase Initialization ---
     try {
         if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
             throw new Error("Firebase config is missing or incomplete on window object in admin.js.");
@@ -40,44 +48,161 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const db = firebase.database();
-    let usersData = {}, candidatesData = {};
 
+    // --- Local State and Caches ---
+    let usersCache = {}; // Cache for user data to avoid re-fetching
+    let candidatesData = {}; // Cache for candidate data
+
+    // --- Helper Functions ---
     const formatNumber = (num) => new Intl.NumberFormat('en-US').format(num || 0);
     const parseSnapshot = (snapshot) => {
         const data = snapshot.val() || {};
         return Object.keys(data).map(key => ({ id: key, ...data[key] }));
     };
 
-    const renderAdminTable = () => {
-        if (!ui.tableBody) return;
-        const userList = Object.keys(usersData).map(key => ({
-            name: key,
-            points: parseInt(usersData[key].points || 0),
-            likes: parseInt(usersData[key].likes || 0),
-            is_candidate: key in candidatesData
-        })).sort((a, b) => b.points - a.points);
+    // --- START: OPTIMIZED USER TABLE RENDERING LOGIC ---
 
-        ui.tableBody.innerHTML = '';
-        if (userList.length > 0) {
-            userList.forEach((user, index) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <th class="align-middle">#${index + 1}</th>
-                    <td class="align-middle fw-bold">${user.name}</td>
-                    <td class="text-center align-middle">${formatNumber(user.points)}</td>
-                    <td class="text-center align-middle"><i class="bi bi-heart-fill text-danger"></i> ${formatNumber(user.likes)}</td>
-                    <td class="text-center align-middle">
-                        <button class="btn btn-info btn-sm" onclick="window.editUserFromTable('${user.name}')" title="تعديل"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn ${user.is_candidate ? 'btn-warning' : 'btn-outline-success'} btn-sm ms-2" onclick="window.toggleCandidate('${user.name}', ${user.is_candidate})" title="${user.is_candidate ? 'إزالة ترشيح' : 'إضافة كمرشح'}"><i class="bi ${user.is_candidate ? 'bi-person-x-fill' : 'bi-person-check-fill'}"></i></button>
-                        <button class="btn btn-danger btn-sm ms-2" onclick="window.confirmDelete('${user.name}')" title="حذف نهائي"><i class="bi bi-trash-fill"></i></button>
-                    </td>`;
-                ui.tableBody.appendChild(row);
-            });
+    // Creates the HTML for a single user row.
+    const createUserRowHTML = (user) => {
+        const isCandidate = user.name in candidatesData;
+        return `
+            <td class="align-middle fw-bold">${user.name}</td>
+            <td class="text-center align-middle">${formatNumber(user.points)}</td>
+            <td class="text-center align-middle"><i class="bi bi-heart-fill text-danger"></i> ${formatNumber(user.likes)}</td>
+            <td class="text-center align-middle">
+                <button class="btn btn-info btn-sm" onclick="window.editUserFromTable('${user.name}')" title="تعديل"><i class="bi bi-pencil-fill"></i></button>
+                <button class="btn ${isCandidate ? 'btn-warning' : 'btn-outline-success'} btn-sm ms-2" onclick="window.toggleCandidate('${user.name}', ${isCandidate})" title="${isCandidate ? 'إزالة ترشيح' : 'إضافة كمرشح'}"><i class="bi ${isCandidate ? 'bi-person-x-fill' : 'bi-person-check-fill'}"></i></button>
+                <button class="btn btn-danger btn-sm ms-2" onclick="window.confirmDelete('${user.name}')" title="حذف نهائي"><i class="bi bi-trash-fill"></i></button>
+            </td>
+        `;
+    };
+
+    // Updates the rank number (#) for all rows in the table.
+    const updateRanks = () => {
+        ui.tableBody.querySelectorAll('tr').forEach((row, index) => {
+            row.querySelector('th').textContent = `#${index + 1}`;
+        });
+    };
+
+    // Finds the correct position to insert a new or updated row based on points.
+    const findInsertPosition = (userPoints) => {
+        const rows = ui.tableBody.querySelectorAll('tr');
+        let insertBeforeNode = null;
+        for (const row of rows) {
+            const rowPoints = parseInt(row.dataset.points, 10);
+            if (userPoints > rowPoints) {
+                insertBeforeNode = row;
+                break;
+            }
+        }
+        return insertBeforeNode;
+    };
+
+    // Adds a new user row to the table in the correct sorted position.
+    const addUserToTable = (user) => {
+        if (!usersCache[user.name]) return; // Avoid adding if already removed
+
+        const newRow = document.createElement('tr');
+        newRow.id = `user-row-${user.name}`;
+        newRow.dataset.username = user.name;
+        newRow.dataset.points = user.points;
+
+        const rankPlaceholder = document.createElement('th');
+        rankPlaceholder.className = 'align-middle';
+        newRow.appendChild(rankPlaceholder);
+        newRow.innerHTML += createUserRowHTML(user);
+
+        const position = findInsertPosition(user.points);
+        ui.tableBody.insertBefore(newRow, position);
+        updateRanks();
+    };
+
+    // Updates an existing user row. If points change, it re-sorts the row.
+    const updateUserInTable = (user) => {
+        const row = document.getElementById(`user-row-${user.name}`);
+        if (!row) return;
+
+        const oldPoints = parseInt(row.dataset.points, 10);
+
+        // If points haven't changed, just update the content.
+        if (oldPoints === user.points) {
+            row.innerHTML = `<th class="align-middle">${row.querySelector('th').textContent}</th>` + createUserRowHTML(user);
         } else {
-            ui.tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">لا يوجد مستخدمين.</td></tr>';
+            // If points changed, remove the old row and insert a new one in the correct sorted position.
+            row.remove();
+            addUserToTable(user);
         }
     };
 
+    // Removes a user row from the table.
+    const removeUserFromTable = (username) => {
+        const row = document.getElementById(`user-row-${username}`);
+        if (row) {
+            row.remove();
+            updateRanks();
+        }
+    };
+
+    const initializeUserList = () => {
+        const usersRef = db.ref('users');
+
+        // Step 1: Initial load (fetch all data once, sorted by points)
+        ui.tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-5"><div class="spinner-border"></div> <p>جاري تحميل القائمة لأول مرة...</p></td></tr>';
+        usersRef.orderByChild('points').once('value', (snapshot) => {
+            const initialUsers = [];
+            snapshot.forEach(childSnapshot => {
+                initialUsers.push({ name: childSnapshot.key, ...childSnapshot.val() });
+            });
+
+            // Reverse the array because orderByChild('points') is ascending
+            initialUsers.reverse();
+
+            ui.tableBody.innerHTML = ''; // Clear loading spinner
+            initialUsers.forEach(user => {
+                usersCache[user.name] = user; // Populate cache
+                addUserToTable(user); // Add to table
+            });
+
+            // If no users, show empty message
+            if (initialUsers.length === 0) {
+                ui.tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">لا يوجد مستخدمين.</td></tr>';
+            }
+
+            // Step 2: Set up real-time listeners for individual changes
+
+            // Fires when a new user is added
+            usersRef.on('child_added', (snapshot) => {
+                const user = { name: snapshot.key, ...snapshot.val() };
+                if (!usersCache[user.name]) { // Check if it's truly new
+                    console.log('User added:', user.name);
+                    usersCache[user.name] = user;
+                    addUserToTable(user);
+                }
+            });
+
+            // Fires when a user's data (e.g., points) changes
+            usersRef.on('child_changed', (snapshot) => {
+                const user = { name: snapshot.key, ...snapshot.val() };
+                console.log('User changed:', user.name);
+                usersCache[user.name] = user;
+                updateUserInTable(user);
+            });
+
+            // Fires when a user is deleted
+            usersRef.on('child_removed', (snapshot) => {
+                const username = snapshot.key;
+                console.log('User removed:', username);
+                delete usersCache[username];
+                removeUserFromTable(username);
+            });
+
+        });
+    };
+
+    // --- END: OPTIMIZED USER TABLE RENDERING LOGIC ---
+
+
+    // --- Other Panel Rendering Functions (unchanged) ---
     const renderBannedVisitors = (bannedSnapshot) => {
         if (!ui.bannedVisitorsList) return;
         const bannedList = parseSnapshot(bannedSnapshot);
@@ -156,20 +281,137 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     };
 
-    const clearForm = () => {
-        if (ui.userForm) ui.userForm.reset();
-        if (ui.originalNameInput) ui.originalNameInput.value = '';
-        if (ui.formTitle) ui.formTitle.innerText = 'إضافة مستخدم جديد';
-        if (ui.saveUserBtn) {
-            ui.saveUserBtn.innerText = 'إضافة';
-            ui.saveUserBtn.classList.replace('btn-warning', 'btn-primary');
-        }
-        if (ui.clearFormBtn) ui.clearFormBtn.style.display = 'none';
+    // --- Spin Wheel Settings Functions ---
+    const addPrizeInput = (prize = { value: '', weight: '' }) => {
+        const prizeRow = document.createElement('div');
+        prizeRow.className = 'input-group prize-row';
+        prizeRow.innerHTML = `
+            <span class="input-group-text">الجائزة:</span>
+            <input type="number" class="form-control prize-value" placeholder="قيمة النقاط" value="${prize.value}" required>
+            <span class="input-group-text">الوزن:</span>
+            <input type="number" step="any" class="form-control prize-weight" placeholder="نسبة الحظ" value="${prize.weight}" required>
+            <button class="btn btn-outline-danger remove-prize-btn" type="button"><i class="bi bi-trash-fill"></i></button>
+        `;
+        ui.prizesContainer.appendChild(prizeRow);
+        prizeRow.querySelector('.remove-prize-btn').addEventListener('click', () => prizeRow.remove());
     };
 
+    const loadSpinWheelSettings = () => {
+        db.ref('site_settings/spin_wheel_settings').once('value', snapshot => {
+            const settings = snapshot.val();
+            if (settings) {
+                ui.spinWheelEnabledToggle.checked = settings.enabled || false;
+                ui.spinCooldownHours.value = settings.cooldownHours || 24;
+                ui.spinMaxAttempts.value = settings.maxAttempts || 1;
+
+                ui.prizesContainer.innerHTML = '';
+                if (settings.prizes && settings.prizes.length > 0) {
+                    settings.prizes.forEach(prize => addPrizeInput(prize));
+                } else {
+                    addPrizeInput();
+                }
+            } else {
+                addPrizeInput({ value: 100, weight: 35 });
+                addPrizeInput({ value: 1000, weight: 10 });
+            }
+        });
+    };
+
+    // --- Form and Button Event Listeners ---
+    const clearForm = () => {
+        ui.userForm.reset();
+        ui.originalNameInput.value = '';
+        ui.formTitle.innerText = 'إضافة مستخدم جديد';
+        ui.saveUserBtn.innerText = 'إضافة';
+        ui.saveUserBtn.classList.replace('btn-warning', 'btn-primary');
+        ui.clearFormBtn.style.display = 'none';
+    };
+
+    ui.userForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        try {
+            const res = await fetch('/add', { method: 'POST', body: new FormData(ui.userForm) });
+            if (res.ok) {
+                clearForm();
+            } else {
+                Swal.fire('خطأ!', 'فشل الحفظ. تأكد من إدخال البيانات بشكل صحيح.', 'error');
+            }
+        } catch {
+            Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');
+        }
+    });
+
+    ui.clearFormBtn.addEventListener('click', clearForm);
+
+    ui.addCandidateBtn.addEventListener('click', () => {
+        Swal.fire({
+            title: 'ترشيح مستخدم جديد',
+            input: 'text',
+            inputLabel: 'اكتب اسم المستخدم لإضافته للمرشحين',
+            inputPlaceholder: 'اسم المرشح...',
+            showCancelButton: true,
+            confirmButtonText: 'إضافة',
+            cancelButtonText: 'إلغاء',
+            inputValidator: (v) => !v && 'يجب كتابة اسم!'
+        }).then(r => r.isConfirmed && r.value && window.toggleCandidate(r.value.trim(), false).then(() => Swal.fire('تم!', `تمت إضافة ${r.value} للمرشحين.`, 'success')));
+    });
+
+    ui.announcementForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        if (!ui.announcementText.value.trim()) return;
+        await fetch('/api/admin/announcements/add', { method: 'POST', body: new FormData(ui.announcementForm) });
+        ui.announcementForm.reset();
+    });
+
+    ui.honorRollForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        if (!ui.honorNameInput.value.trim()) return;
+        await fetch('/api/admin/honor_roll/add', { method: 'POST', body: new URLSearchParams({ name: ui.honorNameInput.value }) });
+        ui.honorNameInput.value = '';
+    });
+
+    ui.addPrizeBtn.addEventListener('click', () => addPrizeInput());
+
+    ui.spinWheelSettingsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const settings = {
+            enabled: ui.spinWheelEnabledToggle.checked,
+            cooldownHours: parseInt(ui.spinCooldownHours.value, 10),
+            maxAttempts: parseInt(ui.spinMaxAttempts.value, 10),
+            prizes: []
+        };
+
+        document.querySelectorAll('.prize-row').forEach(row => {
+            const value = parseFloat(row.querySelector('.prize-value').value);
+            const weight = parseFloat(row.querySelector('.prize-weight').value);
+            if (!isNaN(value) && !isNaN(weight)) {
+                settings.prizes.push({ value, weight });
+            }
+        });
+
+        if (settings.prizes.length === 0) {
+            Swal.fire('خطأ!', 'يجب إضافة جائزة واحدة على الأقل.', 'error');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/admin/settings/spin_wheel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.message || 'فشل غير معروف من الخادم');
+            Swal.fire({ icon: 'success', title: data.message, toast: true, position: 'top-end', showConfirmButton: false, timer: 2500 });
+        } catch (err) {
+            Swal.fire('خطأ!', err.message || 'فشل حفظ إعدادات عجلة الحظ.', 'error');
+        }
+    });
+
+    // --- Global Window Functions (for inline onclicks) ---
     window.editUserFromTable = (name) => {
-        const user = usersData[name];
-        if (!user || !ui.nameInput || !ui.pointsInput || !ui.originalNameInput || !ui.formTitle || !ui.saveUserBtn || !ui.clearFormBtn) return;
+        const user = usersCache[name];
+        if (!user) return;
         ui.nameInput.value = name;
         ui.pointsInput.value = user.points || 0;
         ui.originalNameInput.value = name;
@@ -180,26 +422,42 @@ document.addEventListener('DOMContentLoaded', function () {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    window.confirmDelete = (name) => Swal.fire({ title: `هل أنت متأكد؟`, text: `سيتم حذف الزاحف ${name} نهائياً!`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم!', cancelButtonText: 'إلغاء' }).then(r => {
-        if (r.isConfirmed) {
-            fetch(`/delete/${name}`, { method: 'POST' })
-                .then(res => { if (!res.ok) throw new Error('Server-side deletion failed'); })
-                .catch(err => Swal.fire('خطأ!', 'فشلت عملية الحذف.', 'error'));
-        }
-    });
+    window.confirmDelete = (name) => {
+        Swal.fire({
+            title: `هل أنت متأكد؟`,
+            text: `سيتم حذف الزاحف ${name} نهائياً!`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'نعم!',
+            cancelButtonText: 'إلغاء'
+        }).then(r => {
+            if (r.isConfirmed) {
+                fetch(`/delete/${name}`, { method: 'POST' }).catch(() => Swal.fire('خطأ!', 'فشلت عملية الحذف.', 'error'));
+            }
+        });
+    };
 
-    window.confirmBanVisitor = (name) => Swal.fire({ title: `حظر الزائر "${name}"؟`, text: 'سيتم منعه من استخدام الموقع.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم، احظر!', cancelButtonText: 'إلغاء' }).then(r => {
-        if (r.isConfirmed) {
-            fetch(`/api/admin/ban_visitor`, { method: 'POST', body: new URLSearchParams({ name_to_ban: name }) })
-                .then(res => { if (!res.ok) throw new Error('Server-side ban failed'); })
-                .catch(err => Swal.fire('خطأ!', 'فشلت عملية الحظر.', 'error'));
-        }
-    });
+    window.confirmBanVisitor = (name) => {
+        Swal.fire({
+            title: `حظر الزائر "${name}"؟`,
+            text: 'سيتم منعه من استخدام الموقع.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'نعم، احظر!',
+            cancelButtonText: 'إلغاء'
+        }).then(r => {
+            if (r.isConfirmed) {
+                fetch(`/api/admin/ban_visitor`, { method: 'POST', body: new URLSearchParams({ name_to_ban: name }) }).catch(() => Swal.fire('خطأ!', 'فشلت عملية الحظر.', 'error'));
+            }
+        });
+    };
 
-    window.unbanVisitor = (name) => fetch(`/api/admin/unban_visitor/${name}`, { method: 'POST' }).then(res => { if (!res.ok) Swal.fire('خطأ!', 'فشلت عملية رفع الحظر.', 'error'); });
-    window.deleteAnnouncement = (id) => fetch(`/api/admin/announcements/delete/${id}`, { method: 'POST' }).then(res => { if (!res.ok) Swal.fire('خطأ!', 'فشلت عملية حذف الإعلان.', 'error'); });
-    window.deleteFromHonorRoll = (id) => fetch(`/api/admin/honor_roll/delete/${id}`, { method: 'POST' }).then(res => { if (!res.ok) Swal.fire('خطأ!', 'فشلت عملية الحذف.', 'error'); });
-    window.toggleCandidate = (name, isCandidate) => fetch(`/api/admin/candidate/${isCandidate ? 'remove' : 'add'}/${name}`, { method: 'POST' }).then(res => { if (!res.ok) Swal.fire('خطأ!', 'فشلت عملية الترشيح.', 'error'); });
+    window.unbanVisitor = (name) => fetch(`/api/admin/unban_visitor/${name}`, { method: 'POST' }).catch(() => Swal.fire('خطأ!', 'فشلت عملية رفع الحظر.', 'error'));
+    window.deleteAnnouncement = (id) => fetch(`/api/admin/announcements/delete/${id}`, { method: 'POST' }).catch(() => Swal.fire('خطأ!', 'فشلت عملية حذف الإعلان.', 'error'));
+    window.deleteFromHonorRoll = (id) => fetch(`/api/admin/honor_roll/delete/${id}`, { method: 'POST' }).catch(() => Swal.fire('خطأ!', 'فشلت عملية الحذف.', 'error'));
+    window.toggleCandidate = (name, isCandidate) => fetch(`/api/admin/candidate/${isCandidate ? 'remove' : 'add'}/${name}`, { method: 'POST' }).catch(() => Swal.fire('خطأ!', 'فشلت عملية الترشيح.', 'error'));
 
     window.sendVisitorMessage = (visitorName) => {
         Swal.fire({
@@ -219,53 +477,17 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
 
-    if (ui.userForm) ui.userForm.addEventListener('submit', async e => { e.preventDefault(); try { const res = await fetch('/add', { method: 'POST', body: new FormData(ui.userForm) }); if (res.ok) { clearForm(); } else { Swal.fire('خطأ!', 'فشل الحفظ. تأكد من إدخال البيانات بشكل صحيح.', 'error'); } } catch { Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error'); } });
-    if (ui.clearFormBtn) ui.clearFormBtn.addEventListener('click', clearForm);
-    if (ui.addCandidateBtn) ui.addCandidateBtn.addEventListener('click', () => Swal.fire({ title: 'ترشيح مستخدم جديد', input: 'text', inputLabel: 'اكتب اسم المستخدم لإضافته للمرشحين', inputPlaceholder: 'اسم المرشح...', showCancelButton: true, confirmButtonText: 'إضافة', cancelButtonText: 'إلغاء', inputValidator: (v) => !v && 'يجب كتابة اسم!' }).then(r => r.isConfirmed && r.value && window.toggleCandidate(r.value.trim(), false).then(() => Swal.fire('تم!', `تمت إضافة ${r.value} للمرشحين.`, 'success'))));
-    if (ui.announcementForm) ui.announcementForm.addEventListener('submit', async e => { e.preventDefault(); const text = ui.announcementText.value.trim(); if (!text) return; await fetch('/api/admin/announcements/add', { method: 'POST', body: new FormData(ui.announcementForm) }); ui.announcementForm.reset(); });
-    if (ui.honorRollForm) ui.honorRollForm.addEventListener('submit', async e => { e.preventDefault(); const name = ui.honorNameInput.value.trim(); if (!name) return; await fetch('/api/admin/honor_roll/add', { method: 'POST', body: new URLSearchParams({ name: ui.honorNameInput.value }) }); ui.honorNameInput.value = ''; });
-
-    if (ui.spinWheelToggle) {
-        ui.spinWheelToggle.addEventListener('change', async () => {
-            const isEnabled = ui.spinWheelToggle.checked;
-            try {
-                const res = await fetch('/api/admin/settings/toggle_spin_wheel', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ enabled: isEnabled.toString() })
-                });
-                const data = await res.json();
-                if (!res.ok || !data.success) throw new Error(data.message || 'فشل غير معروف من الخادم');
-                Swal.fire({ icon: 'success', title: data.message, toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-            } catch (e) {
-                Swal.fire('خطأ!', e.message || 'فشل تحديث إعداد عجلة الحظ.', 'error');
-                ui.spinWheelToggle.checked = !isEnabled;
-            }
-        });
-        db.ref('site_settings/spin_wheel_enabled').on('value', snapshot => {
-            if (ui.spinWheelToggle) {
-                ui.spinWheelToggle.checked = !!snapshot.val();
-            }
-        }, error => {
-            console.error("Firebase error listening to spin_wheel_enabled:", error);
-            if (ui.spinWheelToggle && ui.spinWheelToggle.parentElement) {
-                let errorMsg = ui.spinWheelToggle.parentElement.querySelector('.firebase-error-msg');
-                if (!errorMsg) {
-                    errorMsg = document.createElement('small');
-                    errorMsg.className = 'text-danger d-block mt-1 firebase-error-msg';
-                    ui.spinWheelToggle.parentElement.appendChild(errorMsg);
-                }
-                errorMsg.textContent = 'خطأ في مزامنة إعداد العجلة.';
-            }
-        });
-    } else {
-        console.warn("Element with ID 'spin-wheel-toggle' not found in admin.html. Spin wheel control will not be available.");
-    }
-
-    db.ref('users').on('value', snapshot => { usersData = snapshot.val() || {}; renderAdminTable(); });
-    db.ref('candidates').on('value', snapshot => { candidatesData = snapshot.val() || {}; renderAdminTable(); });
+    // --- Initial Data Load and Listeners Setup ---
+    initializeUserList();
+    db.ref('candidates').on('value', snapshot => {
+        candidatesData = snapshot.val() || {};
+        // Re-render all rows to update candidate buttons
+        Object.values(usersCache).forEach(updateUserInTable);
+    });
     db.ref('banned_visitors').on('value', renderBannedVisitors);
     db.ref('activity_log').orderByChild('timestamp').limitToLast(100).on('value', renderActivityLog);
     db.ref('site_settings/announcements').on('value', renderAnnouncements);
     db.ref('site_settings/honor_roll').on('value', renderHonorRoll);
+    loadSpinWheelSettings();
 });
+// --- END OF FILE admin.js ---
