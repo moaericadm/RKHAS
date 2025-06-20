@@ -1,3 +1,4 @@
+<!-- START OF FILE user_view.html -->
 {% extends "base.html" %}
 {% block title %}قائمة النقاط{% endblock %}
 {% block header_title %}قائمة الزواحف الرسمية (تحديث مباشر){% endblock %}
@@ -37,11 +38,17 @@
             box-shadow: none;
         }
 
-    #spin-timer {
+    #spin-timer, #spin-attempts-text {
         font-family: monospace;
         font-size: 1.1rem;
         color: var(--secondary-glow);
         text-shadow: 0 0 8px var(--secondary-glow);
+    }
+
+    #spin-attempts-text {
+        color: var(--text-color);
+        text-shadow: none;
+        font-size: 1rem;
     }
 
     #spinWheelModal .custom-modal-content {
@@ -318,7 +325,8 @@
             <div class="card shadow-lg" id="spin-wheel-card" style="display: none;">
                 <div class="card-header text-warning"><i class="bi bi-bullseye me-2"></i>عجلة حظ الزواحف</div>
                 <div class="card-body text-center">
-                    <p class="text-muted small mb-3">جرّب حظك مرة كل 24 ساعة للفوز بنقاط والتبرع بها!</p>
+                    <p class="text-muted small mb-2">جرّب حظك للفوز بنقاط والتبرع بها!</p>
+                    <div id="spin-attempts-text" class="mb-2 fw-bold"></div>
                     <div class="d-grid">
                         <button class="btn btn-info" id="spin-wheel-btn"><i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!</button>
                     </div>
@@ -466,6 +474,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btn: document.getElementById('spin-wheel-btn'),
             timerContainer: document.getElementById('spin-timer-container'),
             timer: document.getElementById('spin-timer'),
+            attemptsText: document.getElementById('spin-attempts-text'),
             modal: document.getElementById('spinWheelModal'),
             canvas: document.getElementById('spin-canvas'),
             modalCloseBtn: document.querySelector('#spinWheelModal .custom-close-btn')
@@ -480,6 +489,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let wheelSpinning = false;
     let cooldownInterval = null;
     let dbInstance = null;
+    let spinWheelSettings = null; // To store settings from the server
 
     const formatNumber = (num) => new Intl.NumberFormat('ar-EG').format(num || 0);
     const sessionProcessedMessageIds = new Set();
@@ -509,6 +519,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            // Fetch spin wheel settings first
+            const settingsRes = await fetch('/api/settings/spin_wheel');
+            if(!settingsRes.ok) throw new Error('Failed to fetch wheel settings');
+            spinWheelSettings = await settingsRes.json();
+
             const configStr = '{{ firebase_config|tojson|safe }}';
             if (!configStr || configStr === '{}' || configStr.trim() === "") {
                 throw new Error("Firebase config is missing or empty in the template.");
@@ -526,25 +541,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
             setupEventListeners();
 
-            // Check for libraries before initializing
-            if (typeof Winwheel !== 'undefined' && typeof gsap !== 'undefined' && typeof TweenMax !== 'undefined') {
-                initializeSpinWheel();
-            } else {
-                // Log which library is missing
-                let missing = [];
-                if(typeof Winwheel === 'undefined') missing.push('Winwheel');
-                if(typeof gsap === 'undefined') missing.push('gsap');
-                if(typeof TweenMax === 'undefined') missing.push('TweenMax');
-                console.error(`${missing.join(', ')} library is not defined! Spin wheel will not work.`);
-
-                if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ في تحميل مكتبة عجلة الحظ.</p>';
+            if (spinWheelSettings && spinWheelSettings.enabled) {
+                ui.spinWheel.card.style.display = 'block';
+                if (typeof Winwheel !== 'undefined' && typeof gsap !== 'undefined' && typeof TweenMax !== 'undefined') {
+                    initializeSpinWheel();
+                    updateSpinWheelUI(); // Initial check
+                } else {
+                    let missing = [];
+                    if(typeof Winwheel === 'undefined') missing.push('Winwheel');
+                    if(typeof gsap === 'undefined') missing.push('gsap');
+                    if(typeof TweenMax === 'undefined') missing.push('TweenMax');
+                    console.error(`${missing.join(', ')} library is not defined! Spin wheel will not work.`);
+                    if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ في تحميل مكتبة عجلة الحظ.</p>';
+                }
             }
+
 
             dbInstance.ref('users').on('value', handleUsersSnapshot, handleFirebaseError);
             dbInstance.ref('site_settings/honor_roll').on('value', handleHonorRollSnapshot, handleFirebaseError);
             dbInstance.ref('candidates').on('value', handleCandidatesSnapshot, handleFirebaseError);
             dbInstance.ref('site_settings/announcements').on('value', handleAnnouncementsSnapshot, handleFirebaseError);
-            dbInstance.ref('site_settings/spin_wheel_enabled').on('value', handleSpinWheelSettingSnapshot, handleFirebaseError);
             dbInstance.ref(`visitor_messages/${visitorName}`).on('child_added', handleVisitorMessage, handleFirebaseError);
 
         } catch (e) {
@@ -610,18 +626,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const annData = snapshot.val() || {};
         announcementsCache = Object.values(annData);
         renderAnnouncements();
-    }
-
-    function handleSpinWheelSettingSnapshot(snapshot) {
-        const isEnabled = !!snapshot.val();
-        if (ui.spinWheel.card) {
-            ui.spinWheel.card.style.display = isEnabled ? 'block' : 'none';
-            if (isEnabled) {
-                checkSpinCooldown();
-            } else {
-                if (cooldownInterval) clearInterval(cooldownInterval);
-            }
-        }
     }
 
     function renderUserTable() {
@@ -721,39 +725,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function initializeSpinWheel() {
-        if (!ui.spinWheel.canvas || typeof Winwheel === 'undefined' || typeof TweenMax === 'undefined') {
-            const errorMsg = "فشل تهيئة عجلة الحظ. المكتبات المطلوبة غير موجودة.";
-            console.error(errorMsg);
-            if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = `<p class="text-danger p-3">${errorMsg}</p>`;
-            return;
-        }
+        if (!ui.spinWheel.canvas || typeof Winwheel === 'undefined' || typeof TweenMax === 'undefined' || !spinWheelSettings) return;
 
-        const segmentsWithMillion = [
-            {'fillStyle' : '#eae56f', 'text' : '100', 'textFillStyle' : '#000'},
-            {'fillStyle' : '#7de6ef', 'text' : '250', 'textFillStyle' : '#000'},
-            {'fillStyle' : '#89f26e', 'text' : '500', 'textFillStyle' : '#000'},
-            {'fillStyle' : '#e7706f', 'text' : '1000'},
-            {'fillStyle' : '#FFD700', 'text' : 'مليون!', 'textFillStyle' : '#000'},
-            {'fillStyle' : '#c789f2', 'text' : '2500'},
-            {'fillStyle' : '#f2a15f', 'text' : '5000'},
-            {'fillStyle' : '#6aaff2', 'text' : '10000'},
-            {'fillStyle' : '#f289b4', 'text' : '50000'}
-        ];
+        const prizeSegments = spinWheelSettings.prizes.map((p, index) => {
+             const colors = ['#eae56f', '#7de6ef', '#89f26e', '#e7706f', '#c789f2', '#f2a15f', '#6aaff2', '#f289b4'];
+             const textFill = ['#000', '#000', '#000', '#fff', '#fff', '#000', '#fff', '#fff'];
+             let prizeText = p.value.toLocaleString('en-US');
+             if (p.value >= 1000000) prizeText = "مليون!";
+
+             return {
+                'fillStyle': colors[index % colors.length],
+                'text': prizeText,
+                'textFillStyle': textFill[index % textFill.length]
+             };
+        });
 
         try {
             theWheel = new Winwheel({
                 'canvasId'      : ui.spinWheel.canvas.id,
-                'numSegments'   : segmentsWithMillion.length,
+                'numSegments'   : prizeSegments.length,
                 'outerRadius'   : 212,
                 'textFontSize'  : 22,
-                'textFillStyle' : '#ffffff',
-                'segments'      : segmentsWithMillion,
+                'textFontWeight': 'bold',
+                'segments'      : prizeSegments,
                 'animation'     : {
                     'type'     : 'spinToStop', 'duration' : 8, 'spins' : 10,
                     'callbackFinished' : handleSpinFinish, 'easing'   : 'Power4.easeOut'
                 },
                 'pins'          : {
-                    'number'    : segmentsWithMillion.length * 2,
+                    'number'    : prizeSegments.length * 2,
                     'fillStyle' : 'silver',
                     'outerRadius': 4,
                     'margin': 5
@@ -763,6 +763,22 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error("Error initializing Winwheel:", e);
             if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ عند إنشاء عجلة الحظ.</p>';
         }
+    }
+
+    function getWinwheelState() {
+        try {
+            const state = JSON.parse(localStorage.getItem('winwheelState') || '{}');
+            return {
+                lastReset: state.lastReset || 0,
+                attemptsUsed: state.attemptsUsed || 0
+            };
+        } catch {
+            return { lastReset: 0, attemptsUsed: 0 };
+        }
+    }
+
+    function saveWinwheelState(state) {
+        localStorage.setItem('winwheelState', JSON.stringify(state));
     }
 
     async function handleSpinStart() {
@@ -783,18 +799,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(data.message || `Server error: ${res.status}`);
             }
 
+            let state = getWinwheelState();
+            state.attemptsUsed++;
+            saveWinwheelState(state);
+            updateSpinWheelUI();
+
             const prizeWon = data.prize;
             let stopAtSegmentIndex = -1;
 
             for (let i = 1; i <= theWheel.numSegments; i++) {
-                if (theWheel.segments[i]) {
-                    let segmentText = theWheel.segments[i].text.replace(/,/g, '');
-                    let segmentValue = (segmentText === 'مليون!') ? 1000000 : parseInt(segmentText);
-                    if (segmentValue === prizeWon) {
-                        stopAtSegmentIndex = i;
-                        break;
-                    }
-                }
+                 if (theWheel.segments[i]) {
+                     let segmentText = theWheel.segments[i].text.replace(/,/g, '');
+                     let segmentValue = (segmentText === 'مليون!') ? 1000000 : parseInt(segmentText);
+                     if (segmentValue === prizeWon) {
+                         stopAtSegmentIndex = i;
+                         break;
+                     }
+                 }
             }
 
             if (stopAtSegmentIndex === -1) {
@@ -803,13 +824,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             theWheel.animation.stopAngle = theWheel.getRandomForSegment(stopAtSegmentIndex);
-
             wheelSpinning = true;
             theWheel.startAnimation();
             ui.spinWheel.modal.classList.add('show');
             if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'none';
-
-            setSpinCooldown();
 
         } catch (error) {
             console.error("Spin Start Error:", error);
@@ -826,7 +844,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error("Indicated segment is invalid:", indicatedSegment);
             Swal.fire('عذراً', 'حدث خطأ غير متوقع أثناء تحديد الجائزة. لم يتم التبرع بأي نقاط.', 'error');
             resetSpinButton();
-            checkSpinCooldown();
+            updateSpinWheelUI();
             return;
         }
 
@@ -877,40 +895,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 Swal.fire('تم الإلغاء', 'لم يتم التبرع بالنقاط.', 'info');
             }
             resetSpinButton();
-            checkSpinCooldown();
+            updateSpinWheelUI();
         });
     }
 
-    function checkSpinCooldown() {
-        if (!ui.spinWheel.btn || !ui.spinWheel.timerContainer || !ui.spinWheel.timer) return;
+    function updateSpinWheelUI() {
+        if (!spinWheelSettings || !ui.spinWheel.btn) return;
         if(cooldownInterval) clearInterval(cooldownInterval);
 
-        const lastSpin = localStorage.getItem('lastSpinTime');
-        if (!lastSpin) {
-            ui.spinWheel.btn.style.display = 'block';
-            ui.spinWheel.btn.disabled = false;
-            ui.spinWheel.timerContainer.style.display = 'none';
-            return;
+        let state = getWinwheelState();
+        const cooldownMillis = spinWheelSettings.cooldownHours * 60 * 60 * 1000;
+        const timeSinceReset = Date.now() - state.lastReset;
+
+        if (timeSinceReset >= cooldownMillis) {
+            state = { lastReset: Date.now(), attemptsUsed: 0 };
+            saveWinwheelState(state);
         }
 
-        const twentyFourHours = 24 * 60 * 60 * 1000;
-        const timePassed = Date.now() - parseInt(lastSpin);
+        const attemptsLeft = spinWheelSettings.maxAttempts - state.attemptsUsed;
+        ui.spinWheel.attemptsText.textContent = `لديك ${attemptsLeft} / ${spinWheelSettings.maxAttempts} محاولات متبقية`;
 
-        if (timePassed >= twentyFourHours) {
-            localStorage.removeItem('lastSpinTime');
-            ui.spinWheel.btn.style.display = 'block';
+        if (attemptsLeft > 0) {
             ui.spinWheel.btn.disabled = false;
+            ui.spinWheel.btn.style.display = 'block';
             ui.spinWheel.timerContainer.style.display = 'none';
+            resetSpinButton();
         } else {
+            ui.spinWheel.btn.disabled = true;
             ui.spinWheel.btn.style.display = 'none';
             ui.spinWheel.timerContainer.style.display = 'block';
-            let timeLeft = twentyFourHours - timePassed;
+
+            let timeLeft = cooldownMillis - timeSinceReset;
 
             const updateTimer = () => {
                 timeLeft -= 1000;
                 if (timeLeft <= 0) {
                     clearInterval(cooldownInterval);
-                    checkSpinCooldown();
+                    updateSpinWheelUI(); // Re-check state to reset
                     return;
                 }
                 const h = Math.floor(timeLeft / (1000 * 60 * 60)).toString().padStart(2, '0');
@@ -921,10 +942,6 @@ document.addEventListener('DOMContentLoaded', function() {
             updateTimer();
             cooldownInterval = setInterval(updateTimer, 1000);
         }
-    }
-
-    function setSpinCooldown() {
-        localStorage.setItem('lastSpinTime', Date.now().toString());
     }
 
     function resetSpinButton() {
@@ -1194,3 +1211,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+<!-- END OF FILE user_view.html -->
