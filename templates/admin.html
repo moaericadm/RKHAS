@@ -1,3 +1,4 @@
+<!-- START OF FILE admin.html -->
 {% extends "base.html" %} {% block title %}لوحة التحكم{% endblock %} {% block
 header_title %}لوحة تحكم المسؤول{% endblock %}
 {% block styles %}
@@ -11,6 +12,10 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
 
     html:not(.dark-mode) .table thead th {
         background-color: var(--header-color) !important;
+    }
+
+    #prizes-container .input-group {
+        margin-bottom: 0.5rem;
     }
 </style>
 {% endblock %}
@@ -85,20 +90,44 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
             </div>
         </div>
         <!-- ======================================================= -->
-        <!-- == الكود الخاص بإدارة عجلة الحظ (تأكد من وجود هذا الجزء) == -->
+        <!-- ===== START: UPDATED SPIN WHEEL MANAGEMENT PANEL ====== -->
         <!-- ======================================================= -->
         <div class="card shadow-lg">
             <div class="card-header"><i class="bi bi-bullseye me-2"></i>إدارة عجلة الحظ</div>
             <div class="card-body">
-                <div class="form-check form-switch fs-5">
-                    <input class="form-check-input" type="checkbox" role="switch" id="spin-wheel-toggle">
-                    <label class="form-check-label" for="spin-wheel-toggle">تفعيل ميزة عجلة الحظ للزوار</label>
-                </div>
-                <div class="form-text mt-2">عند تفعيلها، سيتمكن كل زائر و زاحف من لف العجلة مرة كل 24 ساعة للحصول على نقاط والتبرع بها.</div>
+                <form id="spin-wheel-settings-form">
+                    <div class="form-check form-switch fs-5 mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="spin-wheel-enabled-toggle">
+                        <label class="form-check-label" for="spin-wheel-enabled-toggle">تفعيل ميزة عجلة الحظ للزوار</label>
+                    </div>
+                    <hr>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="spin-cooldown-hours" class="form-label">مدة الانتظار (بالساعات)</label>
+                            <input type="number" class="form-control" id="spin-cooldown-hours" value="24" min="1" required>
+                            <div class="form-text">كم ساعة يجب أن ينتظر الزائر قبل الحصول على محاولات جديدة.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="spin-max-attempts" class="form-label">عدد المحاولات</label>
+                            <input type="number" class="form-control" id="spin-max-attempts" value="1" min="1" required>
+                            <div class="form-text">كم لفة يمكن للزائر أن يلعبها خلال فترة الانتظار.</div>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-3">الجوائز ونسب الحظ (الأوزان)</h6>
+                    <div id="prizes-container">
+                        <!-- Prize inputs will be generated here by JS -->
+                    </div>
+                    <button type="button" class="btn btn-outline-success btn-sm mt-2" id="add-prize-btn"><i class="bi bi-plus-circle-fill"></i> إضافة جائزة</button>
+                    <hr>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-save-fill me-2"></i>حفظ إعدادات العجلة</button>
+                    </div>
+                </form>
             </div>
         </div>
         <!-- ======================================================= -->
-        <!-- ============= نهاية الكود الخاص بالعجلة =============== -->
+        <!-- ====== END: UPDATED SPIN WHEEL MANAGEMENT PANEL ======= -->
         <!-- ======================================================= -->
     </div>
 </div>
@@ -130,3 +159,4 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
 </script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 {% endblock %}
+<!-- END OF FILE admin.html -->
