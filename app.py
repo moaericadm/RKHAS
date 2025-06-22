@@ -1,452 +1,430 @@
-<!-- START OF MODIFIED SCRIPT FOR user_view.html -->
-{% block scripts %}
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js"></script>
-<script src="{{ url_for('static', filename='js/Winwheel.min.js') }}"></script>
+# --- START OF FILE app.py (FINAL) ---
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const ui = {
-        tableBody: document.getElementById('user-table-body'),
-        loadingSpinner: document.getElementById('loading-spinner'),
-        hallOfFame: document.getElementById('hall-of-fame'),
-        honorRollList: document.getElementById('honor-roll-view-list'),
-        candidatesList: document.getElementById('candidates-list'),
-        searchInput: document.getElementById('searchInput'),
-        nominateBtn: document.getElementById('nominate-btn'),
-        reportBtn: document.getElementById('report-btn'),
-        userChartModal: document.getElementById('userChartModal'),
-        chartModalLabel: document.getElementById('chartModalLabel'),
-        userPointsChartCanvas: document.getElementById('userPointsChart'),
-        announcementsContainer: document.getElementById('announcements-container'),
-        announcementsTicker: document.getElementById('announcements-ticker'),
-        spinWheel: {
-            card: document.getElementById('spin-wheel-card'),
-            btn: document.getElementById('spin-wheel-btn'),
-            timerContainer: document.getElementById('spin-timer-container'),
-            timer: document.getElementById('spin-timer'),
-            attemptsText: document.getElementById('spin-attempts-text'),
-            modal: document.getElementById('spinWheelModal'),
-            canvas: document.getElementById('spin-canvas'),
-            modalCloseBtn: document.querySelector('#spinWheelModal .custom-close-btn')
-        }
-    };
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+import firebase_admin
+from firebase_admin import credentials, db, auth
+import os
+import time
+import sys
+from dotenv import load_dotenv
+import re
+import random
 
-    let allUsersCache = [], honorRollCache = [], candidatesCache = [], announcementsCache = [];
-    let userChartInstance = null, announcementInterval = null, theWheel = null;
-    let wheelSpinning = false, cooldownInterval = null, dbInstance = null, spinWheelSettings = null;
-    const isLoggedIn = {{ 'true' if session.user else 'false' }};
-    let userIsBanned = false; // <-- NEW: Flag for ban status
+# --- تحميل متغيرات البيئة ---
+load_dotenv()
 
-    const formatNumber = (num) => new Intl.NumberFormat('ar-EG').format(num || 0);
+# --- الإعدادات الأولية ---
+try:
+    FIREBASE_DATABASE_URL = os.getenv('FIREBASE_DATABASE_URL')
+    SERVICE_ACCOUNT_FILE = os.getenv('FIREBASE_SERVICE_ACCOUNT')
+    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
+    
+    firebase_config = {
+        "apiKey": os.getenv("FIREBASE_API_KEY"), 
+        "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
+        "databaseURL": FIREBASE_DATABASE_URL, 
+        "projectId": os.getenv("FIREBASE_PROJECT_ID"),
+        "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET"), 
+        "messagingSenderId": os.getenv("FIREBASE_MESSAGING_SENDER_ID"),
+        "appId": os.getenv("FIREBASE_APP_ID"), 
+        "measurementId": os.getenv("FIREBASE_MEASUREMENT_ID")
+    }
+    
+    required_config_keys = ["apiKey", "authDomain", "databaseURL", "projectId"]
+    missing_keys = [key for key, value in firebase_config.items() if key in required_config_keys and not value]
+    if missing_keys:
+        raise ValueError(f"متغيرات البيئة التالية لـ Firebase مفقودة أو فارغة: {', '.join(missing_keys)}")
+    
+    if not SERVICE_ACCOUNT_FILE or not ADMIN_PASSWORD:
+        raise ValueError("متغيرات FIREBASE_SERVICE_ACCOUNT أو ADMIN_PASSWORD مفقودة.")
 
-    async function initializeApp() {
-        try {
-            if (!window.firebaseConfig?.apiKey) throw new Error("Firebase config missing.");
-            dbInstance = firebase.database();
+except Exception as e:
+    print(f"!!! خطأ حاسم في إعدادات البيئة (app.py): {e}", file=sys.stderr)
+    sys.exit(1)
 
-            setupEventListeners();
+BANNED_WORDS = ["منيك", "شرموطة", "بتنتاك", "بنيك", "كس اختك", "كسختك", "امك", "اختك"]
+def is_abusive(text):
+    if not text: return False
+    pattern = r'\b(' + '|'.join(re.escape(word) for word in BANNED_WORDS) + r')\b'
+    return bool(re.search(pattern, text, re.IGNORECASE))
 
-            if (isLoggedIn) {
-                await checkUserBanStatus(); // <-- NEW: Check ban status on load
-                if (userIsBanned) return; // Stop initialization if banned
+app = Flask(__name__)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
+app.config['JSON_AS_ASCII'] = False
 
-                if (ui.spinWheel.card) {
-                    const settingsRes = await fetch('/api/settings/spin_wheel');
-                    if(!settingsRes.ok) throw new Error('Failed to fetch wheel settings');
-                    spinWheelSettings = await settingsRes.json();
-                    if (spinWheelSettings?.enabled) {
-                        ui.spinWheel.card.style.display = 'block';
-                        initializeSpinWheel();
-                        updateSpinWheelUI();
-                    }
+try:
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
+        firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
+        
+    ref_users = db.reference('users/')
+    ref_banned_visitors = db.reference('banned_visitors/')
+    ref_site_settings = db.reference('site_settings/')
+    ref_candidates = db.reference('candidates/')
+    ref_activity_log = db.reference('activity_log/')
+    ref_points_history = db.reference('points_history/')
+    ref_visitor_messages = db.reference('visitor_messages/')
+    ref_registered_users = db.reference('registered_users/')
+    print("تم الاتصال بـ Firebase بنجاح (app.py)!")
+except Exception as e:
+    print(f"!!! خطأ فادح: فشل الاتصال بـ Firebase (app.py): {e}", file=sys.stderr)
+    sys.exit(1)
+
+@app.context_processor
+def inject_global_vars():
+    return dict(session=session, firebase_config=firebase_config)
+
+@app.route('/')
+def home(): 
+    return redirect(url_for('user_view'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if 'admin_logged_in' in session: 
+        return redirect(url_for('admin_panel'))
+    if request.method == 'POST':
+        password = request.form.get('password')
+        if password == ADMIN_PASSWORD:
+            session['admin_logged_in'] = True
+            if 'user' not in session:
+                session['user'] = {
+                    'uid': 'admin_user',
+                    'name': 'Admin',
+                    'email': 'admin@system',
+                    'picture': 'https://i.imgur.com/sC3b3d5.png'
                 }
-            }
+            return jsonify(success=True, redirect_url=url_for('admin_panel'))
+        return jsonify(success=False, message="كلمة المرور غير صحيحة.")
+    
+    announcements_data = ref_site_settings.child('announcements').get() or {}
+    announcements = list(announcements_data.values())
+    return render_template('login.html', announcements=announcements)
 
-            dbInstance.ref('users').on('value', handleUsersSnapshot, handleFirebaseError);
-            dbInstance.ref('site_settings/honor_roll').on('value', handleHonorRollSnapshot, handleFirebaseError);
-            dbInstance.ref('candidates').on('value', handleCandidatesSnapshot, handleFirebaseError);
-            dbInstance.ref('site_settings/announcements').on('value', handleAnnouncementsSnapshot, handleFirebaseError);
-        } catch (e) {
-            console.error("CRITICAL INITIALIZATION ERROR:", e.message);
-            if (ui.loadingSpinner?.parentElement) {
-                 ui.loadingSpinner.parentElement.innerHTML = `<td colspan="4" class="text-center py-4"><div class="alert alert-danger m-3"><strong>خطأ حرج:</strong> ${e.message}</div></td>`;
-            }
+@app.route('/verify_token', methods=['POST'])
+def verify_token():
+    try:
+        token = request.form.get('id_token')
+        if not token:
+            return jsonify({'status': 'error', 'message': 'No token provided'}), 400
+            
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token['uid']
+        
+        user_info = {
+            'uid': uid,
+            'name': decoded_token.get('name', f'مستخدم {uid[:5]}'),
+            'email': decoded_token.get('email'),
+            'picture': decoded_token.get('picture')
         }
+        session['user'] = user_info
+        
+        user_ref = ref_registered_users.child(uid)
+        user_data = user_ref.get()
+        timestamp = int(time.time())
+        
+        if not user_data:
+            user_ref.set({
+                'displayName': user_info['name'],
+                'email': user_info['email'],
+                'photoURL': user_info['picture'],
+                'createdAt': timestamp,
+                'lastLogin': timestamp
+            })
+        else:
+             user_ref.update({
+                'displayName': user_info['name'],
+                'email': user_info['email'],
+                'photoURL': user_info['picture'],
+                'lastLogin': timestamp
+            })
+        return jsonify({'status': 'success', 'user': user_info})
+    except auth.InvalidIdTokenError:
+        return jsonify({'status': 'error', 'message': 'Invalid token'}), 401
+    except Exception as e:
+        print(f"Error in /verify_token: {e}", file=sys.stderr)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/logout')
+def logout():
+    session.pop('admin_logged_in', None)
+    session.pop('user', None)
+    return redirect(url_for('user_view'))
+
+@app.route('/admin')
+def admin_panel():
+    if 'admin_logged_in' not in session: return redirect(url_for('login'))
+    return render_template('admin.html')
+
+@app.route('/users')
+def user_view():
+    return render_template('user_view.html')
+
+@app.route('/api/check_ban_status')
+def check_ban_status():
+    if 'user' not in session:
+        return jsonify({'banned': False})
+    
+    visitor_name = session.get('user', {}).get('name')
+    if not visitor_name:
+        return jsonify({'banned': False})
+
+    is_banned = ref_banned_visitors.child(visitor_name).get()
+    
+    return jsonify({'banned': is_banned is not None})
+
+@app.route('/add', methods=['POST'])
+def add_user():
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    name = request.form.get('name', '').strip()
+    points_str = request.form.get('points', '0')
+    original_name = request.form.get('original_name', '').strip()
+    if not name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
+    try: points = int(points_str)
+    except (ValueError, TypeError): return jsonify(success=False, message="النقاط يجب أن تكون رقماً صحيحاً."), 400
+    
+    if original_name and original_name != name:
+        old_data = ref_users.child(original_name).get()
+        if old_data:
+            ref_users.child(name).set(old_data)
+            ref_users.child(original_name).delete()
+            old_history = ref_points_history.child(original_name).get()
+            if old_history:
+                ref_points_history.child(name).set(old_history)
+                ref_points_history.child(original_name).delete()
+            if ref_candidates.child(original_name).get():
+                ref_candidates.child(name).set(True)
+                ref_candidates.child(original_name).delete()
+            admin_name = session.get('user', {}).get('name', 'Admin')
+            log_text = f"المسؤول '{admin_name}' قام بتغيير اسم الزاحف من '{original_name}' إلى '{name}'."
+            ref_activity_log.push({'type': 'admin_edit', 'text': log_text, 'timestamp': int(time.time()), 'visitor_name': admin_name})
+
+    user_data = ref_users.child(name).get() or {}
+    current_likes = user_data.get('likes', 0) 
+    ref_users.child(name).update({'points': points, 'likes': current_likes})
+    
+    updated_user_data = ref_users.child(name).get()
+    new_total_points = updated_user_data.get('points', points) if updated_user_data else points
+    ref_points_history.child(name).push({'points': new_total_points, 'timestamp': int(time.time()), 'change_source': 'admin_update'})
+    return jsonify(success=True)
+
+@app.route('/delete/<username>', methods=['POST'])
+def delete_user(username):
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    ref_users.child(username).delete()
+    ref_candidates.child(username).delete()
+    ref_points_history.child(username).delete()
+    return jsonify(success=True)
+
+@app.route('/like/<username>', methods=['POST'])
+def like_user(username):
+    if 'user' not in session:
+        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للإعجاب."), 401
+    
+    visitor_name = session.get('user', {}).get('name', 'زائر')
+    action = request.args.get('action', 'like') 
+    
+    if action == 'unlike':
+        ref_users.child(f'{username}/likes').transaction(lambda current: (current or 1) - 1)
+    else:
+        ref_users.child(f'{username}/likes').transaction(lambda current: (current or 0) + 1)
+        ref_activity_log.push({'type': 'like', 'text': f"'{visitor_name}' أعجب بـ '{username}'", 'timestamp': int(time.time()), 'visitor_name': visitor_name})
+    return jsonify(success=True)
+
+@app.route('/api/nominate', methods=['POST'])
+def nominate_user():
+    if 'user' not in session:
+        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للترشيح."), 401
+
+    name = request.form.get('name', '').strip()
+    visitor_name = session['user']['name']
+    
+    if not name: return jsonify(success=False, message="الاسم مطلوب للترشيح."), 400
+    if is_abusive(name): return jsonify(success=False, message="تم الرفض بسبب استخدام كلمات غير لائقة."), 403
+    
+    text = f"'{visitor_name}' رشح '{name}' للانضمام"
+    ref_activity_log.push({'type': 'nomination', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
+    return jsonify(success=True, message="تم إرسال طلب الترشيح بنجاح!")
+
+@app.route('/api/report', methods=['POST'])
+def report_user():
+    if 'user' not in session:
+        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للإبلاغ."), 401
+
+    reason = request.form.get('reason', '').strip()
+    reported_user = request.form.get('reported_user', '').strip()
+    visitor_name = session['user']['name']
+    
+    if not reason or not reported_user: return jsonify(success=False, message="البيانات المطلوبة غير كاملة."), 400
+    if is_abusive(reason) or is_abusive(reported_user):
+        return jsonify(success=False, message="تم الرفض بسبب استخدام كلمات غير لائقة."), 403
+        
+    text = f"بلاغ من '{visitor_name}' ضد '{reported_user}': {reason}"
+    ref_activity_log.push({'type': 'report', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
+    return jsonify(success=True, message=f"تم إرسال بلاغك بخصوص {reported_user}. شكراً لك.")
+
+@app.route('/api/user_history/<username>')
+def get_user_history(username):
+    history_data = ref_points_history.child(username).get()
+    history_list = []
+    if isinstance(history_data, dict):
+        history_list = sorted(list(history_data.values()), key=lambda x: x.get('timestamp', 0))
+    
+    if not history_list:
+        user_data = ref_users.child(username).get() or {}
+        current_points = user_data.get('points', 0)
+        current_time = int(time.time())
+        return jsonify([{'timestamp': current_time - (3600*24), 'points': current_points}, {'timestamp': current_time, 'points': current_points}])
+
+    if len(history_list) == 1:
+         history_list.insert(0,{'points': history_list[0]['points'], 'timestamp': history_list[0]['timestamp'] - (3600*24) }) 
+         
+    return jsonify(history_list)
+
+@app.route('/api/admin/ban_visitor', methods=['POST'])
+def ban_visitor():
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    name_to_ban = request.form.get('name_to_ban', '').strip()
+    if not name_to_ban: return jsonify(success=False, message="اسم الزائر مطلوب للحظر."), 400
+    ref_banned_visitors.child(name_to_ban).set({'banned': True, 'timestamp': int(time.time())})
+    return jsonify(success=True, message=f"تم حظر الزائر '{name_to_ban}' بنجاح.")
+
+@app.route('/api/admin/unban_visitor/<visitor_name>', methods=['POST'])
+def unban_visitor(visitor_name):
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    ref_banned_visitors.child(visitor_name).delete()
+    return jsonify(success=True, message=f"تم رفع الحظر عن '{visitor_name}'.")
+
+@app.route('/api/admin/candidate/<action>/<username>', methods=['POST'])
+def manage_candidate(action, username):
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    if action == 'add': ref_candidates.child(username).set(True)
+    elif action == 'remove': ref_candidates.child(username).delete()
+    return jsonify(success=True)
+
+@app.route('/api/admin/announcements/add', methods=['POST'])
+def add_announcement():
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    text = request.form.get('text', '').strip()
+    if not text: return jsonify(success=False, message="نص الإعلان مطلوب."), 400
+    ref_site_settings.child('announcements').push({'text': text})
+    return jsonify(success=True)
+
+@app.route('/api/admin/announcements/delete/<item_id>', methods=['POST'])
+def delete_announcement(item_id):
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    ref_site_settings.child(f'announcements/{item_id}').delete()
+    return jsonify(success=True)
+
+@app.route('/api/admin/honor_roll/add', methods=['POST'])
+def add_to_honor_roll():
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    name = request.form.get('name', '').strip()
+    if name: ref_site_settings.child('honor_roll').push({'name': name})
+    return jsonify(success=True)
+
+@app.route('/api/admin/honor_roll/delete/<item_id>', methods=['POST'])
+def delete_from_honor_roll(item_id):
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    ref_site_settings.child(f'honor_roll/{item_id}').delete()
+    return jsonify(success=True)
+
+@app.route('/api/admin/visitor_message/send', methods=['POST'])
+def send_visitor_message():
+    if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
+    visitor_name = request.form.get('visitor_name', '').strip()
+    message = request.form.get('message', '').strip()
+    if not visitor_name or not message: return jsonify(success=False, message="اسم الزائر والرسالة مطلوبان."), 400
+    ref_visitor_messages.child(visitor_name).push({'text': message, 'timestamp': int(time.time())})
+    return jsonify(success=True, message=f"تم إرسال الرسالة إلى {visitor_name}")
+
+def get_default_spin_wheel_settings():
+    return {
+        "enabled": True, "cooldownHours": 24, "maxAttempts": 1,
+        "prizes": [
+            {"value": 100, "weight": 35}, {"value": 250, "weight": 25},
+            {"value": 500, "weight": 18}, {"value": 1000, "weight": 10},
+            {"value": 2500, "weight": 6}, {"value": 5000, "weight": 3},
+            {"value": 10000, "weight": 1.5}, {"value": 50000, "weight": 1},
+            {"value": 1000000, "weight": 0.5}
+        ]
     }
 
-    // <-- START: NEW BAN CHECK FUNCTION -->
-    async function checkUserBanStatus() {
-        if (!isLoggedIn) return false;
-        try {
-            const response = await fetch('/api/check_ban_status');
-            if (!response.ok) {
-                throw new Error(`: ${response.status}`);
-            }
-            const data = await response.json();
-            if (data.banned) {
-                userIsBanned = true;
-                // Disable all interactive elements
-                if(ui.nominateBtn) ui.nominateBtn.disabled = true;
-                if(ui.reportBtn) ui.reportBtn.disabled = true;
-                if(ui.spinWheel.btn) ui.spinWheel.btn.disabled = true;
-                document.querySelectorAll('.like-btn').forEach(b => b.disabled = true);
+@app.route('/api/settings/spin_wheel', methods=['GET'])
+def get_spin_wheel_settings():
+    settings = ref_site_settings.child('spin_wheel_settings').get()
+    return jsonify(settings or get_default_spin_wheel_settings())
 
-                Swal.fire({
-                    icon: 'error',
-                    title: 'لقد تم حظرك!',
-                    text: 'لا يمكنك التفاعل مع الموقع. الرجاء الاتصال بالدعم لمزيد من المعلومات.',
-                    allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    showConfirmButton: false,
-                });
-            }
-            return data.banned;
-        } catch (error) {
-            console.error("Ban check failed", error);
-            Swal.fire({
-                icon: 'error',
-                title: 'خطأ حرج',
-                text: `Ban status check failed${error.message}. يرجى المحاولة لاحقاً أو الاتصال بالدعم.`,
-            });
-            return true; // Assume banned if check fails to prevent actions
+@app.route('/api/admin/settings/spin_wheel', methods=['POST'])
+def save_spin_wheel_settings():
+    if 'admin_logged_in' not in session: return jsonify(success=False, message="غير مصرح به"), 401
+    try:
+        data = request.get_json()
+        if not data: return jsonify(success=False, message="لم يتم إرسال بيانات."), 400
+        settings_to_save = {
+            'enabled': data.get('enabled', True), 'cooldownHours': int(data.get('cooldownHours', 24)),
+            'maxAttempts': int(data.get('maxAttempts', 1)), 'prizes': data.get('prizes', [])
         }
-    }
-    // <-- END: NEW BAN CHECK FUNCTION -->
+        if settings_to_save['cooldownHours'] <= 0 or settings_to_save['maxAttempts'] <= 0 or not settings_to_save['prizes']:
+             return jsonify(success=False, message="بيانات الإعدادات غير صالحة."), 400
+        ref_site_settings.child('spin_wheel_settings').set(settings_to_save)
+        return jsonify(success=True, message="تم حفظ إعدادات عجلة الحظ بنجاح!")
+    except Exception as e:
+        print(f"Error saving spin wheel settings: {e}", file=sys.stderr)
+        return jsonify(success=False, message=f"حدث خطأ أثناء حفظ الإعدادات: {e}"), 500
 
-    function handleFirebaseError(error) {
-        console.error("Firebase Read Error:", error.code, error.message);
-        if (ui.loadingSpinner?.parentElement) {
-            ui.loadingSpinner.parentElement.innerHTML = `<td colspan="4" class="text-center py-4"><div class="alert alert-warning">فشل الاتصال بقاعدة البيانات. (${error.code})</div></td>`;
-        }
-    }
+@app.route('/api/spin_wheel', methods=['POST'])
+def spin_wheel_api():
+    if 'user' not in session:
+        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للعب عجلة الحظ."), 401
+    settings = ref_site_settings.child('spin_wheel_settings').get() or get_default_spin_wheel_settings()
+    if not settings.get('enabled', False):
+        return jsonify(success=False, message="عذراً، ميزة عجلة الحظ معطلة حالياً."), 403
+    
+    prize_config = settings.get('prizes', [])
+    if not prize_config: return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
 
-    function handleUsersSnapshot(snapshot) {
-        if (ui.loadingSpinner) ui.loadingSpinner.style.display = 'none';
-        const usersData = snapshot.val() || {};
-        allUsersCache = Object.keys(usersData).map(k => ({ name: k, ...usersData[k] })).sort((a, b) => (b.points || 0) - (a.points || 0));
-        renderUserTable();
-        renderTop3();
-    }
+    prizes = [p['value'] for p in prize_config]
+    weights = [p['weight'] for p in prize_config]
+    if not prizes or not weights or len(prizes) != len(weights):
+        return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
 
-    function handleHonorRollSnapshot(snapshot) {
-        honorRollCache = Object.values(snapshot.val() || {}).map(i => i.name);
-        renderHonorRollList();
-        if(allUsersCache.length > 0) renderUserTable();
-    }
+    chosen_prize = random.choices(prizes, weights=weights, k=1)[0]
+    return jsonify(success=True, prize=chosen_prize)
 
-    function handleCandidatesSnapshot(snapshot) {
-        candidatesCache = Object.keys(snapshot.val() || {});
-        renderCandidatesList();
-    }
+@app.route('/api/donate_points', methods=['POST'])
+def donate_points_api():
+    if 'user' not in session:
+        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للتبرع."), 401
 
-    function handleAnnouncementsSnapshot(snapshot) {
-        announcementsCache = Object.values(snapshot.val() || {});
-        renderAnnouncements();
-    }
+    username_to_donate = request.form.get('username', '').strip()
+    points_str = request.form.get('points', '0').strip()
+    visitor_name = session['user']['name']
 
-    function renderUserTable() {
-        if (!ui.tableBody) return;
-        const term = ui.searchInput.value.toLowerCase();
-        const filteredUsers = allUsersCache.filter(u => u.name.toLowerCase().includes(term));
-        ui.tableBody.innerHTML = filteredUsers.length ? filteredUsers.map((user) => {
-            const rank = allUsersCache.findIndex(u => u.name === user.name) + 1;
-            const honorBadge = honorRollCache.includes(user.name) ? ` <span class="badge rounded-pill" style="background:var(--primary-glow);color:#fff;"><i class="bi bi-award-fill"></i></span>` : '';
-            const likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers')) || []);
-            const hasLiked = likedUsers.has(user.name);
-            return `
-                <tr>
-                    <th class="align-middle">#${rank}</th>
-                    <td class="align-middle fw-bold">${user.name}${honorBadge}</td>
-                    <td class="text-center align-middle fs-5 fw-bold">${formatNumber(user.points)}</td>
-                    <td class="text-center align-middle">
-                        <button class="btn btn-sm like-btn ${hasLiked ? 'liked' : 'btn-outline-danger'}" data-username="${user.name}" title="إعجاب">
-                            <i class="bi bi-heart-fill"></i> <span class="like-count">${formatNumber(user.likes || 0)}</span>
-                        </button>
-                        <button class="btn btn-sm btn-outline-info ms-2 chart-btn" data-username="${user.name}" title="عرض تقدم الزاحف">
-                            <i class="bi bi-graph-up-arrow"></i>
-                        </button>
-                    </td>
-                </tr>`;
-        }).join('') : `<tr><td colspan="4" class="text-center py-4">${term ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد بيانات لعرضها.'}</td></tr>`;
-    }
+    if not username_to_donate or not points_str:
+        return jsonify(success=False, message="البيانات المطلوبة غير مكتملة."), 400
 
-    function renderTop3() {
-        if (!ui.hallOfFame) return;
-        ui.hallOfFame.innerHTML = allUsersCache.slice(0, 3).map((u, i) =>
-            `<li class="list-group-item d-flex justify-content-between"><span>${['🥇','🥈','🥉'][i]} ${u.name}</span><span class="badge rounded-pill" style="background-color:var(--primary-glow)">${formatNumber(u.points)}</span></li>`
-        ).join('') || `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`;
-    }
+    try: points_to_add = int(points_str)
+    except ValueError: return jsonify(success=False, message="قيمة النقاط غير صالحة."), 400
 
-    function renderHonorRollList() { ui.honorRollList.innerHTML = honorRollCache.length ? honorRollCache.map(name => `<li class="list-group-item fw-bold text-center"><i class="bi bi-star-fill text-warning me-2"></i>${name}</li>`).join('') : `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`; }
-    function renderCandidatesList() { ui.candidatesList.innerHTML = candidatesCache.length ? candidatesCache.map(name => `<li class="list-group-item"><i class="bi bi-person-check-fill me-2"></i>${name}</li>`).join('') : `<li class="list-group-item text-muted text-center">لا يوجد مرشحون.</li>`; }
+    user_to_donate_ref = ref_users.child(username_to_donate)
+    if not user_to_donate_ref.get():
+        return jsonify(success=False, message=f"المستخدم '{username_to_donate}' غير موجود."), 404
 
-    function renderAnnouncements() {
-        if (!ui.announcementsTicker || !ui.announcementsContainer) return;
-        ui.announcementsTicker.innerHTML = '';
-        if (announcementInterval) clearInterval(announcementInterval);
-        if (announcementsCache.length > 0) {
-            ui.announcementsContainer.style.display = '';
-            announcementsCache.forEach(ann => { ui.announcementsTicker.innerHTML += `<div class="ticker-item">${ann.text}</div>`; });
-            const items = ui.announcementsTicker.querySelectorAll('.ticker-item');
-            if (items.length === 0) return;
-            let currentIndex = 0;
-            items[currentIndex].classList.add('active');
-            if (items.length > 1) {
-                announcementInterval = setInterval(() => {
-                    items[currentIndex].classList.remove('active');
-                    currentIndex = (currentIndex + 1) % items.length;
-                    items[currentIndex].classList.add('active');
-                }, 5000);
-            }
-        } else {
-            ui.announcementsContainer.style.display = 'none';
-        }
-    }
+    try:
+        user_to_donate_ref.child('points').transaction(lambda current: (current or 0) + points_to_add)
+        timestamp = int(time.time())
+        activity_text = f"'{visitor_name}' تبرع بـ {points_to_add:,} نقطة إلى '{username_to_donate}'."
+        ref_activity_log.push({'type': 'gift', 'text': activity_text, 'timestamp': timestamp, 'visitor_name': visitor_name, 'points': points_to_add})
+        
+        final_points_data = user_to_donate_ref.get()
+        final_points = final_points_data.get('points', 0) if final_points_data else points_to_add
+        ref_points_history.child(username_to_donate).push({'points': final_points, 'timestamp': timestamp, 'change_source': 'donation'})
+        
+        return jsonify(success=True, message=f"تم التبرع بـ {points_to_add:,} نقطة إلى {username_to_donate} بنجاح!")
+    except Exception as e:
+        print(f"Error donating points: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ أثناء عملية التبرع."), 500
 
-    function setupEventListeners() {
-        ui.searchInput?.addEventListener('input', renderUserTable);
-
-        document.querySelectorAll('.custom-modal .custom-close-btn').forEach(btn =>
-            btn.addEventListener('click', e => e.target.closest('.custom-modal')?.classList.remove('show'))
-        );
-
-        ui.tableBody?.addEventListener('click', e => {
-            const likeBtn = e.target.closest('.like-btn');
-            const chartBtn = e.target.closest('.chart-btn');
-            if (likeBtn) handleLike(likeBtn);
-            if (chartBtn) showUserHistoryChart(chartBtn.dataset.username);
-        });
-
-        ui.nominateBtn?.addEventListener('click', handleNomination);
-        ui.reportBtn?.addEventListener('click', handleReport);
-        ui.spinWheel.btn?.addEventListener('click', handleSpinStart);
-    }
-
-    function handleLike(likeBtn) {
-        if (userIsBanned) return; // <-- Check if banned
-        if (!isLoggedIn) {
-            Swal.fire('تنبيه', 'يجب تسجيل الدخول أولاً للإعجاب.', 'warning');
-            document.getElementById('login-btn')?.click();
-            return;
-        }
-        const username = likeBtn.dataset.username;
-        const likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers')) || []);
-        const action = likedUsers.has(username) ? 'unlike' : 'like';
-        const countSpan = likeBtn.querySelector('.like-count');
-        let currentCount = parseInt(countSpan.textContent.replace(/,/g, ''), 10);
-
-        if (action === 'like') {
-            likedUsers.add(username);
-            likeBtn.classList.add('liked');
-            likeBtn.classList.remove('btn-outline-danger');
-            countSpan.textContent = formatNumber(currentCount + 1);
-        } else {
-            likedUsers.delete(username);
-            likeBtn.classList.remove('liked');
-            likeBtn.classList.add('btn-outline-danger');
-            countSpan.textContent = formatNumber(Math.max(0, currentCount - 1));
-        }
-        localStorage.setItem('likedUsers', JSON.stringify([...likedUsers]));
-        fetch(`/like/${username}?action=${action}`, { method:'POST' });
-    }
-
-    function handleNomination() {
-        if (userIsBanned) return; // <-- Check if banned
-        if (!isLoggedIn) {
-            Swal.fire('تنبيه', 'يجب تسجيل الدخول أولاً للترشيح.', 'warning');
-            document.getElementById('login-btn')?.click();
-            return;
-        }
-        Swal.fire({
-            title: 'رشح نفسك كزاحف', input: 'text', inputLabel: 'اكتب اسمك للترشيح',
-            inputPlaceholder: 'الاسم المراد ترشيحه...', showCancelButton: true,
-            confirmButtonText: 'إرسال الترشيح', cancelButtonText: 'إلغاء',
-            inputValidator: (v) => !v && 'يجب كتابة اسم!'
-        }).then(async res => {
-            if (res.isConfirmed && res.value) {
-                const r = await fetch('/api/nominate', { method: 'POST', body: new URLSearchParams({name: res.value}) });
-                const j = await r.json();
-                Swal.fire(j.success ? 'تم!' : 'خطأ!', j.message, j.success ? 'success' : 'error');
-            }
-        });
-    }
-
-    function handleReport() {
-        if (userIsBanned) return; // <-- Check if banned
-        if (!isLoggedIn) {
-            Swal.fire('تنبيه', 'يجب تسجيل الدخول أولاً للإبلاغ.', 'warning');
-            document.getElementById('login-btn')?.click();
-            return;
-        }
-        if (!allUsersCache.length) return Swal.fire('لا يوجد زواحف للإبلاغ عنهم حالياً.', '', 'info');
-        const userOptions = allUsersCache.reduce((obj, user) => ({...obj, [user.name]: user.name}), {});
-        Swal.fire({
-            title: 'الإبلاغ عن زاحف', input: 'select', inputOptions: userOptions,
-            inputPlaceholder: 'اختر الزاحف', showCancelButton: true,
-            confirmButtonText: 'التالي →',
-        }).then(result => {
-            if (result.isConfirmed && result.value) {
-                const reportedUser = result.value;
-                Swal.fire({
-                    title: `الإبلاغ عن ${reportedUser}`, input: 'textarea',
-                    inputLabel: 'سبب الإبلاغ', inputPlaceholder: 'اشرح المشكلة...',
-                    showCancelButton: true, confirmButtonText: 'إرسال البلاغ',
-                    inputValidator: (v) => !v && 'يجب كتابة سبب البلاغ!'
-                }).then(async reasonResult => {
-                    if (reasonResult.isConfirmed && reasonResult.value) {
-                        const r = await fetch('/api/report', { method: 'POST', body: new URLSearchParams({ reported_user: reportedUser, reason: reasonResult.value }) });
-                        const j = await r.json();
-                        Swal.fire(j.success ? 'تم!' : 'خطأ!', j.message, j.success ? 'success' : 'error');
-                    }
-                });
-            }
-        });
-    }
-
-    async function showUserHistoryChart(username) {
-        if (!ui.userChartModal) return;
-        try {
-            const response = await fetch(`/api/user_history/${username}`);
-            if(!response.ok) throw new Error("Failed to fetch history");
-            let history = await response.json();
-            if (!history || history.length === 0) return Swal.fire({icon: 'info', title: 'لا توجد بيانات', text: 'لا يوجد سجل نقاط لهذا الزاحف بعد.'});
-
-            ui.chartModalLabel.innerText = `تقدم الزاحف: ${username}`;
-            if (userChartInstance) userChartInstance.destroy();
-            const chartContext = ui.userPointsChartCanvas.getContext('2d');
-            const gradient = chartContext.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(0, 242, 255, 0.4)');
-            gradient.addColorStop(1, 'rgba(159, 122, 234, 0.1)');
-            userChartInstance = new Chart(chartContext, {
-                type: 'line',
-                data: {
-                    labels: history.map(h => new Date(h.timestamp * 1000).toLocaleDateString('ar-EG', { day: '2-digit', month: 'short', hour:'2-digit', minute:'2-digit'})),
-                    datasets: [{ label: 'النقاط', data: history.map(h => h.points), fill: true, backgroundColor: gradient, borderColor: '#00f2ff', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#00f2ff', pointRadius: 5, pointHoverRadius: 8, tension: 0.4 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: 'var(--text-color)' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }, x: { ticks: { color: 'var(--text-color)' }, grid: { display: false } } }, plugins: { legend: { display: false } } }
-            });
-            ui.userChartModal.classList.add('show');
-        } catch(e) { Swal.fire('خطأ', 'لم نتمكن من جلب سجل نقاط هذا الزاحف.', 'error'); }
-    }
-
-    function initializeSpinWheel() {
-        if (!ui.spinWheel.canvas || typeof Winwheel === 'undefined' || !spinWheelSettings?.prizes) return;
-        const prizeSegments = spinWheelSettings.prizes.map((p, index) => {
-            const colors = ['#eae56f', '#7de6ef', '#89f26e', '#e7706f', '#c789f2', '#f2a15f', '#6aaff2', '#f289b4'];
-            return { 'fillStyle': colors[index % colors.length], 'text': p.value.toLocaleString('en-US') };
-        });
-        theWheel = new Winwheel({
-            'canvasId': ui.spinWheel.canvas.id, 'numSegments': prizeSegments.length, 'outerRadius': 212,
-            'textFontSize': 22, 'textFontWeight': 'bold', 'segments': prizeSegments,
-            'animation': { 'type': 'spinToStop', 'duration': 8, 'spins': 10, 'callbackFinished': handleSpinFinish, 'easing': 'Power4.easeOut' },
-            'pins': { 'number': prizeSegments.length * 2, 'fillStyle': 'silver', 'outerRadius': 4, 'margin': 5 }
-        });
-    }
-
-    async function handleSpinStart() {
-        if (userIsBanned) return; // <-- Check if banned
-        if (wheelSpinning || !theWheel) return;
-        ui.spinWheel.btn.disabled = true;
-        ui.spinWheel.btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-        try {
-            const res = await fetch('/api/spin_wheel', { method: 'POST' });
-            const data = await res.json();
-            if (!res.ok || !data.success) throw new Error(data.message || `Server error: ${res.status}`);
-
-            let state = JSON.parse(localStorage.getItem('winwheelState') || '{}');
-            state.attemptsUsed = (state.attemptsUsed || 0) + 1;
-            localStorage.setItem('winwheelState', JSON.stringify(state));
-            updateSpinWheelUI();
-
-            let stopAtSegment = theWheel.segments.findIndex(s => s && parseInt(s.text.replace(/,/g, '')) === data.prize);
-            if (stopAtSegment === -1) stopAtSegment = Math.floor(Math.random() * theWheel.numSegments) + 1;
-
-            theWheel.animation.stopAngle = theWheel.getRandomForSegment(stopAtSegment);
-            wheelSpinning = true;
-            theWheel.startAnimation();
-            ui.spinWheel.modal.classList.add('show');
-            if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'none';
-        } catch (error) {
-            Swal.fire('خطأ', error.message || 'فشل الاتصال بالخادم.', 'error');
-            resetSpinButton();
-        }
-    }
-
-    function handleSpinFinish(indicatedSegment) {
-        wheelSpinning = false;
-        if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'block';
-        const prizeWon = parseInt(indicatedSegment.text.replace(/,/g, ''));
-        const userOptions = allUsersCache.reduce((obj, user) => ({...obj, [user.name]: user.name}), {});
-        Swal.fire({
-            title: `🎉 مبروك! فزت بـ ${formatNumber(prizeWon)} نقطة!`,
-            input: 'select', inputOptions: userOptions, inputPlaceholder: 'اختر زاحفاً للتبرع',
-            confirmButtonText: 'تبرع الآن!', showCancelButton: true, cancelButtonText: 'إلغاء',
-        }).then(async (result) => {
-            if (result.isConfirmed && result.value) {
-                const res = await fetch('/api/donate_points', {
-                    method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: new URLSearchParams({ username: result.value, points: prizeWon })
-                });
-                const data = await res.json();
-                Swal.fire(data.success ? 'شكراً لك!' : 'خطأ!', data.message, data.success ? 'success' : 'error');
-            } else { Swal.fire('تم الإلغاء', 'لم يتم التبرع بالنقاط.', 'info'); }
-            resetSpinButton();
-        });
-    }
-
-    function updateSpinWheelUI() {
-        if (!spinWheelSettings || !ui.spinWheel.btn) return;
-        if (cooldownInterval) clearInterval(cooldownInterval);
-
-        let state = JSON.parse(localStorage.getItem('winwheelState') || '{}');
-        const cooldownMillis = spinWheelSettings.cooldownHours * 60 * 60 * 1000;
-        const timeSinceReset = Date.now() - (state.lastReset || 0);
-
-        if (timeSinceReset >= cooldownMillis) {
-            state = { lastReset: Date.now(), attemptsUsed: 0 };
-            localStorage.setItem('winwheelState', JSON.stringify(state));
-        }
-
-        const attemptsLeft = spinWheelSettings.maxAttempts - (state.attemptsUsed || 0);
-        ui.spinWheel.attemptsText.textContent = `لديك ${attemptsLeft} / ${spinWheelSettings.maxAttempts} محاولات`;
-
-        if (attemptsLeft > 0) {
-            ui.spinWheel.btn.disabled = false;
-            ui.spinWheel.btn.style.display = 'block';
-            ui.spinWheel.timerContainer.style.display = 'none';
-            resetSpinButton();
-        } else {
-            ui.spinWheel.btn.style.display = 'none';
-            ui.spinWheel.timerContainer.style.display = 'block';
-            let timeLeft = cooldownMillis - timeSinceReset;
-            const updateTimer = () => {
-                timeLeft -= 1000;
-                if (timeLeft <= 0) {
-                    clearInterval(cooldownInterval);
-                    updateSpinWheelUI();
-                    return;
-                }
-                const h = Math.floor(timeLeft / 3600000).toString().padStart(2, '0');
-                const m = Math.floor((timeLeft % 3600000) / 60000).toString().padStart(2, '0');
-                const s = Math.floor((timeLeft % 60000) / 1000).toString().padStart(2, '0');
-                if(ui.spinWheel.timer) ui.spinWheel.timer.textContent = `${h}:${m}:${s}`;
-            };
-            updateTimer();
-            cooldownInterval = setInterval(updateTimer, 1000);
-        }
-    }
-
-    function resetSpinButton() {
-        if (ui.spinWheel.btn) {
-            ui.spinWheel.btn.disabled = false;
-            ui.spinWheel.btn.innerHTML = `<i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!`;
-        }
-    }
-
-    initializeApp();
-});
-</script>
-{% endblock %}
-<!-- END OF MODIFIED SCRIPT FOR user_view.html -->
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
