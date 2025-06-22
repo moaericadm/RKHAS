@@ -22,7 +22,8 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
 {% block content %}
 <ul class="nav nav-tabs nav-justified mb-4" id="adminTab" role="tablist">
     <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#users-panel" type="button"><i class="bi bi-people-fill me-2"></i>إدارة المستخدمين</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity-log-panel" type="button"><i class="bi bi-person-lines-fill me-2"></i>سجل نشاط الزوار</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#online-users-panel" type="button"><i class="bi bi-broadcast me-2"></i>اللاعبون المتصلون</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity-log-panel" type="button"><i class="bi bi-person-lines-fill me-2"></i>سجل النشاط</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#banned-visitors-panel" type="button"><i class="bi bi-person-x-fill me-2"></i>قائمة الحظر</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#settings-panel" type="button"><i class="bi bi-gear-fill me-2"></i>الإعدادات</button></li>
 </ul>
@@ -51,6 +52,17 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
                     <thead><tr><th>#</th><th>الاسم</th><th class="text-center">النقاط</th><th class="text-center">الإعجابات</th><th class="text-center">إجراءات</th></tr></thead>
                     <tbody id="admin-table-body"><tr><td colspan="5" class="text-center py-5"><div class="spinner-border"></div></td></tr></tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+    <!-- NEW TAB FOR ONLINE USERS -->
+    <div class="tab-pane fade" id="online-users-panel" role="tabpanel">
+        <div class="card shadow-lg">
+            <div class="card-header"><i class="bi bi-wifi me-2"></i>المستخدمون المتصلون حالياً</div>
+            <div class="card-body">
+                <ul class="list-group" id="online-users-admin-list">
+                    <li class="list-group-item text-center p-5"><div class="spinner-border"></div></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -89,9 +101,6 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
                 <hr><h6 class="mb-3">الأسماء الحالية في القائمة:</h6><ul class="list-group" id="honorRollList"></ul>
             </div>
         </div>
-        <!-- ======================================================= -->
-        <!-- ===== START: UPDATED SPIN WHEEL MANAGEMENT PANEL ====== -->
-        <!-- ======================================================= -->
         <div class="card shadow-lg">
             <div class="card-header"><i class="bi bi-bullseye me-2"></i>إدارة عجلة الحظ</div>
             <div class="card-body">
@@ -115,20 +124,13 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
                     </div>
                     <hr>
                     <h6 class="mb-3">الجوائز ونسب الحظ (الأوزان)</h6>
-                    <div id="prizes-container">
-                        <!-- Prize inputs will be generated here by JS -->
-                    </div>
+                    <div id="prizes-container"></div>
                     <button type="button" class="btn btn-outline-success btn-sm mt-2" id="add-prize-btn"><i class="bi bi-plus-circle-fill"></i> إضافة جائزة</button>
                     <hr>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-save-fill me-2"></i>حفظ إعدادات العجلة</button>
-                    </div>
+                    <div class="d-grid"><button type="submit" class="btn btn-primary"><i class="bi bi-save-fill me-2"></i>حفظ إعدادات العجلة</button></div>
                 </form>
             </div>
         </div>
-        <!-- ======================================================= -->
-        <!-- ====== END: UPDATED SPIN WHEEL MANAGEMENT PANEL ======= -->
-        <!-- ======================================================= -->
     </div>
 </div>
 {% endblock %}
@@ -139,22 +141,13 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
 <script>
   try {
     const firebaseConfigStr = '{{ firebase_config|tojson|safe }}';
-    if (!firebaseConfigStr || firebaseConfigStr === '{}' || firebaseConfigStr.trim() === "") {
-        throw new Error("Firebase config string is missing or empty in admin.html template.");
-    }
-
+    if (!firebaseConfigStr || firebaseConfigStr === '{}') { throw new Error("Firebase config is missing."); }
     window.firebaseConfig = JSON.parse(firebaseConfigStr);
-
-    if (!window.firebaseConfig?.apiKey) {
-        console.error("Firebase API Key is missing from window.firebaseConfig in admin.html after parsing.");
-        throw new Error("Parsed Firebase config is missing apiKey.");
-    }
+    if (!window.firebaseConfig?.apiKey) { throw new Error("Parsed Firebase config is missing apiKey."); }
   } catch(e) {
-    console.error("Critical Firebase Config Error in admin.html:", e.message, e.stack);
+    console.error("Critical Firebase Config Error:", e.message);
     const errorContainer = document.getElementById('adminTabContent') || document.body;
-    if (errorContainer) {
-        errorContainer.innerHTML = `<div class="alert alert-danger m-3">فشل حاسم في تحميل إعدادات Firebase. تحقق من Console. التفاصيل: ${e.message}</div>`;
-    }
+    if (errorContainer) errorContainer.innerHTML = `<div class="alert alert-danger m-3">فشل حاسم: ${e.message}</div>`;
   }
 </script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
