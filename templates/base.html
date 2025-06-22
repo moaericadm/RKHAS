@@ -1,4 +1,4 @@
-<!-- START OF FILE base.html -->
+<!-- START OF FILE base.html (FINAL) -->
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -39,6 +39,7 @@
             font-family: "Almarai", sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
+            min-height: 100vh;
         }
 
         #particles-js {
@@ -207,7 +208,9 @@
                 <button class="btn btn-outline-secondary" id="theme-toggle" title="تبديل المظهر"><i class="bi bi-moon-stars-fill d-none" id="moon-icon"></i><i class="bi bi-sun-fill d-none" id="sun-icon"></i></button>
             </div>
         </header>
-        {% block content %}{% endblock %}
+        <main>
+            {% block content %}{% endblock %}
+        </main>
     </div>
 
     {% if not session.user %}
@@ -225,9 +228,15 @@
     </div>
     {% endif %}
 
+    <!-- === START: CENTRALIZED SCRIPT LOADING === -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const themeToggle = document.getElementById("theme-toggle"), rootHtml = document.documentElement;
@@ -237,21 +246,18 @@
             themeToggle.addEventListener("click", () => { rootHtml.classList.toggle("dark-mode"); localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light"); updateIcons(); setupParticles(); });
             updateIcons(); setupParticles();
         });
-    </script>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script>
-        // Firebase config is now injected globally by app.py's context_processor
         window.firebaseConfig = {{ firebase_config|tojson|safe }};
         if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
             console.error("Critical Firebase Config Error in base.html: Config object is missing or invalid.");
-            document.body.innerHTML = '<div class="alert alert-danger m-5">فشل حاسم في تحميل إعدادات Firebase. الرجاء مراجعة الـ console.</div>'
+            const mainContent = document.querySelector('main') || document.body;
+            mainContent.innerHTML = '<div class="alert alert-danger m-5">فشل حاسم في تحميل إعدادات Firebase. الرجاء مراجعة الـ console.</div>'
         }
     </script>
+
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
 
     {% block scripts %}{% endblock %}
+    <!-- === END: CENTRALIZED SCRIPT LOADING === -->
 </body>
 </html>
-<!-- END OF FILE base.html -->
