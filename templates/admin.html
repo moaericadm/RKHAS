@@ -21,23 +21,22 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
 {% endblock %}
 {% block content %}
 <ul class="nav nav-tabs nav-justified mb-4" id="adminTab" role="tablist">
-    <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#users-panel" type="button"><i class="bi bi-people-fill me-2"></i>إدارة نقاط الزواحف</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#registered-users-panel" type="button"><i class="bi bi-person-check-fill me-2"></i>المستخدمون المسجلون</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity-log-panel" type="button"><i class="bi bi-person-lines-fill me-2"></i>سجل النشاط</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#users-panel" type="button"><i class="bi bi-people-fill me-2"></i>إدارة المستخدمين</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity-log-panel" type="button"><i class="bi bi-person-lines-fill me-2"></i>سجل نشاط الزوار</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#banned-visitors-panel" type="button"><i class="bi bi-person-x-fill me-2"></i>قائمة الحظر</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#settings-panel" type="button"><i class="bi bi-gear-fill me-2"></i>الإعدادات</button></li>
 </ul>
 <div class="tab-content" id="adminTabContent">
     <div class="tab-pane fade show active" id="users-panel" role="tabpanel">
         <div class="card mb-4 shadow-lg">
-            <div class="card-header"><i class="bi bi-pencil-square me-2"></i><span id="form-title">إضافة/تعديل زاحف</span></div>
+            <div class="card-header"><i class="bi bi-pencil-square me-2"></i><span id="form-title">إضافة مستخدم جديد</span></div>
             <div class="card-body">
                 <form id="userForm">
                     <input type="hidden" id="originalNameInput" name="original_name">
                     <div class="row g-3 align-items-end">
                         <div class="col-md-5"><label for="nameInput" class="form-label">اسم الزاحف</label><input type="text" class="form-control" id="nameInput" name="name" required></div>
                         <div class="col-md-4"><label for="pointsInput" class="form-label">النقاط</label><input type="number" class="form-control" id="pointsInput" name="points" required></div>
-                        <div class="col-md-3 d-grid"><div class="d-flex"><button type="submit" id="saveUserBtn" class="btn btn-primary w-100">حفظ</button><button type="button" id="clearFormBtn" class="btn btn-outline-secondary ms-2" style="display: none;"><i class="bi bi-x-lg"></i></button></div></div>
+                        <div class="col-md-3 d-grid"><div class="d-flex"><button type="submit" id="saveUserBtn" class="btn btn-primary w-100">إضافة</button><button type="button" id="clearFormBtn" class="btn btn-outline-secondary ms-2" style="display: none;"><i class="bi bi-x-lg"></i></button></div></div>
                     </div>
                 </form>
             </div>
@@ -55,30 +54,6 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
             </div>
         </div>
     </div>
-
-    <!-- NEW REGISTERED USERS PANEL -->
-    <div class="tab-pane fade" id="registered-users-panel" role="tabpanel">
-        <div class="card shadow-lg">
-            <div class="card-header"><i class="bi bi-person-check-fill me-2"></i>قائمة المستخدمين المسجلين عبر جوجل/الهاتف</div>
-            <div class="card-body table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>الصورة الرمزية</th>
-                            <th class="align-middle">الاسم المعروض</th>
-                            <th class="align-middle">البريد الإلكتروني</th>
-                            <th class="align-middle">تاريخ التسجيل</th>
-                            <th class="align-middle" style="width: 20%;">معرف المستخدم (UID)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="registered-users-table-body">
-                        <tr><td colspan="5" class="text-center py-5"><div class="spinner-border"></div></td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
     <div class="tab-pane fade" id="activity-log-panel" role="tabpanel">
         <div class="card shadow-lg">
             <div class="card-header"><i class="bi bi-list-check me-2"></i>سجل تفاعلات الزوار</div>
@@ -114,6 +89,9 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
                 <hr><h6 class="mb-3">الأسماء الحالية في القائمة:</h6><ul class="list-group" id="honorRollList"></ul>
             </div>
         </div>
+        <!-- ======================================================= -->
+        <!-- ===== START: UPDATED SPIN WHEEL MANAGEMENT PANEL ====== -->
+        <!-- ======================================================= -->
         <div class="card shadow-lg">
             <div class="card-header"><i class="bi bi-bullseye me-2"></i>إدارة عجلة الحظ</div>
             <div class="card-body">
@@ -148,11 +126,37 @@ header_title %}لوحة تحكم المسؤول{% endblock %}
                 </form>
             </div>
         </div>
+        <!-- ======================================================= -->
+        <!-- ====== END: UPDATED SPIN WHEEL MANAGEMENT PANEL ======= -->
+        <!-- ======================================================= -->
     </div>
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script>
+  try {
+    const firebaseConfigStr = '{{ firebase_config|tojson|safe }}';
+    if (!firebaseConfigStr || firebaseConfigStr === '{}' || firebaseConfigStr.trim() === "") {
+        throw new Error("Firebase config string is missing or empty in admin.html template.");
+    }
+
+    window.firebaseConfig = JSON.parse(firebaseConfigStr);
+
+    if (!window.firebaseConfig?.apiKey) {
+        console.error("Firebase API Key is missing from window.firebaseConfig in admin.html after parsing.");
+        throw new Error("Parsed Firebase config is missing apiKey.");
+    }
+  } catch(e) {
+    console.error("Critical Firebase Config Error in admin.html:", e.message, e.stack);
+    const errorContainer = document.getElementById('adminTabContent') || document.body;
+    if (errorContainer) {
+        errorContainer.innerHTML = `<div class="alert alert-danger m-3">فشل حاسم في تحميل إعدادات Firebase. تحقق من Console. التفاصيل: ${e.message}</div>`;
+    }
+  }
+</script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 {% endblock %}
 <!-- END OF FILE admin.html -->
