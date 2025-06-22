@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
         addCandidateBtn: document.getElementById('add-candidate-btn'),
         activityLogList: document.getElementById('activityLogList'),
         bannedVisitorsList: document.getElementById('banned-visitors-list'),
+        onlineUsersAdminList: document.getElementById('online-users-admin-list'), // New UI Element
         announcementForm: document.getElementById('announcementForm'),
         announcementText: document.getElementById('announcementText'),
         announcementsList: document.getElementById('announcements-list'),
@@ -89,7 +90,35 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
 
-    const renderList = (element, data, renderItem) => {
+    // --- NEW: Render Online Users for Admin ---
+    const renderOnlineUsersAdmin = (snapshot) => {
+        const onlineUsers = Object.values(snapshot.val() || {});
+        ui.onlineUsersAdminList.innerHTML = '';
+
+        if (onlineUsers.length > 0) {
+            onlineUsers.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).forEach(user => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                const statusBadge = user.status === 'in-game'
+                    ? `<span class="badge bg-danger rounded-pill">في معركة</span>`
+                    : `<span class="badge bg-success rounded-pill">متصل</span>`;
+                const lastSeen = user.timestamp ? new Date(user.timestamp).toLocaleTimeString('ar-EG') : 'غير معروف';
+                li.innerHTML = `
+                    <div>
+                        <i class="bi bi-person-circle me-2"></i>
+                        <span class="fw-bold">${user.name}</span>
+                        <small class="text-muted ms-3">(آخر ظهور: ${lastSeen})</small>
+                    </div>
+                    ${statusBadge}
+                `;
+                ui.onlineUsersAdminList.appendChild(li);
+            });
+        } else {
+            ui.onlineUsersAdminList.innerHTML = '<li class="list-group-item text-muted text-center">لا يوجد لاعبون متصلون حالياً.</li>';
+        }
+    };
+
+    const renderList = (element, data, renderItem, emptyMsg) => {
         element.innerHTML = '';
         if (data.length > 0) {
             data.forEach(item => {
@@ -99,7 +128,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 element.appendChild(li);
             });
         } else {
-            element.innerHTML = '<li class="list-group-item text-muted text-center">القائمة فارغة.</li>';
+            element.innerHTML = `<li class="list-group-item text-muted text-center">${emptyMsg || 'القائمة فارغة.'}</li>`;
         }
     };
 
@@ -121,11 +150,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     };
 
-    // --- Spin Wheel Settings Functions ---
     const addPrizeInput = (prize = { value: '', weight: '' }) => { const row = document.createElement('div'); row.className = 'input-group prize-row'; row.innerHTML = `<span class="input-group-text">الجائزة:</span><input type="number" class="form-control prize-value" placeholder="قيمة النقاط" value="${prize.value}" required><span class="input-group-text">الوزن:</span><input type="number" step="any" class="form-control prize-weight" placeholder="نسبة الحظ" value="${prize.weight}" required><button class="btn btn-outline-danger remove-prize-btn" type="button"><i class="bi bi-trash-fill"></i></button>`; ui.prizesContainer.appendChild(row); row.querySelector('.remove-prize-btn').addEventListener('click', () => row.remove()); };
     const loadSpinWheelSettings = () => { db.ref('site_settings/spin_wheel_settings').once('value', s => { const settings = s.val(); if (settings) { ui.spinWheelEnabledToggle.checked = settings.enabled || false; ui.spinCooldownHours.value = settings.cooldownHours || 24; ui.spinMaxAttempts.value = settings.maxAttempts || 1; ui.prizesContainer.innerHTML = ''; if (settings.prizes && settings.prizes.length > 0) { settings.prizes.forEach(addPrizeInput); } else { addPrizeInput(); } } else { addPrizeInput({ value: 100, weight: 35 }); addPrizeInput({ value: 1000, weight: 10 }); } }); };
-
     const clearForm = () => { ui.userForm.reset(); ui.originalNameInput.value = ''; ui.formTitle.innerText = 'إضافة مستخدم جديد'; ui.saveUserBtn.innerText = 'إضافة'; ui.saveUserBtn.classList.replace('btn-warning', 'btn-primary'); ui.clearFormBtn.style.display = 'none'; };
+
     ui.userForm.addEventListener('submit', async e => { e.preventDefault(); try { const res = await fetch('/add', { method: 'POST', body: new FormData(ui.userForm) }); if (res.ok) clearForm(); else Swal.fire('خطأ!', 'فشل الحفظ.', 'error'); } catch { Swal.fire('خطأ!', 'فشل الاتصال.', 'error'); } });
     ui.clearFormBtn.addEventListener('click', clearForm);
     ui.addCandidateBtn.addEventListener('click', () => { Swal.fire({ title: 'ترشيح مستخدم', input: 'text', inputLabel: 'اكتب اسم المستخدم', showCancelButton: true, confirmButtonText: 'إضافة' }).then(r => r.isConfirmed && r.value && window.toggleCandidate(r.value.trim(), false)); });
@@ -134,7 +162,6 @@ document.addEventListener('DOMContentLoaded', function () {
     ui.addPrizeBtn.addEventListener('click', () => addPrizeInput());
     ui.spinWheelSettingsForm.addEventListener('submit', async e => { e.preventDefault(); const settings = { enabled: ui.spinWheelEnabledToggle.checked, cooldownHours: parseInt(ui.spinCooldownHours.value, 10), maxAttempts: parseInt(ui.spinMaxAttempts.value, 10), prizes: [] }; document.querySelectorAll('.prize-row').forEach(row => { const value = parseFloat(row.querySelector('.prize-value').value); const weight = parseFloat(row.querySelector('.prize-weight').value); if (!isNaN(value) && !isNaN(weight)) settings.prizes.push({ value, weight }); }); if (settings.prizes.length === 0) { Swal.fire('خطأ!', 'يجب إضافة جائزة واحدة على الأقل.', 'error'); return; } try { await fetch('/api/admin/settings/spin_wheel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }); Swal.fire({ icon: 'success', title: 'تم الحفظ!', toast: true, position: 'top-end', showConfirmButton: false, timer: 2500 }); } catch (err) { Swal.fire('خطأ!', err.message, 'error'); } });
 
-    // --- Global Window Functions ---
     window.editUserFromTable = (name) => { const user = usersCache[name]; if (!user) return; ui.nameInput.value = name; ui.pointsInput.value = user.points || 0; ui.originalNameInput.value = name; ui.formTitle.innerText = `تعديل: ${name}`; ui.saveUserBtn.innerText = 'حفظ'; ui.saveUserBtn.classList.replace('btn-primary', 'btn-warning'); ui.clearFormBtn.style.display = 'inline-block'; window.scrollTo({ top: 0, behavior: 'smooth' }); };
     window.confirmDelete = (name) => { Swal.fire({ title: `هل أنت متأكد؟`, text: `سيتم حذف ${name} نهائياً!`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم!' }).then(r => r.isConfirmed && fetch(`/delete/${name}`, { method: 'POST' })); };
     window.confirmBanVisitor = (name) => { Swal.fire({ title: `حظر "${name}"؟`, text: 'سيتم منعه من استخدام الموقع.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' }).then(r => r.isConfirmed && fetch(`/api/admin/ban_visitor`, { method: 'POST', body: new URLSearchParams({ name_to_ban: name }) })); };
@@ -147,9 +174,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Initial Load ---
     initializeUserList();
     db.ref('candidates').on('value', snapshot => { candidatesData = snapshot.val() || {}; Object.values(usersCache).forEach(updateUserInTable); });
-    db.ref('banned_visitors').on('value', s => renderList(ui.bannedVisitorsList, Object.keys(s.val() || {}).map(k => ({ id: k, ...s.val()[k] })), item => `<span>${item.id}</span><button class="btn btn-outline-success btn-sm" onclick="window.unbanVisitor('${item.id}')">إلغاء الحظر</button>`));
+    db.ref('banned_visitors').on('value', s => renderList(ui.bannedVisitorsList, Object.keys(s.val() || {}).map(k => ({ id: k, ...s.val()[k] })), item => `<span>${item.id}</span><button class="btn btn-outline-success btn-sm" onclick="window.unbanVisitor('${item.id}')">إلغاء الحظر</button>`, 'لا يوجد زوار محظورون.'));
     db.ref('activity_log').orderByChild('timestamp').limitToLast(100).on('value', renderActivityLog);
-    db.ref('site_settings/announcements').on('value', s => renderList(ui.announcementsList, Object.keys(s.val() || {}).map(k => ({ id: k, ...s.val()[k] })), item => `<span>${item.text}</span><button class="btn btn-outline-danger btn-sm" onclick="window.deleteAnnouncement('${item.id}')">×</button>`));
+    db.ref('online_users').on('value', renderOnlineUsersAdmin); // New listener
+    db.ref('site_settings/announcements').on('value', s => renderList(ui.announcementsList, Object.keys(s.val() || {}).map(k => ({ id: k, ...s.val()[k] })), item => `<span>${item.text}</span><button class="btn btn-outline-danger btn-sm" onclick="window.deleteAnnouncement('${item.id}')">×</button>`, 'لا توجد إعلانات.'));
     db.ref('site_settings/honor_roll').on('value', s => renderList(ui.honorRollList, Object.keys(s.val() || {}).map(k => ({ id: k, ...s.val()[k] })), item => `<span>${item.name}</span><button class="btn btn-outline-danger btn-sm" onclick="window.deleteFromHonorRoll('${item.id}')">×</button>`));
     loadSpinWheelSettings();
 });
