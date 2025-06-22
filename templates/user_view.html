@@ -1,6 +1,189 @@
-<!-- START OF MODIFIED SCRIPT FOR user_view.html -->
+<!-- START OF FILE user_view.html (FINAL) -->
+{% extends "base.html" %}
+{% block title %}قائمة النقاط{% endblock %}
+{% block header_title %}قائمة الزواحف الرسمية (تحديث مباشر){% endblock %}
+
+{% block styles %}
+<style>
+    .table thead th {
+        background-color: var(--primary-glow) !important;
+        color: white !important;
+        text-shadow: 0 0 5px rgba(0,0,0,0.5);
+        border-color: var(--primary-glow) !important;
+    }
+
+    html:not(.dark-mode) .table thead th {
+        background-color: var(--header-color) !important;
+    }
+
+    .like-btn.liked {
+        background-color: #dc3545;
+        color: white;
+        border-color: #dc3545;
+    }
+
+    #spin-wheel-card .card-body {
+        background-image: linear-gradient(45deg, rgba(255, 215, 0, 0.1), transparent), linear-gradient(-45deg, rgba(0, 242, 255, 0.1), transparent);
+    }
+
+    #spin-wheel-btn {
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 0 20px var(--secondary-glow);
+    }
+
+        #spin-wheel-btn:disabled {
+            box-shadow: none;
+        }
+
+    #spin-timer, #spin-attempts-text {
+        font-family: monospace;
+        font-size: 1.1rem;
+        color: var(--secondary-glow);
+        text-shadow: 0 0 8px var(--secondary-glow);
+    }
+
+    #spin-attempts-text {
+        color: var(--text-color);
+        text-shadow: none;
+        font-size: 1rem;
+    }
+
+    #spinWheelModal .custom-modal-content {
+        max-width: 480px;
+        padding: 15px;
+        background-color: transparent;
+        border: none;
+        box-shadow: none;
+    }
+
+    #spin-canvas {
+        display: block;
+        margin: 0 auto;
+        max-width: 100%;
+        height: auto;
+    }
+
+    .ticker-wrap {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        padding: 1rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+
+    .ticker-title {
+        background-color: var(--primary-glow);
+        color: white;
+        padding: 5px 15px;
+        border-radius: 5px;
+        font-weight: bold;
+        flex-shrink: 0;
+    }
+
+    .ticker-container {
+        flex-grow: 1;
+        overflow: hidden;
+        position: relative;
+        min-height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .ticker-item {
+        color: var(--text-color);
+        font-weight: bold;
+        position: absolute;
+        width: 100%;
+        text-align: center;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.8s ease-in-out, transform 0.8s ease-in-out;
+        will-change: opacity, transform;
+    }
+
+        .ticker-item.active {
+            opacity: 1;
+            transform: translateY(0);
+            z-index: 1;
+        }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="announcements-container" class="row justify-content-center mb-4" style="display: none;">
+    <div class="col-lg-12">
+        <div class="ticker-wrap">
+            <div class="d-flex align-items-center">
+                <div class="ticker-title">عاجل</div>
+                <div class="ticker-container" id="announcements-ticker"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-lg h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-bar-chart-line-fill me-2"></i>الترتيب العام للزواحف</span>
+                <input type="search" id="searchInput" class="form-control form-control-sm w-50" placeholder="🔍 ابحث..." />
+            </div>
+            <div class="card-body table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead><tr><th>#</th><th> اسم الزاحف  </th><th class="text-center">النقاط</th><th class="text-center">الإجراءات</th></tr></thead>
+                    <tbody id="user-table-body">
+                        <tr><td colspan="4" class="text-center py-5"><div id="loading-spinner"><div class="spinner-border text-danger"></div><p class="mt-2">جاري الزحف...</p></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="vstack gap-4">
+            {% if session.user %}
+            <div class="card shadow-lg" id="spin-wheel-card" style="display: none;">
+                <div class="card-header text-warning"><i class="bi bi-bullseye me-2"></i>عجلة حظ الزواحف</div>
+                <div class="card-body text-center">
+                    <p class="text-muted small mb-2">جرّب حظك للفوز بنقاط والتبرع بها!</p>
+                    <div id="spin-attempts-text" class="mb-2 fw-bold"></div>
+                    <div class="d-grid">
+                        <button class="btn btn-info" id="spin-wheel-btn"><i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!</button>
+                    </div>
+                    <div id="spin-timer-container" style="display: none;">
+                        <p class="mb-1 mt-3">يمكنك اللف مرة أخرى بعد:</p>
+                        <div id="spin-timer" class="fw-bold">--:--:--</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="card shadow-lg"><div class="card-header bg-warning text-dark"><i class="bi bi-trophy-fill me-2"></i>توب 3 زواحف</div><ul class="list-group list-group-flush" id="hall-of-fame"></ul></div>
+            <div class="card shadow-lg"><div class="card-header" style="background: var(--primary-glow); color: #fff;"><i class="bi bi-award-fill me-2"></i> الزاحف الاكثر ذكراً</div><ul class="list-group list-group-flush" id="honor-roll-view-list"></ul></div>
+            <div class="card shadow-lg"><div class="card-header"><i class="bi bi-person-check-fill me-2 text-success"></i>مرشحون للدخول القائمة </div><ul class="list-group list-group-flush" id="candidates-list"></ul></div>
+            <div class="card shadow-lg"><div class="card-header"><i class="bi bi-joystick me-2"></i>تفاعل معنا</div><div class="card-body d-grid gap-2"><button class="btn btn-success" id="nominate-btn"><i class="bi bi-person-up me-2"></i>رشح احداً</button><button class="btn btn-outline-danger" id="report-btn"><i class="bi bi-exclamation-triangle-fill me-2"></i>أبلغ عن زاحف</button></div></div>
+        </div>
+    </div>
+</div>
+
+<div id="spinWheelModal" class="custom-modal">
+    <div class="custom-modal-content">
+        <span class="custom-close-btn">×</span>
+        <canvas id="spin-canvas" width="450" height="450"><p>عذراً, متصفحك لا يدعم هذه الميزة.</p></canvas>
+    </div>
+</div>
+
+<div id="userChartModal" class="custom-modal">
+    <div class="custom-modal-content">
+        <span class="custom-close-btn">×</span>
+        <h5 class="mb-3" id="chartModalLabel">سجل نقاط الزواحف</h5>
+        <div id="user-chart-container" style="height: 400px"><canvas id="userPointsChart"></canvas></div>
+    </div>
+</div>
+{% endblock %}
+
 {% block scripts %}
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js"></script>
 <script src="{{ url_for('static', filename='js/Winwheel.min.js') }}"></script>
@@ -37,20 +220,24 @@ document.addEventListener('DOMContentLoaded', function() {
     let userChartInstance = null, announcementInterval = null, theWheel = null;
     let wheelSpinning = false, cooldownInterval = null, dbInstance = null, spinWheelSettings = null;
     const isLoggedIn = {{ 'true' if session.user else 'false' }};
-    let userIsBanned = false; // <-- NEW: Flag for ban status
+    let userIsBanned = false;
 
     const formatNumber = (num) => new Intl.NumberFormat('ar-EG').format(num || 0);
 
     async function initializeApp() {
         try {
             if (!window.firebaseConfig?.apiKey) throw new Error("Firebase config missing.");
+            if (typeof firebase.database !== 'function') throw new Error("Firebase Realtime Database library not loaded.");
+
             dbInstance = firebase.database();
 
-            setupEventListeners();
-
             if (isLoggedIn) {
-                await checkUserBanStatus(); // <-- NEW: Check ban status on load
-                if (userIsBanned) return; // Stop initialization if banned
+                await checkUserBanStatus();
+                if (userIsBanned) {
+                     ui.tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4"><div class="alert alert-danger m-3"><strong>أنت محظور!</strong> لا يمكنك التفاعل مع الموقع.</div></td></tr>';
+                     if(ui.loadingSpinner) ui.loadingSpinner.style.display = 'none';
+                     return;
+                }
 
                 if (ui.spinWheel.card) {
                     const settingsRes = await fetch('/api/settings/spin_wheel');
@@ -64,35 +251,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
+            setupEventListeners();
             dbInstance.ref('users').on('value', handleUsersSnapshot, handleFirebaseError);
             dbInstance.ref('site_settings/honor_roll').on('value', handleHonorRollSnapshot, handleFirebaseError);
             dbInstance.ref('candidates').on('value', handleCandidatesSnapshot, handleFirebaseError);
             dbInstance.ref('site_settings/announcements').on('value', handleAnnouncementsSnapshot, handleFirebaseError);
         } catch (e) {
-            console.error("CRITICAL INITIALIZATION ERROR:", e.message);
-            if (ui.loadingSpinner?.parentElement) {
-                 ui.loadingSpinner.parentElement.innerHTML = `<td colspan="4" class="text-center py-4"><div class="alert alert-danger m-3"><strong>خطأ حرج:</strong> ${e.message}</div></td>`;
+            console.error("CRITICAL INITIALIZATION ERROR:", e);
+             if (ui.tableBody) {
+                 ui.tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4"><div class="alert alert-danger m-3"><strong>خطأ حرج:</strong> ${e.message}</div></td></tr>`;
+                 if(ui.loadingSpinner) ui.loadingSpinner.style.display = 'none';
             }
         }
     }
 
-    // <-- START: NEW BAN CHECK FUNCTION -->
     async function checkUserBanStatus() {
         if (!isLoggedIn) return false;
         try {
             const response = await fetch('/api/check_ban_status');
             if (!response.ok) {
-                throw new Error(`: ${response.status}`);
+                throw new Error(`404`);
             }
             const data = await response.json();
             if (data.banned) {
                 userIsBanned = true;
-                // Disable all interactive elements
-                if(ui.nominateBtn) ui.nominateBtn.disabled = true;
-                if(ui.reportBtn) ui.reportBtn.disabled = true;
-                if(ui.spinWheel.btn) ui.spinWheel.btn.disabled = true;
-                document.querySelectorAll('.like-btn').forEach(b => b.disabled = true);
-
                 Swal.fire({
                     icon: 'error',
                     title: 'لقد تم حظرك!',
@@ -104,21 +286,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             return data.banned;
         } catch (error) {
-            console.error("Ban check failed", error);
-            Swal.fire({
-                icon: 'error',
-                title: 'خطأ حرج',
-                text: `Ban status check failed${error.message}. يرجى المحاولة لاحقاً أو الاتصال بالدعم.`,
-            });
-            return true; // Assume banned if check fails to prevent actions
+             throw new Error(`Ban status check failed: ${error.message}. يرجى المحاولة لاحقاً أو الاتصال بالدعم.`);
         }
     }
-    // <-- END: NEW BAN CHECK FUNCTION -->
 
     function handleFirebaseError(error) {
         console.error("Firebase Read Error:", error.code, error.message);
-        if (ui.loadingSpinner?.parentElement) {
-            ui.loadingSpinner.parentElement.innerHTML = `<td colspan="4" class="text-center py-4"><div class="alert alert-warning">فشل الاتصال بقاعدة البيانات. (${error.code})</div></td>`;
+        if (ui.tableBody) {
+            ui.tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4"><div class="alert alert-warning">فشل الاتصال بقاعدة البيانات. (${error.code})</div></td></tr>`;
+            if(ui.loadingSpinner) ui.loadingSpinner.style.display = 'none';
         }
     }
 
@@ -128,22 +304,6 @@ document.addEventListener('DOMContentLoaded', function() {
         allUsersCache = Object.keys(usersData).map(k => ({ name: k, ...usersData[k] })).sort((a, b) => (b.points || 0) - (a.points || 0));
         renderUserTable();
         renderTop3();
-    }
-
-    function handleHonorRollSnapshot(snapshot) {
-        honorRollCache = Object.values(snapshot.val() || {}).map(i => i.name);
-        renderHonorRollList();
-        if(allUsersCache.length > 0) renderUserTable();
-    }
-
-    function handleCandidatesSnapshot(snapshot) {
-        candidatesCache = Object.keys(snapshot.val() || {});
-        renderCandidatesList();
-    }
-
-    function handleAnnouncementsSnapshot(snapshot) {
-        announcementsCache = Object.values(snapshot.val() || {});
-        renderAnnouncements();
     }
 
     function renderUserTable() {
@@ -223,9 +383,8 @@ document.addEventListener('DOMContentLoaded', function() {
         ui.reportBtn?.addEventListener('click', handleReport);
         ui.spinWheel.btn?.addEventListener('click', handleSpinStart);
     }
-
     function handleLike(likeBtn) {
-        if (userIsBanned) return; // <-- Check if banned
+        if (userIsBanned) return;
         if (!isLoggedIn) {
             Swal.fire('تنبيه', 'يجب تسجيل الدخول أولاً للإعجاب.', 'warning');
             document.getElementById('login-btn')?.click();
@@ -253,7 +412,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleNomination() {
-        if (userIsBanned) return; // <-- Check if banned
+        if (userIsBanned) return;
         if (!isLoggedIn) {
             Swal.fire('تنبيه', 'يجب تسجيل الدخول أولاً للترشيح.', 'warning');
             document.getElementById('login-btn')?.click();
@@ -274,7 +433,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleReport() {
-        if (userIsBanned) return; // <-- Check if banned
+        if (userIsBanned) return;
         if (!isLoggedIn) {
             Swal.fire('تنبيه', 'يجب تسجيل الدخول أولاً للإبلاغ.', 'warning');
             document.getElementById('login-btn')?.click();
@@ -346,7 +505,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function handleSpinStart() {
-        if (userIsBanned) return; // <-- Check if banned
+        if (userIsBanned) return;
         if (wheelSpinning || !theWheel) return;
         ui.spinWheel.btn.disabled = true;
         ui.spinWheel.btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
@@ -449,4 +608,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
-<!-- END OF MODIFIED SCRIPT FOR user_view.html -->
