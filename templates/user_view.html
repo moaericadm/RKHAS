@@ -65,8 +65,8 @@
         max-width: 100%;
         height: auto;
     }
-    /* --- END SPIN WHEEL STYLES --- */
 
+    /* --- MODAL & MISC STYLES --- */
     .custom-modal {
         display: none;
         position: fixed;
@@ -92,7 +92,7 @@
         margin: 1rem;
         padding: 30px;
         width: 90%;
-        max-width: 600px;
+        max-width: 800px;
         border-radius: 0.75rem;
         position: relative;
         animation: modal-fade-in 0.3s ease-out;
@@ -125,7 +125,6 @@
         .custom-close-btn:hover {
             color: #fff;
         }
-
 
     .ticker-wrap {
         background: var(--card-bg);
@@ -172,6 +171,7 @@
             z-index: 1;
         }
 
+    /* DUEL & CRAWL STYLES */
     .duel-select {
         background-color: var(--bs-body-bg) !important;
         color: var(--bs-body-color) !important;
@@ -187,7 +187,7 @@
         overflow: hidden;
     }
 
-    .fighter {
+    .fighter, .wrestler {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -206,24 +206,6 @@
         color: var(--text-color);
     }
 
-    .health-bar-container {
-        width: 120px;
-        height: 15px;
-        background-color: #444;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        overflow: hidden;
-        border: 1px solid #666;
-    }
-
-    .health-bar {
-        height: 100%;
-        width: 100%;
-        background: linear-gradient(90deg, #14f195, #00f2ff);
-        border-radius: 4px;
-        transition: width 2s ease-in-out;
-    }
-
     .vs-text {
         font-size: 4rem;
         font-weight: 800;
@@ -232,7 +214,7 @@
         text-shadow: 0 0 10px #ffc107;
     }
 
-    #duel-result-text {
+    #duel-result-text, #game-status-text {
         font-size: 1.5rem;
         font-weight: bold;
         margin-top: 20px;
@@ -272,27 +254,119 @@
         margin: auto;
     }
 
-    #userChartModal .custom-modal-content {
+    #userChartModal .custom-modal-content, #wrestlingModal .custom-modal-content {
         max-width: 800px;
     }
 
     #user-chart-container {
         height: 400px;
     }
+
+    /* === WRESTLING ARENA STYLES === */
+    .wrestling-arena {
+        height: 300px;
+        background: url('https://i.imgur.com/u7z2xKk.jpg') center center/cover;
+        border-radius: 0.5rem;
+        border: 2px solid var(--primary-glow);
+        box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    .wrestler {
+        width: 40%;
+    }
+
+    .wrestler-name {
+        font-size: 1.5rem;
+        color: #fff;
+        text-shadow: 0 0 8px var(--primary-glow), 0 0 5px #000;
+        background: rgba(0,0,0,0.6);
+        padding: 5px 15px;
+        border-radius: 5px;
+    }
+
+    .wrestler-icon {
+        width: 120px;
+        height: 160px;
+        object-fit: contain;
+        filter: drop-shadow(0 5px 15px rgba(0,0,0,0.4));
+        transition: transform 0.1s ease-in-out;
+    }
+
+    .wrestler.taking-damage {
+        animation: take-damage 0.3s;
+    }
+
+    @keyframes take-damage {
+        0%,100% {
+            transform: translateX(0)
+        }
+
+        25% {
+            transform: translateX(-8px) rotate(-2deg)
+        }
+
+        75% {
+            transform: translateX(8px) rotate(2deg)
+        }
+    }
+
+    .health-bar-container {
+        width: 100%;
+        max-width: 200px;
+        height: 25px;
+        background-color: rgba(0,0,0,0.5);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        overflow: hidden;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
+    .health-bar {
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(90deg, #14f195, #00f2ff);
+        border-radius: 4px;
+        transition: width 0.5s ease-in-out;
+    }
+
+        .health-bar.low {
+            background: linear-gradient(90deg, #ffc107, #dc3545);
+        }
+
+    #game-status-text {
+        text-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    #online-users-list .list-group-item {
+        background-color: rgba(255,255,255,0.05);
+    }
+
+    html:not(.dark-mode) #online-users-list .list-group-item {
+        background-color: rgba(0,0,0,0.02);
+    }
+
+    #online-users-list .status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-left: 8px;
+    }
+
+        #online-users-list .status-dot.online {
+            background-color: #28a745;
+        }
+
+        #online-users-list .status-dot.in-game {
+            background-color: #dc3545;
+        }
 </style>
 {% endblock %}
 
 {% block content %}
 <div id="announcements-container" class="row justify-content-center mb-4" style="display: none;">
-    <div class="col-lg-12">
-        <div class="ticker-wrap">
-            <div class="d-flex align-items-center">
-                <div class="ticker-title">عاجل</div>
-                <div class="ticker-container" id="announcements-ticker">
-                </div>
-            </div>
-        </div>
-    </div>
+    <div class="col-lg-12"><div class="ticker-wrap"><div class="d-flex align-items-center"><div class="ticker-title">عاجل</div><div class="ticker-container" id="announcements-ticker"></div></div></div></div>
 </div>
 
 <div class="row g-4">
@@ -305,16 +379,7 @@
             <div class="card-body table-responsive">
                 <table class="table table-hover align-middle">
                     <thead><tr><th>#</th><th> اسم الزاحف  </th><th class="text-center">النقاط</th><th class="text-center">الإجراءات</th></tr></thead>
-                    <tbody id="user-table-body">
-                        <tr>
-                            <td colspan="4" class="text-center py-5">
-                                <div id="loading-spinner">
-                                    <div class="spinner-border text-danger"></div>
-                                    <p class="mt-2">جاري الزحف...</p>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
+                    <tbody id="user-table-body"><tr><td colspan="4" class="text-center py-5"><div id="loading-spinner"><div class="spinner-border text-danger"></div><p class="mt-2">جاري الزحف...</p></div></td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -322,47 +387,35 @@
     <div class="col-lg-4">
         <div class="vstack gap-4">
 
+            <div class="card shadow-lg">
+                <div class="card-header"><i class="bi bi-controller text-warning me-2"></i> حلبة المصارعة</div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">تحدى اللاعبين المتصلين حالياً في مباراة مصارعة حية واربح النقاط!</p>
+                    <h6 class="mb-2">اللاعبون المتصلون:</h6>
+                    <ul class="list-group" id="online-users-list" style="max-height: 200px; overflow-y: auto;">
+                        <li class="list-group-item text-center text-muted">جاري البحث عن لاعبين...</li>
+                    </ul>
+                </div>
+            </div>
+
             <div class="card shadow-lg" id="spin-wheel-card" style="display: none;">
                 <div class="card-header text-warning"><i class="bi bi-bullseye me-2"></i>عجلة حظ الزواحف</div>
                 <div class="card-body text-center">
                     <p class="text-muted small mb-2">جرّب حظك للفوز بنقاط والتبرع بها!</p>
                     <div id="spin-attempts-text" class="mb-2 fw-bold"></div>
-                    <div class="d-grid">
-                        <button class="btn btn-info" id="spin-wheel-btn"><i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!</button>
-                    </div>
-                    <div id="spin-timer-container" style="display: none;">
-                        <p class="mb-1 mt-3">يمكنك اللف مرة أخرى بعد:</p>
-                        <div id="spin-timer" class="fw-bold">--:--:--</div>
-                    </div>
+                    <div class="d-grid"><button class="btn btn-info" id="spin-wheel-btn"><i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!</button></div>
+                    <div id="spin-timer-container" style="display: none;"><p class="mb-1 mt-3">يمكنك اللف مرة أخرى بعد:</p><div id="spin-timer" class="fw-bold">--:--:--</div></div>
                 </div>
             </div>
 
             <div class="card shadow-lg">
                 <div class="card-header"><i class="bi bi-speedometer2 me-2 text-info"></i>كاشف الزواحف</div>
-                <div class="card-body">
-                    <p class="text-muted small">هل أنت زاحف؟ أدخل اسمك واكتشف نسبة زحفك!</p>
-                    <div class="input-group">
-                        <input type="text" id="crawl-name-input" class="form-control form-control-sm" placeholder="أدخل اسماً...">
-                        <button id="check-crawl-btn" class="btn btn-info btn-sm">افحص الزحفنة</button>
-                    </div>
-                </div>
+                <div class="card-body"><p class="text-muted small">هل أنت زاحف؟ أدخل اسمك واكتشف!</p><div class="input-group"><input type="text" id="crawl-name-input" class="form-control form-control-sm" placeholder="أدخل اسماً..."><button id="check-crawl-btn" class="btn btn-info btn-sm">افحص</button></div></div>
             </div>
 
             <div class="card shadow-lg">
-                <div class="card-header"><i class="bi bi-lightning-charge-fill text-warning me-2"></i>مواجهات الزواحف</div>
-                <div class="card-body">
-                    <div class="mb-2">
-                        <label for="duel-user1" class="form-label small">الزاحف الأول</label>
-                        <select id="duel-user1" class="form-select form-select-sm duel-select"></select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="duel-user2" class="form-label small">الزاحف الثاني</label>
-                        <select id="duel-user2" class="form-select form-select-sm duel-select"></select>
-                    </div>
-                    <div class="d-grid">
-                        <button id="start-duel-btn" class="btn btn-warning btn-sm">بدء مواجهة الزحفنة!</button>
-                    </div>
-                </div>
+                <div class="card-header"><i class="bi bi-lightning-charge-fill text-warning me-2"></i>مواجهات (تجريبي)</div>
+                <div class="card-body"><div class="mb-2"><label for="duel-user1" class="form-label small">الزاحف الأول</label><select id="duel-user1" class="form-select form-select-sm duel-select"></select></div><div class="mb-3"><label for="duel-user2" class="form-label small">الزاحف الثاني</label><select id="duel-user2" class="form-select form-select-sm duel-select"></select></div><div class="d-grid"><button id="start-duel-btn" class="btn btn-warning btn-sm">بدء المواجهة!</button></div></div>
             </div>
 
             <div class="card shadow-lg"><div class="card-header bg-warning text-dark"><i class="bi bi-trophy-fill me-2"></i>توب 3 زواحف</div><ul class="list-group list-group-flush" id="hall-of-fame"></ul></div>
@@ -373,56 +426,12 @@
     </div>
 </div>
 
-<div id="spinWheelModal" class="custom-modal">
-    <div class="custom-modal-content">
-        <span class="custom-close-btn">×</span>
-        <canvas id="spin-canvas" width="450" height="450">
-            <p>عذراً, متصفحك لا يدعم هذه الميزة (Canvas).</p>
-        </canvas>
-    </div>
-</div>
-
-<div id="userChartModal" class="custom-modal">
-    <div class="custom-modal-content">
-        <span class="custom-close-btn">×</span>
-        <h5 class="mb-3" id="chartModalLabel">سجل نقاط الزواحف</h5>
-        <div id="user-chart-container">
-            <canvas id="userPointsChart"></canvas>
-        </div>
-    </div>
-</div>
-
-<div id="duelModal" class="custom-modal">
-    <div class="custom-modal-content">
-        <span class="custom-close-btn">×</span>
-        <h3 class="mb-4 text-center">حلبة الزحفنة</h3>
-        <div class="duel-arena">
-            <div class="fighter" id="fighter1">
-                <div class="fighter-name">الزاحف 1</div>
-                <div class="health-bar-container"><div class="health-bar"></div></div>
-                <i class="bi bi-person-arms-up fighter-icon"></i>
-            </div>
-            <div class="vs-text">VS</div>
-            <div class="fighter" id="fighter2">
-                <div class="fighter-name">الزاحف 2</div>
-                <div class="health-bar-container"><div class="health-bar"></div></div>
-                <i class="bi bi-person-raised-hand fighter-icon"></i>
-            </div>
-        </div>
-        <div id="duel-result-text" class="text-center text-warning mt-3"></div>
-    </div>
-</div>
-
-<div id="crawlModal" class="custom-modal">
-    <div class="custom-modal-content text-center">
-        <span class="custom-close-btn">×</span>
-        <h3 class="mb-3" id="crawl-modal-title">نتيجة فحص الزحفنة</h3>
-        <div id="crawl-chart-container">
-            <canvas id="crawlChart"></canvas>
-        </div>
-        <p id="crawl-modal-text" class="fs-5 mt-3 fw-bold"></p>
-    </div>
-</div>
+<!-- All Modals -->
+<div id="wrestlingModal" class="custom-modal"><div class="custom-modal-content"><span class="custom-close-btn" id="close-wrestling-modal-btn">&times;</span><h3 class="mb-4 text-center text-warning" style="text-shadow: 0 0 10px var(--bs-warning);">حلبة القتال المباشر</h3><div class="wrestling-arena"><div class="wrestler" id="wrestler1"><div class="wrestler-name">اللاعب 1</div><div class="health-bar-container"><div class="health-bar"></div></div><img src="https://i.imgur.com/7bOMuP9.png" alt="Wrestler 1" class="wrestler-icon"></div><div class="vs-text">VS</div><div class="wrestler" id="wrestler2"><div class="wrestler-name">اللاعب 2</div><div class="health-bar-container"><div class="health-bar"></div></div><img src="https://i.imgur.com/j0v5R0b.png" alt="Wrestler 2" class="wrestler-icon"></div></div><div id="game-status-text" class="text-center mt-3"></div><div id="game-controls" class="text-center mt-3 d-grid gap-2 col-6 mx-auto" style="display: none !important;"><button class="btn btn-danger" id="attack-btn"><i class="bi bi-hammer me-2"></i> هجوم </button></div></div></div>
+<div id="spinWheelModal" class="custom-modal"><div class="custom-modal-content"><span class="custom-close-btn">×</span><canvas id="spin-canvas" width="450" height="450"></canvas></div></div>
+<div id="userChartModal" class="custom-modal"><div class="custom-modal-content"><span class="custom-close-btn">×</span><h5 class="mb-3" id="chartModalLabel">سجل نقاط الزواحف</h5><div id="user-chart-container"><canvas id="userPointsChart"></canvas></div></div></div>
+<div id="duelModal" class="custom-modal"><div class="custom-modal-content"><span class="custom-close-btn">×</span><h3 class="mb-4 text-center">حلبة الزحفنة</h3><div class="duel-arena"><div class="fighter" id="fighter1"><div class="fighter-name">الزاحف 1</div><div class="health-bar-container"><div class="health-bar"></div></div><i class="bi bi-person-arms-up fighter-icon"></i></div><div class="vs-text">VS</div><div class="fighter" id="fighter2"><div class="fighter-name">الزاحف 2</div><div class="health-bar-container"><div class="health-bar"></div></div><i class="bi bi-person-raised-hand fighter-icon"></i></div></div><div id="duel-result-text" class="text-center text-warning mt-3"></div></div></div>
+<div id="crawlModal" class="custom-modal"><div class="custom-modal-content text-center"><span class="custom-close-btn">×</span><h3 class="mb-3" id="crawl-modal-title">نتيجة فحص الزحفنة</h3><div id="crawl-chart-container"><canvas id="crawlChart"></canvas></div><p id="crawl-modal-text" class="fs-5 mt-3 fw-bold"></p></div></div>
 {% endblock %}
 
 {% block scripts %}
@@ -430,14 +439,12 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<!-- Use CDN for reliability -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/TweenMax.min.js"></script>
 <script src="{{ url_for('static', filename='js/Winwheel.min.js') }}"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // --- UI Elements ---
     const ui = {
         tableBody: document.getElementById('user-table-body'),
         loadingSpinner: document.getElementById('loading-spinner'),
@@ -447,162 +454,86 @@ document.addEventListener('DOMContentLoaded', function() {
         searchInput: document.getElementById('searchInput'),
         nominateBtn: document.getElementById('nominate-btn'),
         reportBtn: document.getElementById('report-btn'),
+        announcementsContainer: document.getElementById('announcements-container'),
+        announcementsTicker: document.getElementById('announcements-ticker'),
         userChartModal: document.getElementById('userChartModal'),
         chartModalLabel: document.getElementById('chartModalLabel'),
         userPointsChartCanvas: document.getElementById('userPointsChart'),
-        duelModal: document.getElementById('duelModal'),
-        duelUser1Select: document.getElementById('duel-user1'),
-        duelUser2Select: document.getElementById('duel-user2'),
-        startDuelBtn: document.getElementById('start-duel-btn'),
-        fighter1Name: document.querySelector('#fighter1 .fighter-name'),
-        fighter2Name: document.querySelector('#fighter2 .fighter-name'),
-        fighter1Health: document.querySelector('#fighter1 .health-bar'),
-        fighter2Health: document.querySelector('#fighter2 .health-bar'),
-        fighter1Div: document.getElementById('fighter1'),
-        fighter2Div: document.getElementById('fighter2'),
-        duelResultText: document.getElementById('duel-result-text'),
-        crawlModal: document.getElementById('crawlModal'),
-        crawlNameInput: document.getElementById('crawl-name-input'),
-        checkCrawlBtn: document.getElementById('check-crawl-btn'),
-        crawlModalTitle: document.getElementById('crawl-modal-title'),
-        crawlChartCanvas: document.getElementById('crawlChart'),
-        crawlModalText: document.getElementById('crawl-modal-text'),
-        announcementsContainer: document.getElementById('announcements-container'),
-        announcementsTicker: document.getElementById('announcements-ticker'),
-        spinWheel: {
-            card: document.getElementById('spin-wheel-card'),
-            btn: document.getElementById('spin-wheel-btn'),
-            timerContainer: document.getElementById('spin-timer-container'),
-            timer: document.getElementById('spin-timer'),
-            attemptsText: document.getElementById('spin-attempts-text'),
-            modal: document.getElementById('spinWheelModal'),
-            canvas: document.getElementById('spin-canvas'),
-            modalCloseBtn: document.querySelector('#spinWheelModal .custom-close-btn')
-        }
+        // Spin Wheel
+        spinWheel: { card: document.getElementById('spin-wheel-card'), btn: document.getElementById('spin-wheel-btn'), timerContainer: document.getElementById('spin-timer-container'), timer: document.getElementById('spin-timer'), attemptsText: document.getElementById('spin-attempts-text'), modal: document.getElementById('spinWheelModal'), canvas: document.getElementById('spin-canvas'), modalCloseBtn: document.querySelector('#spinWheelModal .custom-close-btn')},
+        // Old Duel
+        duelModal: document.getElementById('duelModal'), duelUser1Select: document.getElementById('duel-user1'), duelUser2Select: document.getElementById('duel-user2'), startDuelBtn: document.getElementById('start-duel-btn'), fighter1Name: document.querySelector('#fighter1 .fighter-name'), fighter2Name: document.querySelector('#fighter2 .fighter-name'), fighter1Health: document.querySelector('#fighter1 .health-bar'), fighter2Health: document.querySelector('#fighter2 .health-bar'), fighter1Div: document.getElementById('fighter1'), fighter2Div: document.getElementById('fighter2'), duelResultText: document.getElementById('duel-result-text'),
+        // Crawl Checker
+        crawlModal: document.getElementById('crawlModal'), crawlNameInput: document.getElementById('crawl-name-input'), checkCrawlBtn: document.getElementById('check-crawl-btn'), crawlModalTitle: document.getElementById('crawl-modal-title'), crawlChartCanvas: document.getElementById('crawlChart'), crawlModalText: document.getElementById('crawl-modal-text'),
+        // Wrestling Game
+        onlineUsersList: document.getElementById('online-users-list'), wrestlingModal: document.getElementById('wrestlingModal'), closeWrestlingModalBtn: document.getElementById('close-wrestling-modal-btn'), wrestler1: { div: document.getElementById('wrestler1'), name: document.querySelector('#wrestler1 .wrestler-name'), healthBar: document.querySelector('#wrestler1 .health-bar'), icon: document.querySelector('#wrestler1 .wrestler-icon')}, wrestler2: { div: document.getElementById('wrestler2'), name: document.querySelector('#wrestler2 .wrestler-name'), healthBar: document.querySelector('#wrestler2 .health-bar'), icon: document.querySelector('#wrestler2 .wrestler-icon')}, gameStatusText: document.getElementById('game-status-text'), gameControls: document.getElementById('game-controls'), attackBtn: document.getElementById('attack-btn'),
     };
 
-    let allUsersCache = [], honorRollCache = [], candidatesCache = [], announcementsCache = [];
-    let userChartInstance = null, crawlChartInstance = null;
-    let visitorName = '';
-    let announcementInterval = null;
-    let theWheel = null;
+    // --- Global State ---
+    let allUsersCache = [], honorRollCache = [], candidatesCache = [], announcementsCache = [], spinWheelSettings = null;
+    let userChartInstance = null, crawlChartInstance = null, theWheel = null;
+    let visitorName = '', dbInstance = null, announcementInterval = null, cooldownInterval = null;
     let wheelSpinning = false;
-    let cooldownInterval = null;
-    let dbInstance = null;
-    let spinWheelSettings = null; // To store settings from the server
+    let currentGame = { roomId: null, myPlayerKey: null, opponentPlayerKey: null, listener: null, isGameOver: false };
+    const WRESTLING_WIN_PRIZE = 10000;
 
     const formatNumber = (num) => new Intl.NumberFormat('ar-EG').format(num || 0);
-    const sessionProcessedMessageIds = new Set();
-    const viewedMessages = {
-        get: () => { try { return new Set(JSON.parse(localStorage.getItem('viewedMessageIds')) || []); } catch { return new Set(); } },
-        add: (id) => { const ids = viewedMessages.get(); ids.add(id); localStorage.setItem('viewedMessageIds', JSON.stringify([...ids])); }
-    };
 
     async function initializeApp() {
         try {
             visitorName = localStorage.getItem('visitorNickname');
             if (!visitorName) {
-                const { value: name } = await Swal.fire({
-                    title: 'مرحباً بك!', input: 'text', inputLabel: 'الرجاء إدخال اسم مستعار للمتابعة و عدم استخدام النقطة ( . ) كاسم او اي لفظ سيء تجنباً للحظر',
-                    inputPlaceholder: 'اسمك المستعار...', allowOutsideClick: false, allowEscapeKey: false,
-                    inputValidator: (v) => !v && 'يجب إدخال اسم!'
-                });
-                if (name) { visitorName = name.trim(); localStorage.setItem('visitorNickname', visitorName); }
+                const { value: name } = await Swal.fire({ title: 'مرحباً بك!', input: 'text', inputLabel: 'الرجاء إدخال اسمك المستعار للمشاركة. تجنب الأسماء السيئة لتفادي الحظر.', inputPlaceholder: 'الاسم...', allowOutsideClick: false, allowEscapeKey: false, inputValidator: (v) => !v && 'يجب إدخال اسم!' });
+                if (name) { visitorName = name.trim().replace(/[.#$\[\]]/g, '_'); localStorage.setItem('visitorNickname', visitorName); }
                 else { window.location.reload(); return; }
             }
+            const banStatus = await (await fetch(`/api/check_ban_status/${visitorName}`)).json();
+            if (banStatus.is_banned) { document.body.innerHTML = `<div class="container text-center mt-5"><div class="card p-5"><h1 class="text-danger">لقد تم حظرك</h1></div></div>`; return; }
 
-            const banStatusRes = await fetch(`/api/check_ban_status/${visitorName}`);
-            if (!banStatusRes.ok) throw new Error(`Ban status check failed: ${banStatusRes.status}`);
-            const banStatus = await banStatusRes.json();
-            if(banStatus.is_banned) {
-                document.body.innerHTML = `<div class="container text-center mt-5"><div class="card p-5"><h1 class="text-danger">لقد تم حظرك</h1><p class="fs-5">تم حظرك من قبل الادارة بتسب علينا يا عايب .</p></div></div>`;
-                return;
-            }
-
-            // Fetch spin wheel settings first
-            const settingsRes = await fetch('/api/settings/spin_wheel');
-            if(!settingsRes.ok) throw new Error('Failed to fetch wheel settings');
-            spinWheelSettings = await settingsRes.json();
-
+            spinWheelSettings = await (await fetch('/api/settings/spin_wheel')).json();
             const configStr = '{{ firebase_config|tojson|safe }}';
-            if (!configStr || configStr === '{}' || configStr.trim() === "") {
-                throw new Error("Firebase config is missing or empty in the template.");
-            }
-            let firebaseConfig;
-            try { firebaseConfig = JSON.parse(configStr); }
-            catch (jsonError) { throw new Error("Firebase config is malformed. Cannot parse as JSON."); }
-            if (!firebaseConfig.apiKey) {
-                throw new Error("Firebase API key is missing in the parsed config.");
-            }
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-            }
+            if (!configStr || configStr === '{}') throw new Error("Firebase config is missing.");
+            if (!firebase.apps.length) firebase.initializeApp(JSON.parse(configStr));
             dbInstance = firebase.database();
 
             setupEventListeners();
-
             if (spinWheelSettings && spinWheelSettings.enabled) {
                 ui.spinWheel.card.style.display = 'block';
-                if (typeof Winwheel !== 'undefined' && typeof gsap !== 'undefined' && typeof TweenMax !== 'undefined') {
-                    initializeSpinWheel();
-                    updateSpinWheelUI(); // Initial check
-                } else {
-                    let missing = [];
-                    if(typeof Winwheel === 'undefined') missing.push('Winwheel');
-                    if(typeof gsap === 'undefined') missing.push('gsap');
-                    if(typeof TweenMax === 'undefined') missing.push('TweenMax');
-                    console.error(`${missing.join(', ')} library is not defined! Spin wheel will not work.`);
-                    if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ في تحميل مكتبة عجلة الحظ.</p>';
-                }
+                if (typeof Winwheel !== 'undefined' && typeof gsap !== 'undefined') { initializeSpinWheel(); updateSpinWheelUI(); }
+                else { console.error('Spin wheel libraries not loaded!'); }
             }
-
-
-            dbInstance.ref('users').on('value', handleUsersSnapshot, handleFirebaseError);
-            dbInstance.ref('site_settings/honor_roll').on('value', handleHonorRollSnapshot, handleFirebaseError);
-            dbInstance.ref('candidates').on('value', handleCandidatesSnapshot, handleFirebaseError);
-            dbInstance.ref('site_settings/announcements').on('value', handleAnnouncementsSnapshot, handleFirebaseError);
-            dbInstance.ref(`visitor_messages/${visitorName}`).on('child_added', handleVisitorMessage, handleFirebaseError);
-
+            setupFirebaseListeners();
         } catch (e) {
             console.error("CRITICAL INITIALIZATION ERROR:", e.message, e.stack);
-            const errorDisplayElement = (ui.loadingSpinner && ui.loadingSpinner.parentElement) || document.querySelector('.container') || document.body;
-            if (errorDisplayElement) {
-                 errorDisplayElement.innerHTML = `<div class="alert alert-danger m-3"><strong>خطأ حرج:</strong> ${e.message} يرجى المحاولة لاحقاً أو الاتصال بالدعم.</div>`;
-            }
+            const errorContainer = ui.loadingSpinner?.parentElement || document.body;
+            if (errorContainer) errorContainer.innerHTML = `<div class="alert alert-danger m-3"><strong>خطأ حرج:</strong> ${e.message}</div>`;
         }
     }
 
-    function handleFirebaseError(error) {
-        console.error("Firebase Read Error:", error.code, error.message);
-        const errorDisplayElement = (ui.loadingSpinner && ui.loadingSpinner.parentElement) || ui.tableBody || document.querySelector('.container');
-        if (errorDisplayElement) {
-            let errorMsg = `فشل الاتصال بقاعدة البيانات. رمز: ${error.code}. يرجى تحديث الصفحة.`;
-            if (ui.tableBody && ui.tableBody === errorDisplayElement) {
-                 ui.tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4"><div class="alert alert-warning">${errorMsg}</div></td></tr>`;
-            } else if (errorDisplayElement.classList.contains('container')) {
-                 const alertDiv = document.createElement('div');
-                 alertDiv.className = 'alert alert-danger m-3';
-                 alertDiv.innerHTML = errorMsg;
-                 errorDisplayElement.prepend(alertDiv);
-            }
-        }
-        if (ui.spinWheel.btn) ui.spinWheel.btn.disabled = true;
+    function setupFirebaseListeners() {
+        dbInstance.ref('users').on('value', handleUsersSnapshot, handleFirebaseError);
+        dbInstance.ref('site_settings/honor_roll').on('value', handleHonorRollSnapshot, handleFirebaseError);
+        dbInstance.ref('candidates').on('value', handleCandidatesSnapshot, handleFirebaseError);
+        dbInstance.ref('site_settings/announcements').on('value', handleAnnouncementsSnapshot, handleFirebaseError);
+        setupPresenceSystem();
+        dbInstance.ref('online_users').on('value', renderOnlineUsersList);
+        dbInstance.ref(`invites/${visitorName}`).on('child_added', handleIncomingInvite);
     }
 
-    function handleVisitorMessage(snapshot) {
-        const messageId = snapshot.key;
-        const message = snapshot.val();
-        if (!message || sessionProcessedMessageIds.has(messageId) || viewedMessages.get().has(messageId)) return;
-        sessionProcessedMessageIds.add(messageId);
-        viewedMessages.add(messageId);
-        Swal.fire({ title: 'رسالة من المشرف!', text: message.text, icon: 'info', confirmButtonText: 'حسناً' })
-        .then(() => {
-            snapshot.ref.remove().catch(err => console.error("Firebase: Failed to remove message", err));
+    function setupPresenceSystem() {
+        const myPresenceRef = dbInstance.ref(`online_users/${visitorName}`);
+        dbInstance.ref('.info/connected').on('value', snap => {
+            if (snap.val() === true) {
+                myPresenceRef.onDisconnect().remove();
+                myPresenceRef.set({ name: visitorName, status: 'online', timestamp: firebase.database.ServerValue.TIMESTAMP });
+            }
         });
     }
 
+    function handleFirebaseError(error) { console.error("Firebase Read Error:", error.code, error.message); }
+
     function handleUsersSnapshot(snapshot) {
-        if (ui.loadingSpinner && ui.loadingSpinner.parentElement) ui.loadingSpinner.parentElement.style.display = 'none';
+        if (ui.loadingSpinner) ui.loadingSpinner.parentElement.style.display = 'none';
         const usersData = snapshot.val() || {};
         allUsersCache = Object.keys(usersData).map(k => ({ name: k, ...usersData[k] })).sort((a, b) => (b.points || 0) - (a.points || 0));
         renderUserTable();
@@ -610,603 +541,61 @@ document.addEventListener('DOMContentLoaded', function() {
         updateDuelSelectors();
     }
 
-    function handleHonorRollSnapshot(snapshot) {
-        const honorData = snapshot.val() || {};
-        honorRollCache = Object.values(honorData).map(i => i.name);
-        renderHonorRollList();
-        if(allUsersCache.length > 0) renderUserTable();
-    }
+    // --- RENDER FUNCTIONS (unchanged logic, combined) ---
+    const renderUserTable = () => { const term = ui.searchInput.value.toLowerCase(); const filtered = allUsersCache.filter(u => u.name.toLowerCase().includes(term)); ui.tableBody.innerHTML = filtered.length ? filtered.map(user => { const rank = allUsersCache.findIndex(u => u.name === user.name) + 1; const honorBadge = honorRollCache.includes(user.name) ? ` <span class="badge rounded-pill" style="background:var(--primary-glow);color:#fff;"><i class="bi bi-award-fill"></i></span>` : ''; const hasLiked = new Set(JSON.parse(localStorage.getItem('likedUsers') || '[]')).has(user.name); return `<tr><th class="align-middle">#${rank}</th><td class="align-middle fw-bold">${user.name}${honorBadge}</td><td class="text-center align-middle fs-5 fw-bold">${formatNumber(user.points)}</td><td class="text-center align-middle"><button class="btn btn-sm like-btn ${hasLiked ? 'liked' : 'btn-outline-danger'}" data-username="${user.name}"><i class="bi bi-heart-fill"></i> <span class="like-count">${formatNumber(user.likes)}</span></button><button class="btn btn-sm btn-outline-info ms-2 chart-btn" data-username="${user.name}" title="عرض تقدم الزاحف"><i class="bi bi-graph-up-arrow"></i></button></td></tr>`; }).join('') : `<tr><td colspan="4" class="text-center py-4">${term ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد بيانات.'}</td></tr>`; };
+    const handleHonorRollSnapshot = (s) => { honorRollCache = Object.values(s.val() || {}).map(i => i.name); renderHonorRollList(); };
+    const handleCandidatesSnapshot = (s) => { candidatesCache = Object.keys(s.val() || {}); renderCandidatesList(); };
+    const handleAnnouncementsSnapshot = (s) => { announcementsCache = Object.values(s.val() || {}); renderAnnouncements(); };
+    const renderTop3 = () => { ui.hallOfFame.innerHTML = allUsersCache.slice(0, 3).map((u, i) => `<li class="list-group-item d-flex justify-content-between"><span>${['🥇','🥈','🥉'][i]} ${u.name}</span><span class="badge rounded-pill" style="background-color:var(--primary-glow)">${formatNumber(u.points)}</span></li>`).join('') || `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`; };
+    const renderHonorRollList = () => { ui.honorRollList.innerHTML = honorRollCache.length ? honorRollCache.map(n => `<li class="list-group-item fw-bold text-center"><i class="bi bi-star-fill text-warning me-2"></i>${n}</li>`).join('') : `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`; };
+    const renderCandidatesList = () => { ui.candidatesList.innerHTML = candidatesCache.length ? candidatesCache.map(n => `<li class="list-group-item"><i class="bi bi-person-check-fill me-2"></i>${n}</li>`).join('') : `<li class="list-group-item text-muted text-center">لا يوجد مرشحون.</li>`; };
+    const renderAnnouncements = () => { if (!ui.announcementsTicker) return; ui.announcementsTicker.innerHTML = ''; if (announcementInterval) clearInterval(announcementInterval); if (announcementsCache.length > 0) { ui.announcementsContainer.style.display = 'block'; announcementsCache.forEach(ann => { const item = document.createElement('div'); item.className = 'ticker-item'; item.textContent = ann.text; ui.announcementsTicker.appendChild(item); }); const items = ui.announcementsTicker.querySelectorAll('.ticker-item'); if (items.length === 0) return; let i = 0; if(items[i]) items[i].classList.add('active'); if (items.length > 1) { announcementInterval = setInterval(() => { if(items[i]) items[i].classList.remove('active'); i = (i + 1) % items.length; if(items[i]) items[i].classList.add('active'); }, 5000); } } else { ui.announcementsContainer.style.display = 'none'; } };
+    const updateDuelSelectors = () => { if (!ui.duelUser1Select) return; const opts = allUsersCache.map(u => `<option value="${u.name}">${u.name}</option>`).join(''); ui.duelUser1Select.innerHTML = opts; ui.duelUser2Select.innerHTML = opts; if (allUsersCache.length > 1) ui.duelUser2Select.selectedIndex = 1; };
 
-    function handleCandidatesSnapshot(snapshot) {
-        candidatesCache = Object.keys(snapshot.val() || {});
-        renderCandidatesList();
-    }
+    // --- WRESTLING FUNCTIONS ---
+    const renderOnlineUsersList = (snapshot) => { const onlineUsers = Object.values(snapshot.val() || {}); ui.onlineUsersList.innerHTML = (onlineUsers.length <= 1) ? `<li class="list-group-item text-center text-muted">لا يوجد لاعبون آخرون.</li>` : onlineUsers.filter(u => u.name !== visitorName).map(u => { const isAvailable = u.status === 'online'; return `<li class="list-group-item d-flex justify-content-between align-items-center"><div><span class="status-dot ${isAvailable ? 'online' : 'in-game'}"></span><span class="fw-bold">${u.name}</span>${!isAvailable ? '<small class="text-muted ms-2">(في معركة)</small>' : ''}</div><button class="btn btn-sm btn-warning challenge-btn" data-target-user="${u.name}" ${!isAvailable ? 'disabled' : ''}><i class="bi bi-shield-shaded"></i> تحدي</button></li>`; }).join(''); };
+    function sendChallenge(targetUserName) { if (targetUserName === visitorName) return; const inviteRef = dbInstance.ref(`invites/${targetUserName}/${visitorName}`); inviteRef.set({ from: visitorName, timestamp: firebase.database.ServerValue.TIMESTAMP }); Swal.fire({ title: 'تم إرسال التحدي!', text: `بانتظار رد من ${targetUserName}...`, allowOutsideClick: false, showConfirmButton: false, timer: 20000, willClose: () => inviteRef.remove() }); const roomId = [visitorName, targetUserName].sort().join('-vs-'); const gameRoomRef = dbInstance.ref(`game_rooms/${roomId}`); gameRoomRef.on('value', s => { if (s.exists()) { Swal.close(); gameRoomRef.off('value'); enterGame(roomId, 'player1'); } }); }
+    function handleIncomingInvite(snapshot) { const { from: inviterName } = snapshot.val() || {}; if (!inviterName) return; const inviteRef = snapshot.ref; Swal.fire({ title: 'تحدي جديد!', text: `${inviterName} يتحداك!`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#28a745', confirmButtonText: 'اقبل!', cancelButtonText: 'رفض' }).then(result => { if (result.isConfirmed) { const roomId = [visitorName, inviterName].sort().join('-vs-'); dbInstance.ref(`game_rooms/${roomId}`).set({ player1: { name: inviterName, health: 100 }, player2: { name: visitorName, health: 100 }, turn: inviterName, status: 'active' }).then(() => { dbInstance.ref(`online_users/${visitorName}/status`).set('in-game'); dbInstance.ref(`online_users/${inviterName}/status`).set('in-game'); enterGame(roomId, 'player2'); }); } inviteRef.remove(); }); }
+    function enterGame(roomId, myPlayerKey) { currentGame = { roomId, myPlayerKey, opponentPlayerKey: (myPlayerKey === 'player1' ? 'player2' : 'player1'), listener: null, isGameOver: false }; const gameRoomRef = dbInstance.ref(`game_rooms/${roomId}`); currentGame.listener = gameRoomRef.on('value', updateGameUI); ui.wrestlingModal.classList.add('show'); }
+    function updateGameUI(snapshot) { if (currentGame.isGameOver) return; const gameState = snapshot.val(); if (!gameState || gameState.status === 'finished') { currentGame.isGameOver = true; handleGameEnd(gameState); return; } ui.wrestler1.name.textContent = gameState.player1.name; ui.wrestler2.name.textContent = gameState.player2.name; updateHealthBar(ui.wrestler1, gameState.player1.health); updateHealthBar(ui.wrestler2, gameState.player2.health); const isMyTurn = (gameState.turn === visitorName); ui.gameStatusText.textContent = isMyTurn ? "دورك للهجوم!" : `بانتظار هجوم ${gameState.turn}...`; ui.attackBtn.disabled = !isMyTurn; ui.gameControls.style.display = 'grid'; }
+    function handleGameEnd(gameState) { ui.gameControls.style.display = 'none'; if (!gameState) { Swal.fire('انتهت المعركة', 'تم إنهاء المعركة أو قطع الاتصال.', 'info').then(leaveGame); return; } const isWinner = gameState.winner === visitorName; ui.gameStatusText.innerHTML = `🏆 الفائز هو: <strong class="text-warning">${gameState.winner}</strong> 🏆`; if (isWinner) { showWinnerDonationDialog(gameState.winner); } else { Swal.fire('لقد خسرت!', 'حظاً أوفر في المرة القادمة.', 'error').then(leaveGame); } }
+    function showWinnerDonationDialog(winnerName) { const opts = allUsersCache.map(u => `<option value="${u.name}">${u.name}</option>`).join(''); Swal.fire({ title: `🎉 مبروك الفوز! 🎉`, html: `<div>لقد ربحت <strong class="text-warning">${formatNumber(WRESTLING_WIN_PRIZE)}</strong> نقطة!</div><div class="mt-3">اختر زاحفاً لتهديه هذه النقاط:</div><select id="swal-donate-select" class="swal2-select mt-2">${opts}</select>`, confirmButtonText: 'إهداء النقاط!', showCancelButton: true, cancelButtonText: 'لا شكراً', didOpen: () => { if (allUsersCache.length === 0) Swal.getConfirmButton().disabled = true; }, preConfirm: () => document.getElementById('swal-donate-select').value }).then(async (result) => { if (result.isConfirmed && result.value) { try { await fetch('/api/award_wrestling_points', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams({ username: result.value, points: WRESTLING_WIN_PRIZE, winner_name: winnerName }) }); } catch(e){ console.error(e); } } leaveGame(); }); }
+    function updateHealthBar(wrestlerUI, health) { const pct = Math.max(0, health); wrestlerUI.healthBar.style.width = `${pct}%`; wrestlerUI.healthBar.classList.toggle('low', pct < 40); const oldHealth = parseInt(wrestlerUI.div.dataset.health || "100"); if(health < oldHealth) { wrestlerUI.div.classList.add('taking-damage'); setTimeout(() => wrestlerUI.div.classList.remove('taking-damage'), 300); } wrestlerUI.div.dataset.health = health; }
+    function performAttack() { if (!currentGame.roomId || ui.attackBtn.disabled) return; ui.attackBtn.disabled = true; const oppHealthRef = dbInstance.ref(`game_rooms/${currentGame.roomId}/${currentGame.opponentPlayerKey}/health`); const oppName = ui[currentGame.opponentPlayerKey].name.textContent; oppHealthRef.transaction(currentHealth => { if (currentHealth === null) return 100; const damage = Math.floor(Math.random() * 15) + 5; const newHealth = currentHealth - damage; if (newHealth <= 0) { dbInstance.ref(`game_rooms/${currentGame.roomId}`).update({ status: 'finished', winner: visitorName, turn: null }); return 0; } else { dbInstance.ref(`game_rooms/${currentGame.roomId}/turn`).set(oppName); return newHealth; } }); }
+    function leaveGame() { if (!currentGame.roomId) return; const gameRoomRef = dbInstance.ref(`game_rooms/${currentGame.roomId}`); if(currentGame.listener) gameRoomRef.off('value', currentGame.listener); gameRoomRef.remove(); dbInstance.ref(`online_users/${visitorName}/status`).set('online'); ui.wrestlingModal.classList.remove('show'); currentGame = { roomId: null, myPlayerKey: null, opponentPlayerKey: null, listener: null, isGameOver: false }; }
 
-    function handleAnnouncementsSnapshot(snapshot) {
-        const annData = snapshot.val() || {};
-        announcementsCache = Object.values(annData);
-        renderAnnouncements();
-    }
+    // --- SPIN WHEEL FUNCTIONS ---
+    function initializeSpinWheel() { if (!ui.spinWheel.canvas || !spinWheelSettings) return; const segments = spinWheelSettings.prizes.map((p, i) => ({ 'fillStyle': ['#eae56f', '#7de6ef', '#89f26e', '#e7706f', '#c789f2', '#f2a15f', '#6aaff2', '#f289b4'][i % 8], 'text': p.value > 999999 ? "مليون!" : p.value.toLocaleString('en-US'), 'textFillStyle': ['#000', '#000', '#000', '#fff', '#fff', '#000', '#fff', '#fff'][i % 8] })); try { theWheel = new Winwheel({ 'canvasId': ui.spinWheel.canvas.id, 'numSegments': segments.length, 'outerRadius': 212, 'textFontSize': 22, 'textFontWeight': 'bold', 'segments': segments, 'animation': { 'type': 'spinToStop', 'duration': 8, 'spins': 10, 'callbackFinished': handleSpinFinish, 'easing': 'Power4.easeOut' }, 'pins': { 'number': segments.length * 2, 'fillStyle': 'silver', 'outerRadius': 4, 'margin': 5 } }); } catch (e) { console.error("Error initializing Winwheel:", e); } }
+    const getWinwheelState = () => JSON.parse(localStorage.getItem('winwheelState') || '{"lastReset":0,"attemptsUsed":0}');
+    const saveWinwheelState = (state) => localStorage.setItem('winwheelState', JSON.stringify(state));
+    async function handleSpinStart() { if (wheelSpinning || !theWheel) return; if (allUsersCache.length === 0) { Swal.fire('انتظر!', 'لا يوجد زواحف للتبرع لهم.', 'info'); return; } ui.spinWheel.btn.disabled = true; ui.spinWheel.btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { const res = await fetch('/api/spin_wheel', { method: 'POST' }); const data = await res.json(); if (!res.ok || !data.success) throw new Error(data.message || `Server error`); let state = getWinwheelState(); state.attemptsUsed++; saveWinwheelState(state); updateSpinWheelUI(); let stopAt = theWheel.getRandomForSegment(theWheel.segments.findIndex(s => s && parseInt(s.text.replace(/,/g, '')) === data.prize)); theWheel.animation.stopAngle = stopAt; wheelSpinning = true; theWheel.startAnimation(); ui.spinWheel.modal.classList.add('show'); ui.spinWheel.modalCloseBtn.style.display = 'none'; } catch (error) { Swal.fire('خطأ', error.message, 'error'); resetSpinButton(); } }
+    function handleSpinFinish(indicatedSegment) { wheelSpinning = false; ui.spinWheel.modalCloseBtn.style.display = 'block'; const prizeWon = parseInt(indicatedSegment.text.replace(/,/g, '')); const opts = allUsersCache.map(u => `<option value="${u.name}">${u.name}</option>`).join(''); Swal.fire({ title: `🎉 مبروك! فزت بـ ${formatNumber(prizeWon)} نقطة! 🎉`, html: `<div>اختر زاحفاً للتبرع له:</div><select id="swal-donate-select" class="swal2-select mt-3">${opts}</select>`, confirmButtonText: 'تبرع!', showCancelButton: true, didOpen: () => {if(!allUsersCache.length) Swal.getConfirmButton().disabled = true;}, preConfirm: () => document.getElementById('swal-donate-select').value }).then(async (result) => { if (result.isConfirmed && result.value) { try { await fetch('/api/donate_points', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams({ username: result.value, points: prizeWon, visitor_name: visitorName }) }); } catch(e){ console.error(e); } } resetSpinButton(); updateSpinWheelUI(); }); }
+    function updateSpinWheelUI() { if (!spinWheelSettings) return; if(cooldownInterval) clearInterval(cooldownInterval); let state = getWinwheelState(); const cooldownMillis = spinWheelSettings.cooldownHours * 60 * 60 * 1000; if (Date.now() - state.lastReset >= cooldownMillis) { state = { lastReset: Date.now(), attemptsUsed: 0 }; saveWinwheelState(state); } const attemptsLeft = spinWheelSettings.maxAttempts - state.attemptsUsed; ui.spinWheel.attemptsText.textContent = `لديك ${attemptsLeft} / ${spinWheelSettings.maxAttempts} محاولات`; if (attemptsLeft > 0) { ui.spinWheel.btn.disabled = false; ui.spinWheel.btn.style.display = 'block'; ui.spinWheel.timerContainer.style.display = 'none'; resetSpinButton(); } else { ui.spinWheel.btn.style.display = 'none'; ui.spinWheel.timerContainer.style.display = 'block'; let timeLeft = cooldownMillis - (Date.now() - state.lastReset); const updateTimer = () => { timeLeft -= 1000; if (timeLeft <= 0) { clearInterval(cooldownInterval); updateSpinWheelUI(); return; } const h = Math.floor(timeLeft / 36e5).toString().padStart(2,'0'), m = Math.floor((timeLeft/6e4)%60).toString().padStart(2,'0'), s = Math.floor((timeLeft/1e3)%60).toString().padStart(2,'0'); if(ui.spinWheel.timer) ui.spinWheel.timer.textContent = `${h}:${m}:${s}`; }; updateTimer(); cooldownInterval = setInterval(updateTimer, 1000); } }
+    const resetSpinButton = () => { if (ui.spinWheel.btn) { ui.spinWheel.btn.disabled = false; ui.spinWheel.btn.innerHTML = `<i class="bi bi-arrow-repeat me-2"></i>لف العجلة!`; } };
 
-    function renderUserTable() {
-        if (!ui.tableBody) return;
-        const term = ui.searchInput.value.toLowerCase();
-        const filteredUsers = allUsersCache.filter(u => u.name.toLowerCase().includes(term));
-        let tableHtml = '';
-
-        if (filteredUsers.length > 0) {
-            filteredUsers.forEach((user) => {
-                const rank = allUsersCache.findIndex(u => u.name === user.name) + 1;
-                const honorBadge = honorRollCache.includes(user.name) ? ` <span class="badge rounded-pill" style="background:var(--primary-glow);color:#fff;"><i class="bi bi-award-fill"></i></span>` : '';
-                const hasLiked = (new Set(JSON.parse(localStorage.getItem('likedUsers')) || [])).has(user.name);
-                tableHtml += `
-                    <tr>
-                        <th class="align-middle">#${rank}</th>
-                        <td class="align-middle fw-bold">${user.name}${honorBadge}</td>
-                        <td class="text-center align-middle fs-5 fw-bold">${formatNumber(user.points)}</td>
-                        <td class="text-center align-middle">
-                            <button class="btn btn-sm like-btn ${hasLiked ? 'liked' : 'btn-outline-danger'}" data-username="${user.name}">
-                                <i class="bi bi-heart-fill"></i> <span class="like-count">${formatNumber(user.likes)}</span>
-                            </button>
-                            <button class="btn btn-sm btn-outline-info ms-2 chart-btn" data-username="${user.name}" title="عرض تقدم الزاحف">
-                                <i class="bi bi-graph-up-arrow"></i>
-                            </button>
-                        </td>
-                    </tr>`;
-            });
-        } else {
-            tableHtml = `<tr><td colspan="4" class="text-center py-4">${term ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد بيانات لعرضها.'}</td></tr>`;
-        }
-        ui.tableBody.innerHTML = tableHtml;
-    }
-
-    function renderTop3() {
-        if (!ui.hallOfFame) return;
-        ui.hallOfFame.innerHTML = allUsersCache.slice(0, 3).map((u, i) =>
-            `<li class="list-group-item d-flex justify-content-between"><span>${['🥇','🥈','🥉'][i]} ${u.name}</span><span class="badge rounded-pill" style="background-color:var(--primary-glow)">${formatNumber(u.points)}</span></li>`
-        ).join('') || `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`;
-    }
-
-    function renderHonorRollList() {
-        if (!ui.honorRollList) return;
-        ui.honorRollList.innerHTML = honorRollCache.length ?
-            honorRollCache.map(name => `<li class="list-group-item fw-bold text-center"><i class="bi bi-star-fill text-warning me-2"></i>${name}</li>`).join('') :
-            `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`;
-    }
-
-    function renderCandidatesList() {
-        if (!ui.candidatesList) return;
-        ui.candidatesList.innerHTML = candidatesCache.length ?
-            candidatesCache.map(name => `<li class="list-group-item"><i class="bi bi-person-check-fill me-2"></i>${name}</li>`).join('') :
-            `<li class="list-group-item text-muted text-center">لا يوجد مرشحون.</li>`;
-    }
-
-    function renderAnnouncements() {
-        if (!ui.announcementsTicker || !ui.announcementsContainer) return;
-        ui.announcementsTicker.innerHTML = '';
-        if (announcementInterval) clearInterval(announcementInterval);
-
-        if (announcementsCache.length > 0) {
-            ui.announcementsContainer.style.display = 'block';
-            announcementsCache.forEach(ann => {
-                const item = document.createElement('div');
-                item.className = 'ticker-item';
-                item.textContent = ann.text;
-                ui.announcementsTicker.appendChild(item);
-            });
-            const items = ui.announcementsTicker.querySelectorAll('.ticker-item');
-            if (items.length === 0) return;
-
-            let currentIndex = 0;
-            if(items[currentIndex]) items[currentIndex].classList.add('active');
-
-            if (items.length > 1) {
-                announcementInterval = setInterval(() => {
-                    if(items[currentIndex]) items[currentIndex].classList.remove('active');
-                    currentIndex = (currentIndex + 1) % items.length;
-                    if(items[currentIndex]) items[currentIndex].classList.add('active');
-                }, 5000);
-            }
-        } else {
-            ui.announcementsContainer.style.display = 'none';
-        }
-    }
-
-    function updateDuelSelectors() {
-        if (!ui.duelUser1Select || !ui.duelUser2Select) return;
-        const options = allUsersCache.map(u => `<option value="${u.name}">${u.name}</option>`).join('');
-        ui.duelUser1Select.innerHTML = options;
-        ui.duelUser2Select.innerHTML = options;
-        if (allUsersCache.length > 1 && ui.duelUser2Select.options.length > 1) {
-            ui.duelUser2Select.selectedIndex = 1;
-        } else if (allUsersCache.length === 1 && ui.duelUser2Select.options.length > 0) {
-            ui.duelUser2Select.selectedIndex = 0;
-        }
-    }
-
-    function initializeSpinWheel() {
-        if (!ui.spinWheel.canvas || typeof Winwheel === 'undefined' || typeof TweenMax === 'undefined' || !spinWheelSettings) return;
-
-        const prizeSegments = spinWheelSettings.prizes.map((p, index) => {
-             const colors = ['#eae56f', '#7de6ef', '#89f26e', '#e7706f', '#c789f2', '#f2a15f', '#6aaff2', '#f289b4'];
-             const textFill = ['#000', '#000', '#000', '#fff', '#fff', '#000', '#fff', '#fff'];
-             let prizeText = p.value.toLocaleString('en-US');
-             if (p.value >= 1000000) prizeText = "مليون!";
-
-             return {
-                'fillStyle': colors[index % colors.length],
-                'text': prizeText,
-                'textFillStyle': textFill[index % textFill.length]
-             };
-        });
-
-        try {
-            theWheel = new Winwheel({
-                'canvasId'      : ui.spinWheel.canvas.id,
-                'numSegments'   : prizeSegments.length,
-                'outerRadius'   : 212,
-                'textFontSize'  : 22,
-                'textFontWeight': 'bold',
-                'segments'      : prizeSegments,
-                'animation'     : {
-                    'type'     : 'spinToStop', 'duration' : 8, 'spins' : 10,
-                    'callbackFinished' : handleSpinFinish, 'easing'   : 'Power4.easeOut'
-                },
-                'pins'          : {
-                    'number'    : prizeSegments.length * 2,
-                    'fillStyle' : 'silver',
-                    'outerRadius': 4,
-                    'margin': 5
-                }
-            });
-        } catch (e) {
-            console.error("Error initializing Winwheel:", e);
-            if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ عند إنشاء عجلة الحظ.</p>';
-        }
-    }
-
-    function getWinwheelState() {
-        try {
-            const state = JSON.parse(localStorage.getItem('winwheelState') || '{}');
-            return {
-                lastReset: state.lastReset || 0,
-                attemptsUsed: state.attemptsUsed || 0
-            };
-        } catch {
-            return { lastReset: 0, attemptsUsed: 0 };
-        }
-    }
-
-    function saveWinwheelState(state) {
-        localStorage.setItem('winwheelState', JSON.stringify(state));
-    }
-
-    async function handleSpinStart() {
-        if (wheelSpinning || !theWheel) return;
-        if (allUsersCache.length === 0) {
-            Swal.fire('انتظر!', 'لا يوجد زواحف للتبرع لهم حالياً.', 'info');
-            return;
-        }
-
-        ui.spinWheel.btn.disabled = true;
-        ui.spinWheel.btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جاري الدوران...`;
-
-        try {
-            const res = await fetch('/api/spin_wheel', { method: 'POST' });
-            const data = await res.json();
-
-            if (!res.ok || !data.success) {
-                throw new Error(data.message || `Server error: ${res.status}`);
-            }
-
-            let state = getWinwheelState();
-            state.attemptsUsed++;
-            saveWinwheelState(state);
-            updateSpinWheelUI();
-
-            const prizeWon = data.prize;
-            let stopAtSegmentIndex = -1;
-
-            for (let i = 1; i <= theWheel.numSegments; i++) {
-                 if (theWheel.segments[i]) {
-                     let segmentText = theWheel.segments[i].text.replace(/,/g, '');
-                     let segmentValue = (segmentText === 'مليون!') ? 1000000 : parseInt(segmentText);
-                     if (segmentValue === prizeWon) {
-                         stopAtSegmentIndex = i;
-                         break;
-                     }
-                 }
-            }
-
-            if (stopAtSegmentIndex === -1) {
-                console.warn(`Prize ${prizeWon} not found, selecting random segment.`);
-                stopAtSegmentIndex = Math.floor(Math.random() * theWheel.numSegments) + 1;
-            }
-
-            theWheel.animation.stopAngle = theWheel.getRandomForSegment(stopAtSegmentIndex);
-            wheelSpinning = true;
-            theWheel.startAnimation();
-            ui.spinWheel.modal.classList.add('show');
-            if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'none';
-
-        } catch (error) {
-            console.error("Spin Start Error:", error);
-            Swal.fire('خطأ', error.message || 'فشل الاتصال بالخادم.', 'error');
-            resetSpinButton();
-        }
-    }
-
-    function handleSpinFinish(indicatedSegment) {
-        wheelSpinning = false;
-        if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'block';
-
-        if (!indicatedSegment || typeof indicatedSegment.text === 'undefined') {
-            console.error("Indicated segment is invalid:", indicatedSegment);
-            Swal.fire('عذراً', 'حدث خطأ غير متوقع أثناء تحديد الجائزة. لم يتم التبرع بأي نقاط.', 'error');
-            resetSpinButton();
-            updateSpinWheelUI();
-            return;
-        }
-
-        const prizeText = indicatedSegment.text.replace(/,/g, '');
-        const prizeWon = (prizeText === 'مليون!') ? 1000000 : parseInt(prizeText);
-
-        Swal.fire({
-            title: `🎉 مبروك! لقد فزت بـ ${formatNumber(prizeWon)} نقطة! 🎉`,
-            html: `<div>اختر الزاحف الذي تريد التبرع له بالنقاط:</div>
-                   <select id="swal-donate-select" class="swal2-select mt-3" style="min-width: 200px;"></select>`,
-            confirmButtonText: 'تبرع الآن!',
-            showCancelButton: true,
-            cancelButtonText: 'إلغاء (عدم التبرع)',
-            didOpen: () => {
-                const select = document.getElementById('swal-donate-select');
-                if (allUsersCache.length > 0) {
-                    allUsersCache.forEach(user => select.add(new Option(user.name, user.name)));
-                    select.selectedIndex = 0;
-                } else {
-                    select.innerHTML = '<option value="">لا يوجد زواحف للتبرع!</option>';
-                    Swal.getConfirmButton().disabled = true;
-                }
-            },
-            preConfirm: () => {
-                const selectedUser = document.getElementById('swal-donate-select').value;
-                if (!selectedUser && allUsersCache.length > 0) {
-                    Swal.showValidationMessage('الرجاء اختيار زاحف للتبرع له.');
-                    return false;
-                }
-                return selectedUser;
-            },
-            allowOutsideClick: false
-        }).then(async (result) => {
-            if (result.isConfirmed && result.value) {
-                const usernameToDonate = result.value;
-                try {
-                    const res = await fetch('/api/donate_points', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                        body: new URLSearchParams({ username: usernameToDonate, points: prizeWon, visitor_name: visitorName })
-                    });
-                    const data = await res.json();
-                    Swal.fire(data.success ? 'شكراً لك!' : 'خطأ!', data.message, data.success ? 'success' : 'error');
-                } catch(e){
-                    Swal.fire('خطأ!', 'فشل الاتصال بالخادم عند التبرع.', 'error');
-                }
-            } else if (result.dismiss === Swal.DismissReason.cancel) {
-                Swal.fire('تم الإلغاء', 'لم يتم التبرع بالنقاط.', 'info');
-            }
-            resetSpinButton();
-            updateSpinWheelUI();
-        });
-    }
-
-    function updateSpinWheelUI() {
-        if (!spinWheelSettings || !ui.spinWheel.btn) return;
-        if(cooldownInterval) clearInterval(cooldownInterval);
-
-        let state = getWinwheelState();
-        const cooldownMillis = spinWheelSettings.cooldownHours * 60 * 60 * 1000;
-        const timeSinceReset = Date.now() - state.lastReset;
-
-        if (timeSinceReset >= cooldownMillis) {
-            state = { lastReset: Date.now(), attemptsUsed: 0 };
-            saveWinwheelState(state);
-        }
-
-        const attemptsLeft = spinWheelSettings.maxAttempts - state.attemptsUsed;
-        ui.spinWheel.attemptsText.textContent = `لديك ${attemptsLeft} / ${spinWheelSettings.maxAttempts} محاولات متبقية`;
-
-        if (attemptsLeft > 0) {
-            ui.spinWheel.btn.disabled = false;
-            ui.spinWheel.btn.style.display = 'block';
-            ui.spinWheel.timerContainer.style.display = 'none';
-            resetSpinButton();
-        } else {
-            ui.spinWheel.btn.disabled = true;
-            ui.spinWheel.btn.style.display = 'none';
-            ui.spinWheel.timerContainer.style.display = 'block';
-
-            let timeLeft = cooldownMillis - timeSinceReset;
-
-            const updateTimer = () => {
-                timeLeft -= 1000;
-                if (timeLeft <= 0) {
-                    clearInterval(cooldownInterval);
-                    updateSpinWheelUI(); // Re-check state to reset
-                    return;
-                }
-                const h = Math.floor(timeLeft / (1000 * 60 * 60)).toString().padStart(2, '0');
-                const m = Math.floor((timeLeft / (1000 * 60)) % 60).toString().padStart(2, '0');
-                const s = Math.floor((timeLeft / 1000) % 60).toString().padStart(2, '0');
-                if(ui.spinWheel.timer) ui.spinWheel.timer.textContent = `${h}:${m}:${s}`;
-            };
-            updateTimer();
-            cooldownInterval = setInterval(updateTimer, 1000);
-        }
-    }
-
-    function resetSpinButton() {
-        if (ui.spinWheel.btn) {
-            ui.spinWheel.btn.disabled = false;
-            ui.spinWheel.btn.innerHTML = `<i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!`;
-        }
-    }
+    // --- OLD DUEL & CRAWL CHECKER FUNCTIONS ---
+    function handleCrawlCheck() { const name = ui.crawlNameInput.value.trim(); if (!name) return; let percentage, title, text, color; const existingUser = allUsersCache.find(u => u.name.toLowerCase() === name.toLowerCase()); if (existingUser) { const maxPoints = Math.max(...allUsersCache.map(u => u.points || 0), 1); percentage = Math.min(Math.round((existingUser.points / maxPoints) * 100), 100); title = `نتيجة الزاحف: ${existingUser.name}`; text = `زاحف معتمد بنسبة ${percentage}%.`; color = '#8e44ad'; } else { let hash = 0; for (let i = 0; i < name.length; i++) { hash = name.charCodeAt(i) + ((hash << 5) - hash); } percentage = Math.abs(hash % 100) + 1; title = `نتيجة فحص: "${name}"`; if (percentage < 30) { text = `نسبة زحفك ${percentage}%. مبتدئ!`; color = '#2ecc71'; } else if (percentage < 70) { text = `نسبة زحفك ${percentage}%. محترف!`; color = '#f1c40f'; } else { text = `نسبة زحفك ${percentage}%. خطر على المجتمع!`; color = '#e74c3c'; } } if (crawlChartInstance) crawlChartInstance.destroy(); ui.crawlModal.classList.add('show'); crawlChartInstance = new Chart(ui.crawlChartCanvas.getContext('2d'), { type: 'doughnut', data: { datasets: [{ data: [percentage, 100 - percentage], backgroundColor: [color, 'rgba(255,255,255,0.1)'], borderWidth: 0 }] }, options: { animation: { animateRotate: true }, cutout: '70%', plugins: { legend: { display: false } } } }); ui.crawlModalTitle.textContent = title; ui.crawlModalText.textContent = text; ui.crawlModalText.style.color = color; }
+    function handleDuelStart() { const name1 = ui.duelUser1Select.value, name2 = ui.duelUser2Select.value; if (!name1 || !name2) return; if (name1 === name2) { Swal.fire('لا يمكنك مواجهة نفس الزاحف!', '', 'warning'); return; } ui.fighter1Name.textContent = name1; ui.fighter2Name.textContent = name2; ui.fighter1Health.style.width = '100%'; ui.fighter2Health.style.width = '100%'; ui.duelResultText.textContent = ''; ui.duelModal.classList.add('show'); const winner = Math.random() < 0.5 ? 1 : 2; setTimeout(() => { ui.fighter1Div.classList.add('fighting'); ui.fighter2Div.classList.add('fighting'); winner === 1 ? ui.fighter2Health.style.width = '0%' : ui.fighter1Health.style.width = '0%'; }, 500); setTimeout(() => { ui.fighter1Div.classList.remove('fighting'); ui.fighter2Div.classList.remove('fighting'); ui.duelResultText.innerHTML = `🏆 الفائز هو: <strong>${winner === 1 ? name1 : name2}</strong> 🏆`; }, 2500); }
 
     function setupEventListeners() {
-        if (ui.searchInput) ui.searchInput.addEventListener('input', renderUserTable);
-
+        ui.searchInput.addEventListener('input', renderUserTable);
+        ui.tableBody.addEventListener('click', e => {
+            const likeBtn = e.target.closest('.like-btn');
+            if (likeBtn) { const username = likeBtn.dataset.username; const likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers') || '[]')); const action = likedUsers.has(username) ? 'unlike' : 'like'; if (action === 'like') { likedUsers.add(username); } else { likedUsers.delete(username); } localStorage.setItem('likedUsers', JSON.stringify([...likedUsers])); renderUserTable(); fetch(`/like/${username}?action=${action}`, { method:'POST', body: new URLSearchParams({visitor_name: visitorName}) }); }
+            if (e.target.closest('.chart-btn')) { showUserHistoryChart(e.target.closest('.chart-btn').dataset.username); }
+        });
+        // New listeners
+        ui.onlineUsersList.addEventListener('click', e => { if (e.target.closest('.challenge-btn')) sendChallenge(e.target.closest('.challenge-btn').dataset.targetUser); });
+        ui.attackBtn.addEventListener('click', performAttack);
+        ui.closeWrestlingModalBtn.addEventListener('click', () => { Swal.fire({ title: 'هل أنت متأكد؟', text: "الهروب يعني الخسارة!", icon: 'warning', showCancelButton: true, confirmButtonText: 'نعم، أهرب!' }).then(r => { if (r.isConfirmed && currentGame.roomId) { dbInstance.ref(`game_rooms/${currentGame.roomId}`).update({ status: 'finished', winner: ui[currentGame.opponentPlayerKey].name.textContent }); } }); });
+        // Old listeners
         if (ui.spinWheel.btn) ui.spinWheel.btn.addEventListener('click', handleSpinStart);
-        if (ui.spinWheel.modalCloseBtn) {
-            ui.spinWheel.modalCloseBtn.addEventListener('click', () => {
-                if (!wheelSpinning) ui.spinWheel.modal.classList.remove('show');
-            });
-        }
-
-        document.querySelectorAll('.custom-modal .custom-close-btn:not(#spinWheelModal .custom-close-btn)').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const modal = e.target.closest('.custom-modal');
-                if (modal) modal.classList.remove('show');
-            });
-        });
-        window.addEventListener('click', (e) => {
-            if (e.target.classList.contains('custom-modal')) {
-                if (e.target.id === 'spinWheelModal' && wheelSpinning) return;
-                e.target.classList.remove('show');
-            }
-        });
-
-
-        if (ui.tableBody) {
-            ui.tableBody.addEventListener('click', e => {
-                const likeBtn = e.target.closest('.like-btn');
-                const chartBtn = e.target.closest('.chart-btn');
-                if (likeBtn) {
-                    const username = likeBtn.dataset.username;
-                    const likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers')) || []);
-                    const action = likedUsers.has(username) ? 'unlike' : 'like';
-                    const countSpan = likeBtn.querySelector('.like-count');
-                    let currentCount = parseInt((countSpan.textContent || '0').replace(/,/g, ''));
-
-                    if(action === 'like') {
-                        likedUsers.add(username); likeBtn.classList.add('liked'); likeBtn.classList.remove('btn-outline-danger');
-                        countSpan.textContent = formatNumber(currentCount + 1);
-                    } else {
-                        likedUsers.delete(username); likeBtn.classList.remove('liked'); likeBtn.classList.add('btn-outline-danger');
-                        countSpan.textContent = formatNumber(Math.max(0, currentCount - 1));
-                    }
-                    localStorage.setItem('likedUsers', JSON.stringify([...likedUsers]));
-                    fetch(`/like/${username}?action=${action}`, { method:'POST', body: new URLSearchParams({visitor_name: visitorName}) });
-                }
-                if(chartBtn && ui.userChartModal) {
-                    showUserHistoryChart(chartBtn.dataset.username);
-                }
-            });
-        }
-
-        if(ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', handleCrawlCheck);
-        if(ui.startDuelBtn) ui.startDuelBtn.addEventListener('click', handleDuelStart);
-
-        if (ui.nominateBtn) {
-            ui.nominateBtn.addEventListener('click', () => {
-                Swal.fire({
-                    title: 'رشح نفسك كزاحف', input: 'text', inputLabel: 'اكتب اسمك للترشيح',
-                    inputPlaceholder: 'الاسم المراد ترشيحه...', showCancelButton: true,
-                    confirmButtonText: 'إرسال الترشيح', cancelButtonText: 'إلغاء',
-                    inputValidator: (v) => !v && 'يجب كتابة اسم!'
-                }).then(async res => {
-                    if (res.isConfirmed && res.value) {
-                        try {
-                            const r = await fetch('/api/nominate', {
-                                method: 'POST', body: new URLSearchParams({name: res.value, visitor_name: visitorName})
-                            });
-                            const j = await r.json();
-                            if(r.ok && j.success) Swal.fire('تم!', j.message, 'success');
-                            else Swal.fire('خطأ!', j.message || 'فشل إرسال طلب الترشيح.', 'error');
-                        } catch(e){ Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');}
-                    }
-                })
-            });
-        }
-        if (ui.reportBtn) {
-            ui.reportBtn.addEventListener('click', () => {
-                if (!allUsersCache.length) return Swal.fire('لا يوجد زواحف للإبلاغ عنهم حالياً.', '', 'info');
-                const userOptions = allUsersCache.reduce((obj, user) => { obj[user.name] = user.name; return obj; }, {});
-                Swal.fire({
-                    title: 'الإبلاغ عن زاحف',
-                    html: `<label for="swal-reported-user" class="swal2-label" style="display: block; margin-bottom: .5em;">اختر الزاحف:</label>
-                           <select id="swal-reported-user" class="swal2-select" style="min-width: 200px; margin-bottom: 1em;"></select>
-                           <label for="swal-report-reason" class="swal2-label" style="display: block; margin-bottom: .5em;">سبب الإبلاغ:</label>
-                           <textarea id="swal-report-reason" class="swal2-textarea" placeholder="اشرح المشكلة أو سبب الإبلاغ..."></textarea>`,
-                    showCancelButton: true, confirmButtonText: 'إرسال البلاغ', cancelButtonText: 'إلغاء',
-                    didOpen: () => {
-                        const select = document.getElementById('swal-reported-user');
-                        Object.keys(userOptions).forEach(key => select.add(new Option(userOptions[key], key)));
-                         if(select.options.length > 0) select.selectedIndex = 0;
-                    },
-                    preConfirm: () => {
-                        const user = document.getElementById('swal-reported-user').value;
-                        const reason = document.getElementById('swal-report-reason').value;
-                        if (!user) { Swal.showValidationMessage('يجب اختيار زاحف للإبلاغ عنه!'); return false; }
-                        if (!reason) { Swal.showValidationMessage('يجب كتابة سبب البلاغ!'); return false;}
-                        return { user, reason };
-                    }
-                }).then(async (result) => {
-                    if (result.isConfirmed && result.value) {
-                        try {
-                            const r = await fetch('/api/report', {
-                                method: 'POST',
-                                body: new URLSearchParams({ reported_user: result.value.user, reason: result.value.reason, visitor_name: visitorName })
-                            });
-                            const j = await r.json();
-                            if(r.ok && j.success) Swal.fire('تم!', j.message, 'success');
-                            else Swal.fire('خطأ!', j.message || 'فشل إرسال البلاغ.', 'error');
-                        } catch(e){ Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');}
-                    }
-                });
-            });
-        }
+        if (ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', handleCrawlCheck);
+        if (ui.startDuelBtn) ui.startDuelBtn.addEventListener('click', handleDuelStart);
+        // Modal closing
+        document.querySelectorAll('.custom-modal .custom-close-btn').forEach(btn => { if(btn.id !== 'close-wrestling-modal-btn') btn.addEventListener('click', e => e.target.closest('.custom-modal').classList.remove('show')); });
+        window.addEventListener('click', e => { if (e.target.classList.contains('custom-modal') && e.target.id !== 'wrestlingModal') e.target.classList.remove('show'); });
     }
-
-    function handleCrawlCheck() {
-        if(!ui.crawlNameInput || !ui.crawlModalTitle || !ui.crawlChartCanvas || !ui.crawlModal) return;
-        const name = ui.crawlNameInput.value.trim();
-        if (!name) return Swal.fire('خطأ', 'الرجاء إدخال اسم لفحص النسبة.', 'warning');
-
-        const existingUser = allUsersCache.find(u => u.name.toLowerCase() === name.toLowerCase());
-        let percentage, title, text, color;
-        if (existingUser) {
-            const maxPoints = Math.max(...allUsersCache.map(u => u.points || 0), 1);
-            percentage = Math.min(Math.round(((existingUser.points || 0) / maxPoints) * 100), 100);
-            title = `نتيجة الزاحف الأصلي: ${existingUser.name}`; text = ` زاحف معتمد بنسبة🦎 ${percentage}%. ولدَ زاحفاً و  سيبقى زاحف  محتل هذه اللوحة!`; color = '#8e44ad';
-        } else {
-            let hash = 0;
-            for (let i = 0; i < name.length; i++) {
-                hash = name.charCodeAt(i) + ((hash << 5) - hash);
-                hash = hash & hash;
-            }
-            percentage = (Math.abs(hash) % 100) + 1;
-
-            title = `نتيجة فحص الزحف لـِ "${name}"`;
-            if (percentage < 30) { text = `نسبة زحفك ${percentage}%. زاحف مبتدئ، أمامك طريق للتوبة !`; color = '#2ecc71'; }
-            else if (percentage < 50) { text = `نسبة زحفك ${percentage}%. زاحف الايزي ، كلنا عارفين قصصك لا تحاول تتغير!`; color = '#f1c40f'; }
-            else if (percentage < 70) { text = `نسبة زحفك ${percentage}%. زاحف خرائي ، بديت تغوص ولا عودة بعد اليوم!`; color = '#f1c40f'; }
-            else { text = `نسبة زحفك ${percentage}%. خطر على المجتمع! الله يعوض عليها بشوال رز!`; color = '#e74c3c'; }
-        }
-        ui.crawlModalTitle.textContent = "جاري الفحص..."; ui.crawlModalText.textContent = "";
-        if (crawlChartInstance) { crawlChartInstance.destroy(); }
-        ui.crawlModal.classList.add('show');
-
-        const ctx = ui.crawlChartCanvas.getContext('2d');
-        setTimeout(() => {
-            ui.crawlModalTitle.textContent = title; ui.crawlModalText.textContent = text; ui.crawlModalText.style.color = color;
-            crawlChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['نسبة الزحف', 'نسبة البراءة'],
-                    datasets: [{
-                        data: [percentage, 100 - percentage],
-                        backgroundColor: [color, 'rgba(255, 255, 255, 0.1)'],
-                        borderColor: 'var(--card-bg)',
-                        borderWidth: 4
-                    }]
-                },
-                options: {
-                    animation: { animateRotate: true, duration: 2000 },
-                    responsive: true, maintainAspectRatio: false, cutout: '70%',
-                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
-                }
-            });
-        }, 1500);
-    }
-
-    async function showUserHistoryChart(username) {
-        if(!ui.userChartModal || !ui.chartModalLabel || !ui.userPointsChartCanvas) return;
-        try {
-            const response = await fetch(`/api/user_history/${username}`);
-            if(!response.ok) throw new Error("Failed to fetch history");
-            let history = await response.json();
-
-            if(!history || !history.length) {
-                return Swal.fire({icon: 'info', title: 'لا توجد بيانات', text: 'لا يوجد سجل نقاط لهذا الزاحف بعد.'});
-            }
-            if (history.length === 1) {
-                 const firstPoint = history[0];
-                 history.unshift({ points: firstPoint.points, timestamp: firstPoint.timestamp - (24 * 60 * 60) });
-            }
-
-            ui.chartModalLabel.innerText = `تقدم الزاحف: ${username}`;
-            if (userChartInstance) userChartInstance.destroy();
-
-            const chartContext = ui.userPointsChartCanvas.getContext('2d');
-            const gradient = chartContext.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(0, 242, 255, 0.4)');
-            gradient.addColorStop(1, 'rgba(159, 122, 234, 0.1)');
-
-            userChartInstance = new Chart(chartContext, {
-                type: 'line',
-                data: {
-                    labels: history.map(h => new Date(h.timestamp * 1000).toLocaleDateString('ar-EG', { day: '2-digit', month: 'short', hour:'2-digit', minute:'2-digit'})),
-                    datasets: [{
-                        label: 'النقاط', data: history.map(h => h.points),
-                        fill: true, backgroundColor: gradient, borderColor: '#00f2ff',
-                        borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#00f2ff',
-                        pointRadius: 5, pointHoverRadius: 8, tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    scales: {
-                        y: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
-                        x: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { display: false } }
-                    },
-                    plugins: { legend: { display: false }, tooltip: { titleFont: { family: "Almarai" }, bodyFont: { family: "Almarai" } } }
-                }
-            });
-            ui.userChartModal.classList.add('show');
-        } catch(e) {
-            console.error("User History Chart Error:", e);
-            Swal.fire('خطأ', 'لم نتمكن من جلب أو عرض سجل نقاط هذا الزاحف.', 'error');
-        }
-    }
-
-    function handleDuelStart() {
-        if (!ui.duelUser1Select || !ui.duelUser2Select || !ui.fighter1Name || !ui.fighter2Name || !ui.fighter1Health || !ui.fighter2Health || !ui.duelResultText || !ui.fighter1Div || !ui.fighter2Div || !ui.duelModal) return;
-
-        const name1 = ui.duelUser1Select.value;
-        const name2 = ui.duelUser2Select.value;
-
-        if (!name1 || !name2) return Swal.fire('خطأ!', 'الرجاء التأكد من وجود زواحف في القائمة أولاً.', 'error');
-        if (name1 === name2) return Swal.fire('لا يمكنك مواجهة نفس الزاحف!', 'الرجاء اختيار زاحفين مختلفين.', 'warning');
-
-        ui.fighter1Name.textContent = name1;
-        ui.fighter2Name.textContent = name2;
-        ui.fighter1Health.style.width = '100%';
-        ui.fighter2Health.style.width = '100%';
-        ui.duelResultText.textContent = '';
-        ui.fighter1Div.classList.remove('fighting');
-        ui.fighter2Div.classList.remove('fighting');
-        ui.duelModal.classList.add('show');
-
-        const winner = Math.random() < 0.5 ? 1 : 2;
-
-        setTimeout(() => {
-            ui.fighter1Div.classList.add('fighting');
-            ui.fighter2Div.classList.add('fighting');
-            ui.duelResultText.textContent = 'الزحفنة تبدأ...!';
-            if (winner === 1) {
-                ui.fighter2Health.style.width = '0%';
-            } else {
-                ui.fighter1Health.style.width = '0%';
-            }
-        }, 500);
-
-        setTimeout(() => {
-            ui.fighter1Div.classList.remove('fighting');
-            ui.fighter2Div.classList.remove('fighting');
-            const winnerName = winner === 1 ? name1 : name2;
-            ui.duelResultText.innerHTML = `🏆 الزاحف الاكبر هو: <strong>${winnerName}</strong> 🏆`;
-        }, 2500);
-    }
-
     initializeApp();
 });
 </script>
