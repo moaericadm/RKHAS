@@ -1,14 +1,15 @@
-# --- START OF FILE app.py (FINAL) ---
+# --- START OF FILE app.py ---
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import firebase_admin
-from firebase_admin import credentials, db, auth
+from firebase_admin import credentials, db
 import os
 import time
 import sys
 from dotenv import load_dotenv
 import re
 import random
+import json
 
 # --- تحميل متغيرات البيئة ---
 load_dotenv()
@@ -53,10 +54,9 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
 app.config['JSON_AS_ASCII'] = False
 
 try:
+    cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
     if not firebase_admin._apps:
-        cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
-        
     ref_users = db.reference('users/')
     ref_banned_visitors = db.reference('banned_visitors/')
     ref_site_settings = db.reference('site_settings/')
@@ -64,113 +64,37 @@ try:
     ref_activity_log = db.reference('activity_log/')
     ref_points_history = db.reference('points_history/')
     ref_visitor_messages = db.reference('visitor_messages/')
-    ref_registered_users = db.reference('registered_users/')
     print("تم الاتصال بـ Firebase بنجاح (app.py)!")
 except Exception as e:
     print(f"!!! خطأ فادح: فشل الاتصال بـ Firebase (app.py): {e}", file=sys.stderr)
     sys.exit(1)
 
-@app.context_processor
-def inject_global_vars():
-    return dict(session=session, firebase_config=firebase_config)
-
 @app.route('/')
-def home(): 
-    return redirect(url_for('user_view'))
+def home(): return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if 'admin_logged_in' in session: 
-        return redirect(url_for('admin_panel'))
+    if 'admin_logged_in' in session: return redirect(url_for('admin_panel'))
     if request.method == 'POST':
-        password = request.form.get('password')
-        if password == ADMIN_PASSWORD:
+        if request.form.get('password') == ADMIN_PASSWORD:
             session['admin_logged_in'] = True
-            if 'user' not in session:
-                session['user'] = {
-                    'uid': 'admin_user',
-                    'name': 'Admin',
-                    'email': 'admin@system',
-                    'picture': 'https://i.imgur.com/sC3b3d5.png'
-                }
             return jsonify(success=True, redirect_url=url_for('admin_panel'))
         return jsonify(success=False, message="كلمة المرور غير صحيحة.")
-    
     announcements_data = ref_site_settings.child('announcements').get() or {}
     announcements = list(announcements_data.values())
     return render_template('login.html', announcements=announcements)
 
-@app.route('/verify_token', methods=['POST'])
-def verify_token():
-    try:
-        token = request.form.get('id_token')
-        if not token:
-            return jsonify({'status': 'error', 'message': 'No token provided'}), 400
-            
-        decoded_token = auth.verify_id_token(token)
-        uid = decoded_token['uid']
-        
-        user_info = {
-            'uid': uid,
-            'name': decoded_token.get('name', f'مستخدم {uid[:5]}'),
-            'email': decoded_token.get('email'),
-            'picture': decoded_token.get('picture')
-        }
-        session['user'] = user_info
-        
-        user_ref = ref_registered_users.child(uid)
-        user_data = user_ref.get()
-        timestamp = int(time.time())
-        
-        if not user_data:
-            user_ref.set({
-                'displayName': user_info['name'],
-                'email': user_info['email'],
-                'photoURL': user_info['picture'],
-                'createdAt': timestamp,
-                'lastLogin': timestamp
-            })
-        else:
-             user_ref.update({
-                'displayName': user_info['name'],
-                'email': user_info['email'],
-                'photoURL': user_info['picture'],
-                'lastLogin': timestamp
-            })
-        return jsonify({'status': 'success', 'user': user_info})
-    except auth.InvalidIdTokenError:
-        return jsonify({'status': 'error', 'message': 'Invalid token'}), 401
-    except Exception as e:
-        print(f"Error in /verify_token: {e}", file=sys.stderr)
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/logout')
-def logout():
-    session.pop('admin_logged_in', None)
-    session.pop('user', None)
-    return redirect(url_for('user_view'))
-
 @app.route('/admin')
 def admin_panel():
     if 'admin_logged_in' not in session: return redirect(url_for('login'))
-    return render_template('admin.html')
+    return render_template('admin.html', firebase_config=firebase_config)
 
 @app.route('/users')
 def user_view():
-    return render_template('user_view.html')
+    return render_template('user_view.html', firebase_config=firebase_config)
 
-@app.route('/api/check_ban_status')
-def check_ban_status():
-    if 'user' not in session:
-        return jsonify({'banned': False})
-    
-    visitor_name = session.get('user', {}).get('name')
-    if not visitor_name:
-        return jsonify({'banned': False})
-
-    is_banned = ref_banned_visitors.child(visitor_name).get()
-    
-    return jsonify({'banned': is_banned is not None})
+@app.route('/logout')
+def logout(): session.pop('admin_logged_in', None); return redirect(url_for('login'))
 
 @app.route('/add', methods=['POST'])
 def add_user():
@@ -187,16 +111,15 @@ def add_user():
         if old_data:
             ref_users.child(name).set(old_data)
             ref_users.child(original_name).delete()
+            
             old_history = ref_points_history.child(original_name).get()
             if old_history:
                 ref_points_history.child(name).set(old_history)
                 ref_points_history.child(original_name).delete()
+            
             if ref_candidates.child(original_name).get():
                 ref_candidates.child(name).set(True)
                 ref_candidates.child(original_name).delete()
-            admin_name = session.get('user', {}).get('name', 'Admin')
-            log_text = f"المسؤول '{admin_name}' قام بتغيير اسم الزاحف من '{original_name}' إلى '{name}'."
-            ref_activity_log.push({'type': 'admin_edit', 'text': log_text, 'timestamp': int(time.time()), 'visitor_name': admin_name})
 
     user_data = ref_users.child(name).get() or {}
     current_likes = user_data.get('likes', 0) 
@@ -204,7 +127,8 @@ def add_user():
     
     updated_user_data = ref_users.child(name).get()
     new_total_points = updated_user_data.get('points', points) if updated_user_data else points
-    ref_points_history.child(name).push({'points': new_total_points, 'timestamp': int(time.time()), 'change_source': 'admin_update'})
+    ref_points_history.child(name).push({'points': new_total_points, 'timestamp': int(time.time())})
+    
     return jsonify(success=True)
 
 @app.route('/delete/<username>', methods=['POST'])
@@ -217,12 +141,8 @@ def delete_user(username):
 
 @app.route('/like/<username>', methods=['POST'])
 def like_user(username):
-    if 'user' not in session:
-        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للإعجاب."), 401
-    
-    visitor_name = session.get('user', {}).get('name', 'زائر')
+    visitor_name = request.form.get('visitor_name', 'زائر').strip()
     action = request.args.get('action', 'like') 
-    
     if action == 'unlike':
         ref_users.child(f'{username}/likes').transaction(lambda current: (current or 1) - 1)
     else:
@@ -232,32 +152,26 @@ def like_user(username):
 
 @app.route('/api/nominate', methods=['POST'])
 def nominate_user():
-    if 'user' not in session:
-        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للترشيح."), 401
-
     name = request.form.get('name', '').strip()
-    visitor_name = session['user']['name']
-    
+    visitor_name = request.form.get('visitor_name', 'زائر').strip()
+    if is_abusive(name) or is_abusive(visitor_name):
+        ref_banned_visitors.child(visitor_name).set({'banned': True, 'timestamp': int(time.time())})
+        return jsonify(success=False, message="تم حظرك لاستخدام كلمات غير لائقة.", action="ban"), 403
     if not name: return jsonify(success=False, message="الاسم مطلوب للترشيح."), 400
-    if is_abusive(name): return jsonify(success=False, message="تم الرفض بسبب استخدام كلمات غير لائقة."), 403
-    
     text = f"'{visitor_name}' رشح '{name}' للانضمام"
     ref_activity_log.push({'type': 'nomination', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
     return jsonify(success=True, message="تم إرسال طلب الترشيح بنجاح!")
 
 @app.route('/api/report', methods=['POST'])
 def report_user():
-    if 'user' not in session:
-        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للإبلاغ."), 401
-
     reason = request.form.get('reason', '').strip()
+    visitor_name = request.form.get('visitor_name', 'الطالب').strip()
     reported_user = request.form.get('reported_user', '').strip()
-    visitor_name = session['user']['name']
-    
-    if not reason or not reported_user: return jsonify(success=False, message="البيانات المطلوبة غير كاملة."), 400
-    if is_abusive(reason) or is_abusive(reported_user):
-        return jsonify(success=False, message="تم الرفض بسبب استخدام كلمات غير لائقة."), 403
-        
+    if is_abusive(reason) or is_abusive(visitor_name) or is_abusive(reported_user):
+        ref_banned_visitors.child(visitor_name).set({'banned': True, 'timestamp': int(time.time())})
+        return jsonify(success=False, message="تم حظرك لاستخدام كلمات غير لائقة.", action="ban"), 403
+    if not reason: return jsonify(success=False, message="سبب الإبلاغ مطلوب."), 400
+    if not reported_user: return jsonify(success=False, message="يجب اختيار زاحف للإبلاغ عنه."), 400
     text = f"بلاغ من '{visitor_name}' ضد '{reported_user}': {reason}"
     ref_activity_log.push({'type': 'report', 'text': text, 'timestamp': int(time.time()), 'visitor_name': visitor_name})
     return jsonify(success=True, message=f"تم إرسال بلاغك بخصوص {reported_user}. شكراً لك.")
@@ -265,20 +179,23 @@ def report_user():
 @app.route('/api/user_history/<username>')
 def get_user_history(username):
     history_data = ref_points_history.child(username).get()
-    history_list = []
     if isinstance(history_data, dict):
-        history_list = sorted(list(history_data.values()), key=lambda x: x.get('timestamp', 0))
-    
-    if not history_list:
+        history_list = list(history_data.values())
+        if len(history_list) == 1:
+             history_list.insert(0,{'points': history_list[0]['points'], 'timestamp': history_list[0]['timestamp'] - (3600*24) }) 
+        return jsonify(sorted(history_list, key=lambda x: x.get('timestamp', 0)))
+    else: 
         user_data = ref_users.child(username).get() or {}
         current_points = user_data.get('points', 0)
         current_time = int(time.time())
-        return jsonify([{'timestamp': current_time - (3600*24), 'points': current_points}, {'timestamp': current_time, 'points': current_points}])
+        return jsonify([
+            {'timestamp': current_time - (3600*24), 'points': current_points},
+            {'timestamp': current_time, 'points': current_points}
+        ])
 
-    if len(history_list) == 1:
-         history_list.insert(0,{'points': history_list[0]['points'], 'timestamp': history_list[0]['timestamp'] - (3600*24) }) 
-         
-    return jsonify(history_list)
+@app.route('/api/check_ban_status/<visitor_name>')
+def check_ban_status(visitor_name):
+    return jsonify({'is_banned': ref_banned_visitors.child(visitor_name).get() is not None})
 
 @app.route('/api/admin/ban_visitor', methods=['POST'])
 def ban_visitor():
@@ -337,14 +254,22 @@ def send_visitor_message():
     ref_visitor_messages.child(visitor_name).push({'text': message, 'timestamp': int(time.time())})
     return jsonify(success=True, message=f"تم إرسال الرسالة إلى {visitor_name}")
 
+# --- START: NEW AND UPDATED SPIN WHEEL ROUTES ---
+
 def get_default_spin_wheel_settings():
     return {
-        "enabled": True, "cooldownHours": 24, "maxAttempts": 1,
+        "enabled": True,
+        "cooldownHours": 24,
+        "maxAttempts": 1,
         "prizes": [
-            {"value": 100, "weight": 35}, {"value": 250, "weight": 25},
-            {"value": 500, "weight": 18}, {"value": 1000, "weight": 10},
-            {"value": 2500, "weight": 6}, {"value": 5000, "weight": 3},
-            {"value": 10000, "weight": 1.5}, {"value": 50000, "weight": 1},
+            {"value": 100, "weight": 35},
+            {"value": 250, "weight": 25},
+            {"value": 500, "weight": 18},
+            {"value": 1000, "weight": 10},
+            {"value": 2500, "weight": 6},
+            {"value": 5000, "weight": 3},
+            {"value": 10000, "weight": 1.5},
+            {"value": 50000, "weight": 1},
             {"value": 1000000, "weight": 0.5}
         ]
     }
@@ -352,20 +277,36 @@ def get_default_spin_wheel_settings():
 @app.route('/api/settings/spin_wheel', methods=['GET'])
 def get_spin_wheel_settings():
     settings = ref_site_settings.child('spin_wheel_settings').get()
-    return jsonify(settings or get_default_spin_wheel_settings())
+    if not settings:
+        settings = get_default_spin_wheel_settings()
+    return jsonify(settings)
 
 @app.route('/api/admin/settings/spin_wheel', methods=['POST'])
 def save_spin_wheel_settings():
-    if 'admin_logged_in' not in session: return jsonify(success=False, message="غير مصرح به"), 401
+    if 'admin_logged_in' not in session:
+        return jsonify(success=False, message="غير مصرح به"), 401
+    
     try:
         data = request.get_json()
-        if not data: return jsonify(success=False, message="لم يتم إرسال بيانات."), 400
-        settings_to_save = {
-            'enabled': data.get('enabled', True), 'cooldownHours': int(data.get('cooldownHours', 24)),
-            'maxAttempts': int(data.get('maxAttempts', 1)), 'prizes': data.get('prizes', [])
-        }
-        if settings_to_save['cooldownHours'] <= 0 or settings_to_save['maxAttempts'] <= 0 or not settings_to_save['prizes']:
+        if not data:
+            return jsonify(success=False, message="لم يتم إرسال بيانات."), 400
+        
+        # Basic validation
+        cooldown = int(data.get('cooldownHours', 24))
+        attempts = int(data.get('maxAttempts', 1))
+        prizes = data.get('prizes', [])
+        enabled = data.get('enabled', True)
+
+        if cooldown <= 0 or attempts <= 0 or not prizes:
              return jsonify(success=False, message="بيانات الإعدادات غير صالحة."), 400
+
+        settings_to_save = {
+            'enabled': enabled,
+            'cooldownHours': cooldown,
+            'maxAttempts': attempts,
+            'prizes': prizes
+        }
+
         ref_site_settings.child('spin_wheel_settings').set(settings_to_save)
         return jsonify(success=True, message="تم حفظ إعدادات عجلة الحظ بنجاح!")
     except Exception as e:
@@ -374,57 +315,89 @@ def save_spin_wheel_settings():
 
 @app.route('/api/spin_wheel', methods=['POST'])
 def spin_wheel_api():
-    if 'user' not in session:
-        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للعب عجلة الحظ."), 401
-    settings = ref_site_settings.child('spin_wheel_settings').get() or get_default_spin_wheel_settings()
+    settings = ref_site_settings.child('spin_wheel_settings').get()
+    if not settings:
+        settings = get_default_spin_wheel_settings()
+
     if not settings.get('enabled', False):
-        return jsonify(success=False, message="عذراً، ميزة عجلة الحظ معطلة حالياً."), 403
+        return jsonify(success=False, message="عذراً، ميزة عجلة الحظ معطلة حالياً من قبل الإدارة."), 403
     
     prize_config = settings.get('prizes', [])
-    if not prize_config: return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
+    if not prize_config:
+        return jsonify(success=False, message="خطأ في إعدادات الجوائز. يرجى مراجعة الإدارة."), 500
 
     prizes = [p['value'] for p in prize_config]
     weights = [p['weight'] for p in prize_config]
+
     if not prizes or not weights or len(prizes) != len(weights):
+        print("Error: Prizes and weights mismatch or empty in /api/spin_wheel", file=sys.stderr)
         return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
 
     chosen_prize = random.choices(prizes, weights=weights, k=1)[0]
+    
     return jsonify(success=True, prize=chosen_prize)
+
+# --- END: NEW AND UPDATED SPIN WHEEL ROUTES ---
+
 
 @app.route('/api/donate_points', methods=['POST'])
 def donate_points_api():
-    if 'user' not in session:
-        return jsonify(success=False, message="يجب تسجيل الدخول أولاً للتبرع."), 401
-
     username_to_donate = request.form.get('username', '').strip()
     points_str = request.form.get('points', '0').strip()
-    visitor_name = session['user']['name']
+    visitor_name = request.form.get('visitor_name', 'زائر مجهول').strip()
 
     if not username_to_donate or not points_str:
-        return jsonify(success=False, message="البيانات المطلوبة غير مكتملة."), 400
-
-    try: points_to_add = int(points_str)
-    except ValueError: return jsonify(success=False, message="قيمة النقاط غير صالحة."), 400
-
-    user_to_donate_ref = ref_users.child(username_to_donate)
-    if not user_to_donate_ref.get():
-        return jsonify(success=False, message=f"المستخدم '{username_to_donate}' غير موجود."), 404
+        return jsonify(success=False, message="البيانات المطلوبة (اسم المستخدم والنقاط) غير مكتملة."), 400
 
     try:
-        user_to_donate_ref.child('points').transaction(lambda current: (current or 0) + points_to_add)
+        points_to_add = int(points_str)
+        if points_to_add <= 0:
+            raise ValueError("Points must be a positive integer.")
+    except ValueError:
+        return jsonify(success=False, message="قيمة النقاط غير صالحة."), 400
+
+    user_to_donate_ref = ref_users.child(username_to_donate)
+    user_exists = user_to_donate_ref.get()
+
+    if not user_exists:
+        return jsonify(success=False, message=f"المستخدم '{username_to_donate}' غير موجود للتبرع له."), 404
+
+    try:
+        def transaction_update(current_data):
+            # This handles both old structure (just points) and new (dict with points and likes)
+            if current_data is None:
+                current_data = {'points': 0, 'likes': 0}
+            elif isinstance(current_data, int): # Handle legacy format
+                current_data = {'points': current_data, 'likes': 0}
+            
+            current_data['points'] = current_data.get('points', 0) + points_to_add
+            return current_data
+
+        user_to_donate_ref.transaction(transaction_update)
+        
         timestamp = int(time.time())
-        activity_text = f"'{visitor_name}' تبرع بـ {points_to_add:,} نقطة إلى '{username_to_donate}'."
-        ref_activity_log.push({'type': 'gift', 'text': activity_text, 'timestamp': timestamp, 'visitor_name': visitor_name, 'points': points_to_add})
-        
+        activity_text = f"'{visitor_name}' تبرع بـ {points_to_add:,} نقطة إلى '{username_to_donate}' عن طريق عجلة الحظ."
+        ref_activity_log.push({
+            'type': 'gift', 
+            'text': activity_text, 
+            'timestamp': timestamp,
+            'visitor_name': visitor_name
+        })
+
         final_points_data = user_to_donate_ref.get()
-        final_points = final_points_data.get('points', 0) if final_points_data else points_to_add
-        ref_points_history.child(username_to_donate).push({'points': final_points, 'timestamp': timestamp, 'change_source': 'donation'})
+        final_points = final_points_data.get('points', 0) if isinstance(final_points_data, dict) else (final_points_data or points_to_add)
+
+        ref_points_history.child(username_to_donate).push({
+            'points': final_points,
+            'timestamp': timestamp
+        })
         
-        return jsonify(success=True, message=f"تم التبرع بـ {points_to_add:,} نقطة إلى {username_to_donate} بنجاح!")
+        return jsonify(success=True, message=f"تم التبرع بـ {points_to_add:,} نقطة إلى {username_to_donate} بنجاح! شكراً لك.")
     except Exception as e:
         print(f"Error donating points: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ أثناء عملية التبرع."), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=port)
+# --- END OF FILE app.py ---
