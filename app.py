@@ -111,10 +111,12 @@ def add_user():
         if old_data:
             ref_users.child(name).set(old_data)
             ref_users.child(original_name).delete()
+            
             old_history = ref_points_history.child(original_name).get()
             if old_history:
                 ref_points_history.child(name).set(old_history)
                 ref_points_history.child(original_name).delete()
+            
             if ref_candidates.child(original_name).get():
                 ref_candidates.child(name).set(True)
                 ref_candidates.child(original_name).delete()
@@ -126,6 +128,7 @@ def add_user():
     updated_user_data = ref_users.child(name).get()
     new_total_points = updated_user_data.get('points', points) if updated_user_data else points
     ref_points_history.child(name).push({'points': new_total_points, 'timestamp': int(time.time())})
+    
     return jsonify(success=True)
 
 @app.route('/delete/<username>', methods=['POST'])
@@ -185,13 +188,15 @@ def get_user_history(username):
         user_data = ref_users.child(username).get() or {}
         current_points = user_data.get('points', 0)
         current_time = int(time.time())
-        return jsonify([{'timestamp': current_time - (3600*24), 'points': current_points}, {'timestamp': current_time, 'points': current_points}])
+        return jsonify([
+            {'timestamp': current_time - (3600*24), 'points': current_points},
+            {'timestamp': current_time, 'points': current_points}
+        ])
 
 @app.route('/api/check_ban_status/<visitor_name>')
 def check_ban_status(visitor_name):
     return jsonify({'is_banned': ref_banned_visitors.child(visitor_name).get() is not None})
 
-# --- ADMIN API ROUTES ---
 @app.route('/api/admin/ban_visitor', methods=['POST'])
 def ban_visitor():
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
@@ -245,110 +250,168 @@ def send_visitor_message():
     if 'admin_logged_in' not in session: return jsonify(error="Unauthorized"), 401
     visitor_name = request.form.get('visitor_name', '').strip()
     message = request.form.get('message', '').strip()
-    if not visitor_name or not message: return jsonify(success=False, message="اسم الزائر والرسالة مطلوبان."), 400
-    ref_visitor_messages.child(visitor_name).push({'text': message, 'timestamp': int(time.time())})
-    return jsonify(success=True, message=f"تم إرسال الرسالة إلى {visitor_name}")
+    
+    if not visitor_name or not message: 
+        return jsonify(success=False, message="اسم الزائر والرسالة مطلوبان."), 400
+    
+    try:
+        ref_visitor_messages.child(visitor_name).push({'text': message, 'timestamp': int(time.time())})
+        return jsonify(success=True, message=f"تم إرسال الرسالة إلى {visitor_name}")
+    except Exception as e:
+        print(f"ERROR in send_visitor_message: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء إرسال الرسالة."), 500
 
-# --- SPIN WHEEL ROUTES ---
+
+# --- START: NEW AND UPDATED SPIN WHEEL ROUTES ---
+
 def get_default_spin_wheel_settings():
     return {
-        "enabled": True, "cooldownHours": 24, "maxAttempts": 1,
+        "enabled": True,
+        "cooldownHours": 24,
+        "maxAttempts": 1,
         "prizes": [
-            {"value": 100, "weight": 35}, {"value": 250, "weight": 25}, {"value": 500, "weight": 18},
-            {"value": 1000, "weight": 10}, {"value": 2500, "weight": 6}, {"value": 5000, "weight": 3},
-            {"value": 10000, "weight": 1.5}, {"value": 50000, "weight": 1}, {"value": 1000000, "weight": 0.5}
+            {"value": 100, "weight": 35},
+            {"value": 250, "weight": 25},
+            {"value": 500, "weight": 18},
+            {"value": 1000, "weight": 10},
+            {"value": 2500, "weight": 6},
+            {"value": 5000, "weight": 3},
+            {"value": 10000, "weight": 1.5},
+            {"value": 50000, "weight": 1},
+            {"value": 1000000, "weight": 0.5}
         ]
     }
 
 @app.route('/api/settings/spin_wheel', methods=['GET'])
 def get_spin_wheel_settings():
     settings = ref_site_settings.child('spin_wheel_settings').get()
-    return jsonify(settings or get_default_spin_wheel_settings())
+    if not settings:
+        settings = get_default_spin_wheel_settings()
+    return jsonify(settings)
 
 @app.route('/api/admin/settings/spin_wheel', methods=['POST'])
 def save_spin_wheel_settings():
-    if 'admin_logged_in' not in session: return jsonify(success=False, message="غير مصرح به"), 401
+    if 'admin_logged_in' not in session:
+        return jsonify(success=False, message="غير مصرح به"), 401
+    
     try:
         data = request.get_json()
-        if not data: return jsonify(success=False, message="لم يتم إرسال بيانات."), 400
+        if not data:
+            return jsonify(success=False, message="لم يتم إرسال بيانات."), 400
+        
+        # Basic validation
+        cooldown = int(data.get('cooldownHours', 24))
+        attempts = int(data.get('maxAttempts', 1))
+        prizes = data.get('prizes', [])
+        enabled = data.get('enabled', True)
+
+        if cooldown <= 0 or attempts <= 0 or not prizes:
+             return jsonify(success=False, message="بيانات الإعدادات غير صالحة."), 400
+
         settings_to_save = {
-            'enabled': data.get('enabled', True), 'cooldownHours': int(data.get('cooldownHours', 24)),
-            'maxAttempts': int(data.get('maxAttempts', 1)), 'prizes': data.get('prizes', [])
+            'enabled': enabled,
+            'cooldownHours': cooldown,
+            'maxAttempts': attempts,
+            'prizes': prizes
         }
-        if settings_to_save['cooldownHours'] <= 0 or settings_to_save['maxAttempts'] <= 0 or not settings_to_save['prizes']:
-            return jsonify(success=False, message="بيانات الإعدادات غير صالحة."), 400
+
         ref_site_settings.child('spin_wheel_settings').set(settings_to_save)
         return jsonify(success=True, message="تم حفظ إعدادات عجلة الحظ بنجاح!")
     except Exception as e:
+        print(f"Error saving spin wheel settings: {e}", file=sys.stderr)
         return jsonify(success=False, message=f"حدث خطأ أثناء حفظ الإعدادات: {e}"), 500
 
 @app.route('/api/spin_wheel', methods=['POST'])
 def spin_wheel_api():
-    settings = ref_site_settings.child('spin_wheel_settings').get() or get_default_spin_wheel_settings()
+    settings = ref_site_settings.child('spin_wheel_settings').get()
+    if not settings:
+        settings = get_default_spin_wheel_settings()
+
     if not settings.get('enabled', False):
-        return jsonify(success=False, message="عذراً، ميزة عجلة الحظ معطلة حالياً."), 403
+        return jsonify(success=False, message="عذراً، ميزة عجلة الحظ معطلة حالياً من قبل الإدارة."), 403
+    
     prize_config = settings.get('prizes', [])
-    if not prize_config: return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
+    if not prize_config:
+        return jsonify(success=False, message="خطأ في إعدادات الجوائز. يرجى مراجعة الإدارة."), 500
+
     prizes = [p['value'] for p in prize_config]
     weights = [p['weight'] for p in prize_config]
+
     if not prizes or not weights or len(prizes) != len(weights):
+        print("Error: Prizes and weights mismatch or empty in /api/spin_wheel", file=sys.stderr)
         return jsonify(success=False, message="خطأ في إعدادات الجوائز."), 500
-    return jsonify(success=True, prize=random.choices(prizes, weights=weights, k=1)[0])
+
+    chosen_prize = random.choices(prizes, weights=weights, k=1)[0]
+    
+    # --- START: SPIN WHEEL SECURITY FIX ---
+    # Store the securely-determined prize in the user's session
+    session['last_prize_won'] = chosen_prize
+    # --- END: SPIN WHEEL SECURITY FIX ---
+    
+    return jsonify(success=True, prize=chosen_prize)
+
 
 @app.route('/api/donate_points', methods=['POST'])
 def donate_points_api():
     username_to_donate = request.form.get('username', '').strip()
-    points_str = request.form.get('points', '0').strip()
     visitor_name = request.form.get('visitor_name', 'زائر مجهول').strip()
-    if not username_to_donate or not points_str:
-        return jsonify(success=False, message="البيانات المطلوبة غير مكتملة."), 400
-    try:
-        points_to_add = int(points_str)
-        if points_to_add <= 0: raise ValueError("Points must be positive.")
-    except ValueError:
-        return jsonify(success=False, message="قيمة النقاط غير صالحة."), 400
-    user_to_donate_ref = ref_users.child(username_to_donate)
-    if not user_to_donate_ref.get():
-        return jsonify(success=False, message=f"المستخدم '{username_to_donate}' غير موجود."), 404
-    try:
-        user_to_donate_ref.transaction(lambda data: (data or 0) + points_to_add if isinstance(data, int) else ({'points': data.get('points', 0) + points_to_add, 'likes': data.get('likes', 0)}) if data else {'points': points_to_add, 'likes': 0})
-        timestamp = int(time.time())
-        activity_text = f"'{visitor_name}' تبرع بـ {points_to_add:,} نقطة إلى '{username_to_donate}'."
-        ref_activity_log.push({'type': 'gift', 'text': activity_text, 'timestamp': timestamp, 'visitor_name': visitor_name})
-        final_points_data = user_to_donate_ref.get()
-        final_points = final_points_data.get('points', 0) if isinstance(final_points_data, dict) else final_points_data
-        ref_points_history.child(username_to_donate).push({'points': final_points, 'timestamp': timestamp})
-        return jsonify(success=True, message=f"تم التبرع بـ {points_to_add:,} نقطة بنجاح!")
-    except Exception as e:
-        return jsonify(success=False, message="حدث خطأ أثناء عملية التبرع."), 500
 
-# --- WRESTLING GAME & POINTS API ---
-@app.route('/api/award_wrestling_points', methods=['POST'])
-def award_wrestling_points():
-    recipient_username = request.form.get('username', '').strip()
-    points_str = request.form.get('points', '0').strip()
-    winner_name = request.form.get('winner_name', 'لاعب مجهول').strip()
-    if not recipient_username or not points_str:
-        return jsonify(success=False, message="البيانات المطلوبة غير مكتملة."), 400
-    try:
-        points_to_add = int(points_str)
-        if points_to_add <= 0: raise ValueError("Points must be positive.")
-    except ValueError:
+    # --- START: SPIN WHEEL SECURITY FIX ---
+    # Retrieve the prize from the session, not from the client request.
+    # This prevents the client from manipulating the number of points.
+    if 'last_prize_won' not in session:
+        return jsonify(success=False, message="لم يتم العثور على جائزة صالحة. الرجاء لف العجلة أولاً."), 400
+    
+    points_to_add = session.pop('last_prize_won') # Use and remove from session
+    # --- END: SPIN WHEEL SECURITY FIX ---
+
+    if not username_to_donate:
+        return jsonify(success=False, message="اسم المستخدم للتبرع غير موجود."), 400
+    if points_to_add <= 0:
         return jsonify(success=False, message="قيمة النقاط غير صالحة."), 400
-    user_ref = ref_users.child(recipient_username)
-    if not user_ref.get():
-        return jsonify(success=False, message=f"المستخدم '{recipient_username}' غير موجود."), 404
+
+
+    user_to_donate_ref = ref_users.child(username_to_donate)
+    user_exists = user_to_donate_ref.get()
+
+    if not user_exists:
+        return jsonify(success=False, message=f"المستخدم '{username_to_donate}' غير موجود للتبرع له."), 404
+
     try:
-        user_ref.transaction(lambda data: (data or 0) + points_to_add if isinstance(data, int) else ({'points': data.get('points', 0) + points_to_add, 'likes': data.get('likes', 0)}) if data else {'points': points_to_add, 'likes': 0})
+        def transaction_update(current_data):
+            if current_data is None:
+                current_data = {'points': 0, 'likes': 0}
+            elif isinstance(current_data, int): # Handle legacy format
+                current_data = {'points': current_data, 'likes': 0}
+            
+            current_data['points'] = current_data.get('points', 0) + points_to_add
+            return current_data
+
+        user_to_donate_ref.transaction(transaction_update)
+        
         timestamp = int(time.time())
-        activity_text = f"'{winner_name}' فاز في المصارعة وأهدى {points_to_add:,} نقطة إلى '{recipient_username}'."
-        ref_activity_log.push({'type': 'gift', 'text': activity_text, 'timestamp': timestamp, 'visitor_name': winner_name})
-        final_points_data = user_ref.get()
-        final_points = final_points_data.get('points', 0) if isinstance(final_points_data, dict) else final_points_data
-        ref_points_history.child(recipient_username).push({'points': final_points, 'timestamp': timestamp})
-        return jsonify(success=True, message=f"تم إهداء {points_to_add:,} نقطة إلى {recipient_username} بنجاح!")
+        activity_text = f"'{visitor_name}' تبرع بـ {points_to_add:,} نقطة إلى '{username_to_donate}' عن طريق عجلة الحظ."
+        ref_activity_log.push({
+            'type': 'gift', 
+            'text': activity_text, 
+            'timestamp': timestamp,
+            'visitor_name': visitor_name
+        })
+
+        final_points_data = user_to_donate_ref.get()
+        final_points = final_points_data.get('points', 0) if isinstance(final_points_data, dict) else (final_points_data or points_to_add)
+
+        ref_points_history.child(username_to_donate).push({
+            'points': final_points,
+            'timestamp': timestamp
+        })
+        
+        return jsonify(success=True, message=f"تم التبرع بـ {points_to_add:,} نقطة إلى {username_to_donate} بنجاح! شكراً لك.")
     except Exception as e:
-        return jsonify(success=False, message="حدث خطأ أثناء عملية إهداء النقاط."), 500
+        # If transaction fails, restore the prize to the session so the user can try again
+        session['last_prize_won'] = points_to_add
+        print(f"Error donating points: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ أثناء عملية التبرع."), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
