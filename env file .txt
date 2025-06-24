@@ -22,8 +22,10 @@ FIREBASE_MEASUREMENT_ID="G-ZRYXSTE6BX"
 # == إعدادات التطبيق ==
 # =======================================================
 
-# كلمة المرور للدخول إلى لوحة تحكم الأدمن
-ADMIN_PASSWORD="naw"
+# البريد الإلكتروني الخاص بالمسؤول الأول (Admin)
+# عند التسجيل بهذا البريد، سيتم منحه صلاحيات الأدمن تلقائياً
+ADMIN_EMAIL="naw@naw.com"
+
 
 # مفتاح سري لتأمين الجلسات (Sessions) في فلاسك
 FLASK_SECRET_KEY="a-very-strong-and-random-secret-key-for-my-app-9876-that-is-secure"

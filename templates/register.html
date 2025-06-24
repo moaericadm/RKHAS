@@ -1,0 +1,76 @@
+<!-- START OF FILE templates/register.html -->
+{% extends "base.html" %}
+{% block title %}تسجيل حساب جديد{% endblock %}
+{% block header_title %}إنشاء حساب جديد{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card p-4 shadow-lg">
+            <div class="card-body">
+                <h5 class="card-title text-center mb-4 fs-4">تعبئة بيانات التسجيل</h5>
+                <p class="text-muted text-center small">بعد التسجيل، سيتم مراجعة طلبك من قبل الإدارة.</p>
+                <form id="registerForm">
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="name" name="name" placeholder="الاسم الكامل" required>
+                        <label for="name">الاسم الكامل</label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input type="email" class="form-control" id="email" name="email" placeholder="البريد الإلكتروني" required>
+                        <label for="email">البريد الإلكتروني</label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input type="tel" class="form-control" id="phone_number" name="phone_number" placeholder="رقم الهاتف" required>
+                        <label for="phone_number">رقم الهاتف</label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input type="password" class="form-control" id="password" name="password" placeholder="كلمة المرور" required>
+                        <label for="password">كلمة المرور</label>
+                    </div>
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">إرسال طلب التسجيل</button>
+                        <a href="{{ url_for('login_page') }}" class="text-center mt-2">لديك حساب بالفعل؟ سجل الدخول</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("registerForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.submitter, originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جارِ الإرسال...`;
+
+    try {
+        const response = await fetch("{{ url_for('register_page') }}", {
+            method: "POST",
+            body: new FormData(e.target)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            await Swal.fire({
+                icon: 'success',
+                title: 'تم بنجاح!',
+                text: data.message,
+                confirmButtonText: 'حسناً'
+            });
+            window.location.href = "{{ url_for('login_page') }}";
+        } else {
+            Swal.fire({ icon: "error", title: "خطأ", text: data.message });
+        }
+    } catch(err) {
+        Swal.fire("خطأ!", "فشل الاتصال بالخادم.", "error");
+    }
+    finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+});
+</script>
+{% endblock %}
+<!-- END OF FILE templates/register.html -->

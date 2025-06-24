@@ -1,4 +1,4 @@
-<!-- START OF FILE base.html -->
+<!-- START OF FILE templates/base.html -->
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -152,17 +152,26 @@
         }
     </style>
     {% block styles %}{% endblock %}
-    <script>
-        (function () { const theme = localStorage.getItem("theme") || "dark"; document.documentElement.classList.toggle("dark-mode", theme === "dark"); })();
-    </script>
+    <script>(function () { const theme = localStorage.getItem("theme") || "dark"; document.documentElement.classList.toggle("dark-mode", theme === "dark"); })();</script>
 </head>
 <body>
     <div id="particles-js"></div>
     <div class="container mt-5 mb-5">
         <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom" style="border-color: var(--card-border) !important">
             <h1 class="h3 fw-bold" style="color: var(--header-color); text-shadow: 0 0 10px var(--header-color);">{% block header_title %}{% endblock %}</h1>
-            <div>
-                {% if 'admin_logged_in' in session %}<a href="{{ url_for('admin_panel') }}" class="btn btn-outline-info me-2">لوحة التحكم</a><a href="/logout" class="btn btn-danger me-2">تسجيل الخروج</a>{% endif %}
+            <div class="d-flex align-items-center">
+                {% if session.logged_in %}
+                <span class="me-3 d-none d-md-inline">أهلاً، {{ session.name }}</span>
+                {% if session.role == 'admin' %}
+                <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-info me-2">لوحة التحكم</a>
+                <!-- START: الإضافة الجديدة لزر التنقل -->
+                <a href="{{ url_for('user_view') }}" class="btn btn-outline-primary me-2">عرض قائمة الزواحف</a>
+                <!-- END: الإضافة الجديدة -->
+                {% else %}
+                <a href="{{ url_for('user_view') }}" class="btn btn-outline-info me-2">قائمة الزواحف</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" class="btn btn-danger me-2">خروج</a>
+                {% endif %}
                 <button class="btn btn-outline-secondary" id="theme-toggle" title="تبديل المظهر"><i class="bi bi-moon-stars-fill d-none" id="moon-icon"></i><i class="bi bi-sun-fill d-none" id="sun-icon"></i></button>
             </div>
         </header>
@@ -170,17 +179,50 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+
+    <script>
+      try {
+        const firebaseConfigStr = '{{ firebase_config | tojson | safe }}';
+        if (!firebaseConfigStr || firebaseConfigStr === '"{}"' || firebaseConfigStr === '{}') {
+          throw new Error("إعدادات Firebase غير موجودة في الخادم.");
+        }
+        window.firebaseConfig = JSON.parse(firebaseConfigStr);
+        if (!window.firebaseConfig.apiKey) {
+          throw new Error("مفتاح API الخاص بـ Firebase (apiKey) مفقود في الإعدادات.");
+        }
+      } catch(e) {
+        console.error("Critical Firebase Config Error:", e.message);
+        const errorContainer = document.querySelector('.container') || document.body;
+        if (errorContainer) {
+            errorContainer.innerHTML = `<div class="alert alert-danger m-3">
+                <strong>فشل حاسم في تحميل إعدادات التطبيق:</strong> ${e.message}<br>
+                لا يمكن للتطبيق العمل بدون هذه الإعدادات. يرجى مراجعة مسؤول النظام.
+            </div>`;
+        }
+      }
+    </script>
+
+    <script>
+      const freshToken = '{{ firebase_token | default("", true) | safe }}';
+      if (freshToken) {
+          sessionStorage.setItem('firebaseToken', freshToken);
+      }
+    </script>
+
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const themeToggle = document.getElementById("theme-toggle"), rootHtml = document.documentElement;
             const moonIcon = document.getElementById('moon-icon'), sunIcon = document.getElementById('sun-icon');
-            const updateIcons = () => { const isDark = rootHtml.classList.contains('dark-mode'); moonIcon.classList.toggle('d-none', !isDark); sunIcon.classList.toggle('d-none', isDark); };
-            const setupParticles = () => { const isDark = rootHtml.classList.contains('dark-mode'); particlesJS("particles-js", { particles: { number: { value: 60, density: { enable: true, value_area: 800 } }, color: { value: isDark ? "#9f7aea" : "#2b6cb0" }, shape: { type: "circle" }, opacity: { value: 0.5, random: true }, size: { value: 3, random: true }, line_linked: { enable: true, distance: 150, color: isDark ? "#00f2ff" : "#a0aec0", opacity: 0.2, width: 1 }, move: { enable: true, speed: 1.5, direction: "none", out_mode: "out" } }, interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "repel" }, onclick: { enable: false } } } }); };
-            themeToggle.addEventListener("click", () => { rootHtml.classList.toggle("dark-mode"); localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light"); updateIcons(); setupParticles(); });
-            updateIcons(); setupParticles();
+            const updateIcons = () => { if (!moonIcon || !sunIcon) return; const isDark = rootHtml.classList.contains('dark-mode'); moonIcon.classList.toggle('d-none', !isDark); sunIcon.classList.toggle('d-none', isDark); };
+            const setupParticles = () => { if (typeof particlesJS === 'undefined') return; const isDark = rootHtml.classList.contains('dark-mode'); particlesJS("particles-js", { particles: { number: { value: 60, density: { enable: true, value_area: 800 } }, color: { value: isDark ? "#9f7aea" : "#2b6cb0" }, shape: { type: "circle" }, opacity: { value: 0.5, random: true }, size: { value: 3, random: true }, line_linked: { enable: true, distance: 150, color: isDark ? "#00f2ff" : "#a0aec0", opacity: 0.2, width: 1 }, move: { enable: true, speed: 1.5, direction: "none", out_mode: "out" } }, interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "repel" }, onclick: { enable: false } } } }); };
+            if (themeToggle) {
+                themeToggle.addEventListener("click", () => { rootHtml.classList.toggle("dark-mode"); localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light"); updateIcons(); setupParticles(); });
+            }
+            updateIcons();
+            setupParticles();
         });
     </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
-<!-- END OF FILE base.html -->
+<!-- END OF FILE templates/base.html -->

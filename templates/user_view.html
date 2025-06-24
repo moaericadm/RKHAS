@@ -1,11 +1,10 @@
-<!-- START OF FILE user_view.html -->
+<!-- START OF FILE templates/user_view.html -->
 {% extends "base.html" %}
 {% block title %}قائمة النقاط{% endblock %}
 {% block header_title %}قائمة الزواحف الرسمية (تحديث مباشر){% endblock %}
 
 {% block styles %}
 <style>
-    /* ... لا تغيير في الستايلات ... */
     .table thead th {
         background-color: var(--primary-glow) !important;
         color: white !important;
@@ -444,6 +443,7 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
@@ -451,117 +451,158 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    function setupPresenceSystem(db, visitorName) {
-        if (!db || !visitorName) return;
-        const listRef = db.ref('online_visitors');
-        const myRef = listRef.push();
-        const connectedRef = db.ref('.info/connected');
-        connectedRef.on('value', (snap) => {
-            if (snap.val() === true) {
-                myRef.set({ name: visitorName, timestamp: firebase.database.ServerValue.TIMESTAMP });
-                myRef.onDisconnect().remove();
-            }
-        });
-    }
-
-    const ui = {
-        tableBody: document.getElementById('user-table-body'),
-        loadingSpinner: document.getElementById('loading-spinner'),
-        hallOfFame: document.getElementById('hall-of-fame'),
-        honorRollList: document.getElementById('honor-roll-view-list'),
-        candidatesList: document.getElementById('candidates-list'),
-        searchInput: document.getElementById('searchInput'),
-        nominateBtn: document.getElementById('nominate-btn'),
-        reportBtn: document.getElementById('report-btn'),
-        userChartModal: document.getElementById('userChartModal'),
-        chartModalLabel: document.getElementById('chartModalLabel'),
-        userPointsChartCanvas: document.getElementById('userPointsChart'),
-        duelModal: document.getElementById('duelModal'),
-        duelUser1Select: document.getElementById('duel-user1'),
-        duelUser2Select: document.getElementById('duel-user2'),
-        startDuelBtn: document.getElementById('start-duel-btn'),
-        fighter1Name: document.querySelector('#fighter1 .fighter-name'),
-        fighter2Name: document.querySelector('#fighter2 .fighter-name'),
-        fighter1Health: document.querySelector('#fighter1 .health-bar'),
-        fighter2Health: document.querySelector('#fighter2 .health-bar'),
-        fighter1Div: document.getElementById('fighter1'),
-        fighter2Div: document.getElementById('fighter2'),
-        duelResultText: document.getElementById('duel-result-text'),
-        crawlModal: document.getElementById('crawlModal'),
-        crawlNameInput: document.getElementById('crawl-name-input'),
-        checkCrawlBtn: document.getElementById('check-crawl-btn'),
-        crawlModalTitle: document.getElementById('crawl-modal-title'),
-        crawlChartCanvas: document.getElementById('crawlChart'),
-        crawlModalText: document.getElementById('crawl-modal-text'),
-        announcementsContainer: document.getElementById('announcements-container'),
-        announcementsTicker: document.getElementById('announcements-ticker'),
-        spinWheel: {
-            card: document.getElementById('spin-wheel-card'),
-            btn: document.getElementById('spin-wheel-btn'),
-            timerContainer: document.getElementById('spin-timer-container'),
-            timer: document.getElementById('spin-timer'),
-            attemptsText: document.getElementById('spin-attempts-text'),
-            modal: document.getElementById('spinWheelModal'),
-            canvas: document.getElementById('spin-canvas'),
-            modalCloseBtn: document.querySelector('#spinWheelModal .custom-close-btn')
-        }
-    };
-
-    let allUsersCache = [], honorRollCache = [], candidatesCache = [], announcementsCache = [];
-    let userChartInstance = null, crawlChartInstance = null;
-    let visitorName = '';
-    let announcementInterval = null;
-    let theWheel = null;
-    let wheelSpinning = false;
-    let cooldownInterval = null;
-    let dbInstance = null;
-    let spinWheelSettings = null;
-    let sessionProcessedMessageIds = new Set();
-
-    const formatNumber = (num) => new Intl.NumberFormat('ar-EG').format(num || 0);
-
     async function initializeApp() {
         try {
-            visitorName = localStorage.getItem('visitorNickname');
-            if (!visitorName) {
-                const { value: name } = await Swal.fire({
-                    title: 'مرحباً بك!', input: 'text', inputLabel: 'الرجاء إدخال اسم مستعار للمتابعة',
-                    inputPlaceholder: 'اسمك المستعار...', allowOutsideClick: false, allowEscapeKey: false,
-                    inputValidator: (v) => {
-                        if (!v || v.trim().length === 0) return 'يجب إدخال اسم!';
-                        if (/[.#$\[\]\/]/.test(v)) return 'الاسم يحتوي على رموز غير مسموحة (مثل . # $ / [ ])';
-                        return null;
-                    }
-                });
-                if (name) { visitorName = name.trim(); localStorage.setItem('visitorNickname', visitorName); }
-                else { window.location.reload(); return; }
+            if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
+                throw new Error("إعدادات Firebase غير موجودة أو غير صالحة.");
             }
 
-            const banStatusRes = await fetch(`/api/check_ban_status/${visitorName}`);
-            if (!banStatusRes.ok) throw new Error(`Ban status check failed: ${banStatusRes.status}`);
-            const banStatus = await banStatusRes.json();
-            if(banStatus.is_banned) {
-                document.body.innerHTML = `<div class="container text-center mt-5"><div class="card p-5"><h1 class="text-danger">لقد تم حظرك</h1><p class="fs-5">تم حظرك من قبل الادارة. لا يمكنك استخدام الموقع.</p></div></div>`;
+            if (!firebase.apps.length) {
+                firebase.initializeApp(window.firebaseConfig);
+            }
+
+            const token = sessionStorage.getItem('firebaseToken');
+            if (!token) {
+                 Swal.fire({
+                    title: 'انتهت الجلسة',
+                    text: 'الرجاء تسجيل الدخول مرة أخرى للوصول لهذه الصفحة.',
+                    icon: 'warning',
+                    confirmButtonText: 'تسجيل الدخول',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then(() => {
+                    window.location.href = '/login';
+                });
                 return;
+            }
+
+            await firebase.auth().signInWithCustomToken(token);
+            console.log("Firebase authentication successful.");
+            runApplicationLogic();
+
+        } catch (e) {
+            console.error("CRITICAL INITIALIZATION ERROR:", e);
+            Swal.fire({
+                title: 'انتهت صلاحية الجلسة',
+                text: 'الرجاء تسجيل الدخول مرة أخرى للاستمرار.',
+                icon: 'error',
+                confirmButtonText: 'تسجيل الدخول',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            }).then(() => {
+                sessionStorage.removeItem('firebaseToken');
+                window.location.href = '/login';
+            });
+        }
+    }
+
+
+    function runApplicationLogic() {
+        const ui = {
+            tableBody: document.getElementById('user-table-body'),
+            loadingSpinner: document.getElementById('loading-spinner'),
+            hallOfFame: document.getElementById('hall-of-fame'),
+            honorRollList: document.getElementById('honor-roll-view-list'),
+            candidatesList: document.getElementById('candidates-list'),
+            searchInput: document.getElementById('searchInput'),
+            nominateBtn: document.getElementById('nominate-btn'),
+            reportBtn: document.getElementById('report-btn'),
+            userChartModal: document.getElementById('userChartModal'),
+            chartModalLabel: document.getElementById('chartModalLabel'),
+            userPointsChartCanvas: document.getElementById('userPointsChart'),
+            duelModal: document.getElementById('duelModal'),
+            duelUser1Select: document.getElementById('duel-user1'),
+            duelUser2Select: document.getElementById('duel-user2'),
+            startDuelBtn: document.getElementById('start-duel-btn'),
+            fighter1Name: document.querySelector('#fighter1 .fighter-name'),
+            fighter2Name: document.querySelector('#fighter2 .fighter-name'),
+            fighter1Health: document.querySelector('#fighter1 .health-bar'),
+            fighter2Health: document.querySelector('#fighter2 .health-bar'),
+            fighter1Div: document.getElementById('fighter1'),
+            fighter2Div: document.getElementById('fighter2'),
+            duelResultText: document.getElementById('duel-result-text'),
+            crawlModal: document.getElementById('crawlModal'),
+            crawlNameInput: document.getElementById('crawl-name-input'),
+            checkCrawlBtn: document.getElementById('check-crawl-btn'),
+            crawlModalTitle: document.getElementById('crawl-modal-title'),
+            crawlChartCanvas: document.getElementById('crawlChart'),
+            crawlModalText: document.getElementById('crawl-modal-text'),
+            announcementsContainer: document.getElementById('announcements-container'),
+            announcementsTicker: document.getElementById('announcements-ticker'),
+            spinWheel: {
+                card: document.getElementById('spin-wheel-card'),
+                btn: document.getElementById('spin-wheel-btn'),
+                timerContainer: document.getElementById('spin-timer-container'),
+                timer: document.getElementById('spin-timer'),
+                attemptsText: document.getElementById('spin-attempts-text'),
+                modal: document.getElementById('spinWheelModal'),
+                canvas: document.getElementById('spin-canvas'),
+                modalCloseBtn: document.querySelector('#spinWheelModal .custom-close-btn')
+            }
+        };
+
+        let allUsersCache = [], honorRollCache = [], candidatesCache = [], announcementsCache = [];
+        let userChartInstance = null, crawlChartInstance = null;
+        let visitorName = '{{ session.name | default("زائر", true) | safe }}';
+        let visitorId = '{{ session.user_id | default("", true) | safe }}';
+        let announcementInterval = null;
+        let theWheel = null;
+        let wheelSpinning = false;
+        let cooldownInterval = null;
+        const dbInstance = firebase.database();
+        let spinWheelSettings = null;
+
+        // --- START: الحل النهائي لمنع تكرار الرسائل ---
+        const getProcessedMessageIds = () => {
+            try {
+                const ids = JSON.parse(sessionStorage.getItem('processedMessageIds') || '[]');
+                return new Set(ids);
+            } catch (e) {
+                console.error("Failed to parse processedMessageIds from sessionStorage", e);
+                return new Set();
+            }
+        };
+
+        const saveProcessedMessageIds = (idSet) => {
+            sessionStorage.setItem('processedMessageIds', JSON.stringify([...idSet]));
+        };
+
+        const sessionProcessedMessageIds = getProcessedMessageIds();
+        // --- END: الحل النهائي لمنع تكرار الرسائل ---
+
+        // START: دالة تنسيق الأرقام الجديدة والمحسنة
+        const formatNumber = (num) => {
+            const number = Number(num);
+            if (isNaN(number)) {
+                return '0';
+            }
+
+            if (Math.abs(number) < 10000) {
+                return new Intl.NumberFormat('en-US').format(number);
+            }
+
+            return new Intl.NumberFormat('en-US', {
+                notation: 'compact',
+                compactDisplay: 'short'
+            }).format(number);
+        };
+        // END: دالة تنسيق الأرقام الجديدة والمحسنة
+
+        async function setupApp() {
+            const banStatusRes = await fetch(`/api/check_my_ban_status`);
+            if (banStatusRes.ok) {
+                const banStatus = await banStatusRes.json();
+                if(banStatus.is_banned) {
+                    document.body.innerHTML = `<div class="container text-center mt-5"><div class="card p-5"><h1 class="text-danger">لقد تم حظرك</h1><p class="fs-5">تم حظرك من قبل الادارة. لا يمكنك استخدام الموقع.</p><a href='/logout' class='btn btn-warning mt-3'>تسجيل الخروج</a></div></div>`;
+                    return;
+                }
             }
 
             const settingsRes = await fetch('/api/settings/spin_wheel');
             if(!settingsRes.ok) throw new Error('Failed to fetch wheel settings');
             spinWheelSettings = await settingsRes.json();
 
-            const configStr = '{{ firebase_config|tojson|safe }}';
-            if (!configStr || configStr === '{}' || configStr.trim() === "") { throw new Error("Firebase config is missing or empty in the template."); }
-            let firebaseConfig;
-            try { firebaseConfig = JSON.parse(configStr); }
-            catch (jsonError) { throw new Error("Firebase config is malformed. Cannot parse as JSON."); }
-            if (!firebaseConfig.apiKey) { throw new Error("Firebase API key is missing in the parsed config."); }
-
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-            }
-            dbInstance = firebase.database();
-
-            setupPresenceSystem(dbInstance, visitorName);
+            setupPresenceSystem(dbInstance, visitorName, visitorId);
             setupEventListeners();
 
             if (spinWheelSettings && spinWheelSettings.enabled) {
@@ -570,8 +611,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     initializeSpinWheel();
                     updateSpinWheelUI();
                 } else {
-                    console.error('Winwheel/TweenMax library is not defined! Spin wheel will not work.');
-                    if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ في تحميل مكتبة عجلة الحظ. تأكد من أن TweenMax محمل بشكل صحيح.</p>';
+                    console.error('Winwheel/TweenMax library is not defined!');
+                    if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ في تحميل مكتبة عجلة الحظ.</p>';
                 }
             }
 
@@ -579,333 +620,202 @@ document.addEventListener('DOMContentLoaded', function() {
             dbInstance.ref('site_settings/honor_roll').on('value', handleHonorRollSnapshot, handleFirebaseError);
             dbInstance.ref('candidates').on('value', handleCandidatesSnapshot, handleFirebaseError);
             dbInstance.ref('site_settings/announcements').on('value', handleAnnouncementsSnapshot, handleFirebaseError);
-            dbInstance.ref(`visitor_messages/${visitorName}`).on('child_added', handleVisitorMessage, handleFirebaseError);
-
-        } catch (e) {
-            console.error("CRITICAL INITIALIZATION ERROR:", e.message, e.stack);
-            const errorDisplayElement = (ui.loadingSpinner && ui.loadingSpinner.parentElement) || document.querySelector('.container') || document.body;
-            if (errorDisplayElement) {
-                 errorDisplayElement.innerHTML = `<div class="alert alert-danger m-3"><strong>خطأ حرج:</strong> ${e.message} يرجى المحاولة لاحقاً أو الاتصال بالدعم.</div>`;
+            if (visitorId) {
+                dbInstance.ref(`user_messages/${visitorId}`).on('child_added', handleUserMessage, handleFirebaseError);
             }
         }
-    }
 
-    function handleFirebaseError(error) { console.error("Firebase Read Error:", error.code, error.message); const errorDisplayElement = (ui.loadingSpinner && ui.loadingSpinner.parentElement) || ui.tableBody || document.querySelector('.container'); if (errorDisplayElement) { let errorMsg = `فشل الاتصال بقاعدة البيانات. رمز: ${error.code}. يرجى تحديث الصفحة.`; if (ui.tableBody && ui.tableBody === errorDisplayElement) { ui.tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4"><div class="alert alert-warning">${errorMsg}</div></td></tr>`; } else if (errorDisplayElement.classList.contains('container')) { const alertDiv = document.createElement('div'); alertDiv.className = 'alert alert-danger m-3'; alertDiv.innerHTML = errorMsg; errorDisplayElement.prepend(alertDiv); } } if (ui.spinWheel.btn) ui.spinWheel.btn.disabled = true; }
-    function handleVisitorMessage(snapshot) { const messageId = snapshot.key; const message = snapshot.val(); if (!message || !message.text || sessionProcessedMessageIds.has(messageId)) { return; } sessionProcessedMessageIds.add(messageId); Swal.fire({ title: 'رسالة من الإدارة!', text: message.text, icon: 'info', confirmButtonText: 'تم الاطلاع', allowOutsideClick: false, allowEscapeKey: false }).then((result) => { if (result.isConfirmed) { snapshot.ref.remove().catch(err => { console.error("Firebase: Failed to remove message after viewing.", err); }); } }); }
-    function handleUsersSnapshot(snapshot) { if (ui.loadingSpinner && ui.loadingSpinner.parentElement) ui.loadingSpinner.parentElement.style.display = 'none'; const usersData = snapshot.val() || {}; allUsersCache = Object.keys(usersData).map(k => ({ name: k, ...usersData[k] })).sort((a, b) => (b.points || 0) - (a.points || 0)); renderUserTable(); renderTop3(); updateDuelSelectors(); }
-    function handleHonorRollSnapshot(snapshot) { const honorData = snapshot.val() || {}; honorRollCache = Object.values(honorData).map(i => i.name); renderHonorRollList(); if(allUsersCache.length > 0) renderUserTable(); }
-    function handleCandidatesSnapshot(snapshot) { candidatesCache = Object.keys(snapshot.val() || {}); renderCandidatesList(); }
-    function handleAnnouncementsSnapshot(snapshot) { const annData = snapshot.val() || {}; announcementsCache = Object.values(annData); renderAnnouncements(); }
-    function renderUserTable() { if (!ui.tableBody) return; const term = ui.searchInput.value.toLowerCase(); const filteredUsers = allUsersCache.filter(u => u.name.toLowerCase().includes(term)); let tableHtml = ''; if (filteredUsers.length > 0) { filteredUsers.forEach((user) => { const rank = allUsersCache.findIndex(u => u.name === user.name) + 1; const honorBadge = honorRollCache.includes(user.name) ? ` <span class="badge rounded-pill" style="background:var(--primary-glow);color:#fff;"><i class="bi bi-award-fill"></i></span>` : ''; const hasLiked = (new Set(JSON.parse(localStorage.getItem('likedUsers')) || [])).has(user.name); tableHtml += ` <tr> <th class="align-middle">#${rank}</th> <td class="align-middle fw-bold">${user.name}${honorBadge}</td> <td class="text-center align-middle fs-5 fw-bold">${formatNumber(user.points)}</td> <td class="text-center align-middle"> <button class="btn btn-sm like-btn ${hasLiked ? 'liked' : 'btn-outline-danger'}" data-username="${user.name}"> <i class="bi bi-heart-fill"></i> <span class="like-count">${formatNumber(user.likes)}</span> </button> <button class="btn btn-sm btn-outline-info ms-2 chart-btn" data-username="${user.name}" title="عرض تقدم الزاحف"> <i class="bi bi-graph-up-arrow"></i> </button> </td> </tr>`; }); } else { tableHtml = `<tr><td colspan="4" class="text-center py-4">${term ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد بيانات لعرضها.'}</td></tr>`; } ui.tableBody.innerHTML = tableHtml; }
-    function renderTop3() { if (!ui.hallOfFame) return; ui.hallOfFame.innerHTML = allUsersCache.slice(0, 3).map((u, i) => `<li class="list-group-item d-flex justify-content-between"><span>${['🥇','🥈','🥉'][i]} ${u.name}</span><span class="badge rounded-pill" style="background-color:var(--primary-glow)">${formatNumber(u.points)}</span></li>` ).join('') || `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`; }
-    function renderHonorRollList() { if (!ui.honorRollList) return; ui.honorRollList.innerHTML = honorRollCache.length ? honorRollCache.map(name => `<li class="list-group-item fw-bold text-center"><i class="bi bi-star-fill text-warning me-2"></i>${name}</li>`).join('') : `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`; }
-    function renderCandidatesList() { if (!ui.candidatesList) return; ui.candidatesList.innerHTML = candidatesCache.length ? candidatesCache.map(name => `<li class="list-group-item"><i class="bi bi-person-check-fill me-2"></i>${name}</li>`).join('') : `<li class="list-group-item text-muted text-center">لا يوجد مرشحون.</li>`; }
-    function renderAnnouncements() { if (!ui.announcementsTicker || !ui.announcementsContainer) return; ui.announcementsTicker.innerHTML = ''; if (announcementInterval) clearInterval(announcementInterval); if (announcementsCache.length > 0) { ui.announcementsContainer.style.display = 'block'; announcementsCache.forEach(ann => { const item = document.createElement('div'); item.className = 'ticker-item'; item.textContent = ann.text; ui.announcementsTicker.appendChild(item); }); const items = ui.announcementsTicker.querySelectorAll('.ticker-item'); if (items.length === 0) return; let currentIndex = 0; if(items[currentIndex]) items[currentIndex].classList.add('active'); if (items.length > 1) { announcementInterval = setInterval(() => { if(items[currentIndex]) items[currentIndex].classList.remove('active'); currentIndex = (currentIndex + 1) % items.length; if(items[currentIndex]) items[currentIndex].classList.add('active'); }, 5000); } } else { ui.announcementsContainer.style.display = 'none'; } }
-    function updateDuelSelectors() { if (!ui.duelUser1Select || !ui.duelUser2Select) return; const options = allUsersCache.map(u => `<option value="${u.name}">${u.name}</option>`).join(''); ui.duelUser1Select.innerHTML = options; ui.duelUser2Select.innerHTML = options; if (allUsersCache.length > 1 && ui.duelUser2Select.options.length > 1) { ui.duelUser2Select.selectedIndex = 1; } else if (allUsersCache.length === 1 && ui.duelUser2Select.options.length > 0) { ui.duelUser2Select.selectedIndex = 0; } }
-
-    function initializeSpinWheel() { if (!ui.spinWheel.canvas || typeof Winwheel === 'undefined' || typeof TweenMax === 'undefined' || !spinWheelSettings) return; const prizeSegments = spinWheelSettings.prizes.map((p, index) => { const colors = ['#eae56f', '#7de6ef', '#89f26e', '#e7706f', '#c789f2', '#f2a15f', '#6aaff2', '#f289b4']; const textFill = ['#000', '#000', '#000', '#fff', '#fff', '#000', '#fff', '#fff']; let prizeText = p.value.toLocaleString('en-US'); if (p.value >= 1000000) prizeText = "مليون!"; return { 'fillStyle': colors[index % colors.length], 'text': prizeText, 'textFillStyle': textFill[index % textFill.length] }; }); try { theWheel = new Winwheel({ 'canvasId' : ui.spinWheel.canvas.id, 'numSegments' : prizeSegments.length, 'outerRadius' : 212, 'textFontSize' : 22, 'textFontWeight': 'bold', 'segments' : prizeSegments, 'animation' : { 'type' : 'spinToStop', 'duration' : 8, 'spins' : 10, 'callbackFinished' : handleSpinFinish, 'easing' : 'Power4.easeOut' }, 'pins' : { 'number' : prizeSegments.length * 2, 'fillStyle' : 'silver', 'outerRadius': 4, 'margin': 5 } }); } catch (e) { console.error("Error initializing Winwheel:", e); if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ عند إنشاء عجلة الحظ.</p>'; } }
-    function getWinwheelState() { try { const state = JSON.parse(localStorage.getItem('winwheelState') || '{}'); return { lastReset: state.lastReset || 0, attemptsUsed: state.attemptsUsed || 0 }; } catch { return { lastReset: 0, attemptsUsed: 0 }; } }
-    function saveWinwheelState(state) { localStorage.setItem('winwheelState', JSON.stringify(state)); }
-
-    async function handleSpinStart() {
-        if (wheelSpinning || !theWheel) return;
-        if (allUsersCache.length === 0) { Swal.fire('انتظر!', 'لا يوجد زواحف للتبرع لهم حالياً.', 'info'); return; }
-
-        ui.spinWheel.btn.disabled = true;
-        ui.spinWheel.btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جاري الدوران...`;
-
-        try {
-            const res = await fetch('/api/spin_wheel', { method: 'POST' });
-            const data = await res.json();
-            if (!res.ok || !data.success) { throw new Error(data.message || `Server error: ${res.status}`); }
-
-            let state = getWinwheelState();
-            state.attemptsUsed++;
-            saveWinwheelState(state);
-            updateSpinWheelUI();
-
-            const prizeWon = data.prize;
-            let stopAtSegmentIndex = -1;
-            for (let i = 1; i <= theWheel.numSegments; i++) {
-                if (theWheel.segments[i]) {
-                    let segmentText = theWheel.segments[i].text.replace(/,/g, '');
-                    let segmentValue = (segmentText === 'مليون!') ? 1000000 : parseInt(segmentText);
-                    if (segmentValue === prizeWon) { stopAtSegmentIndex = i; break; }
-                }
-            }
-
-            if (stopAtSegmentIndex === -1) {
-                console.warn(`Prize ${prizeWon} not found, selecting random segment.`);
-                stopAtSegmentIndex = Math.floor(Math.random() * theWheel.numSegments) + 1;
-            }
-
-            theWheel.animation.stopAngle = theWheel.getRandomForSegment(stopAtSegmentIndex);
-            wheelSpinning = true;
-            theWheel.startAnimation();
-            ui.spinWheel.modal.classList.add('show');
-            if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'none';
-        } catch (error) {
-            console.error("Spin Start Error:", error);
-            Swal.fire('خطأ', error.message || 'فشل الاتصال بالخادم.', 'error');
-            resetWheel();
-            updateSpinWheelUI();
-        }
-    }
-
-    function handleSpinFinish(indicatedSegment) {
-        wheelSpinning = false;
-        if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'block';
-
-        if (!indicatedSegment || typeof indicatedSegment.text === 'undefined') {
-            console.error("Indicated segment is invalid:", indicatedSegment);
-            Swal.fire('عذراً', 'حدث خطأ غير متوقع أثناء تحديد الجائزة. لم يتم التبرع بأي نقاط.', 'error');
-            resetWheel();
-            updateSpinWheelUI();
-            return;
-        }
-
-        const prizeText = indicatedSegment.text.replace(/,/g, '');
-        const prizeWon = (prizeText === 'مليون!') ? 1000000 : parseInt(prizeText);
-
-        Swal.fire({
-            title: `🎉 مبروك! لقد فزت بـ ${formatNumber(prizeWon)} نقطة! 🎉`,
-            html: `<div>اختر الزاحف الذي تريد التبرع له بالنقاط:</div> <select id="swal-donate-select" class="swal2-select mt-3" style="min-width: 200px;"></select>`,
-            confirmButtonText: 'تبرع الآن!',
-            showCancelButton: true,
-            cancelButtonText: 'إلغاء (عدم التبرع)',
-            didOpen: () => {
-                const select = document.getElementById('swal-donate-select');
-                if (allUsersCache.length > 0) {
-                    allUsersCache.forEach(user => select.add(new Option(user.name, user.name)));
-                    select.selectedIndex = 0;
-                } else {
-                    select.innerHTML = '<option value="">لا يوجد زواحف للتبرع!</option>';
-                    Swal.getConfirmButton().disabled = true;
-                }
-            },
-            preConfirm: () => {
-                const selectedUser = document.getElementById('swal-donate-select').value;
-                if (!selectedUser && allUsersCache.length > 0) { Swal.showValidationMessage('الرجاء اختيار زاحف للتبرع له.'); return false; }
-                return selectedUser;
-            },
-            allowOutsideClick: false
-        }).then(async (result) => {
-            if (result.isConfirmed && result.value) {
-                const usernameToDonate = result.value;
-                try {
-                    const res = await fetch('/api/donate_points', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                        body: new URLSearchParams({
-                            username: usernameToDonate,
-                            visitor_name: visitorName
-                        })
+        function setupPresenceSystem(db, name, id) {
+            if (!db || !name || !id) return;
+            const listRef = db.ref('online_visitors');
+            const myRef = listRef.push();
+            const connectedRef = db.ref('.info/connected');
+            connectedRef.on('value', (snap) => {
+                if (snap.val() === true) {
+                    myRef.set({
+                        name: name,
+                        user_id: id,
+                        timestamp: firebase.database.ServerValue.TIMESTAMP
                     });
-                    const data = await res.json();
-                    Swal.fire(data.success ? 'شكراً لك!' : 'خطأ!', data.message, data.success ? 'success' : 'error');
-                } catch(e){ Swal.fire('خطأ!', 'فشل الاتصال بالخادم عند التبرع.', 'error'); }
-            } else if (result.dismiss === Swal.DismissReason.cancel) {
-                Swal.fire('تم الإلغاء', 'لم يتم التبرع بالنقاط.', 'info');
-            }
-
-            resetWheel();
-            updateSpinWheelUI();
-        });
-    }
-
-    function updateSpinWheelUI() {
-        if (!spinWheelSettings || !ui.spinWheel.btn) return;
-        if(cooldownInterval) clearInterval(cooldownInterval);
-
-        let state = getWinwheelState();
-        const cooldownMillis = spinWheelSettings.cooldownHours * 60 * 60 * 1000;
-        const timeSinceReset = Date.now() - state.lastReset;
-
-        if (timeSinceReset >= cooldownMillis) {
-            state = { lastReset: Date.now(), attemptsUsed: 0 };
-            saveWinwheelState(state);
+                    myRef.onDisconnect().remove();
+                }
+            });
         }
 
-        // --- START: NEGATIVE ATTEMPTS FIX ---
-        // Ensure attemptsLeft can't be negative.
-        const attemptsLeft = Math.max(0, spinWheelSettings.maxAttempts - state.attemptsUsed);
-        // --- END: NEGATIVE ATTEMPTS FIX ---
+        function handleFirebaseError(error) { console.error("Firebase Read Error:", error.code, error.message); const errorDisplayElement = (ui.loadingSpinner && ui.loadingSpinner.parentElement) || ui.tableBody || document.querySelector('.container'); if (errorDisplayElement) { let errorMsg = `فشل الاتصال بقاعدة البيانات. رمز: ${error.code}. يرجى تحديث الصفحة.`; if (ui.tableBody && ui.tableBody === errorDisplayElement) { ui.tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4"><div class="alert alert-warning">${errorMsg}</div></td></tr>`; } else if (errorDisplayElement.classList.contains('container')) { const alertDiv = document.createElement('div'); alertDiv.className = 'alert alert-danger m-3'; alertDiv.innerHTML = errorMsg; errorDisplayElement.prepend(alertDiv); } } if (ui.spinWheel.btn) ui.spinWheel.btn.disabled = true; }
 
-        ui.spinWheel.attemptsText.textContent = `لديك ${attemptsLeft} / ${spinWheelSettings.maxAttempts} محاولات متبقية`;
+        // --- START: الدالة النهائية لمعالجة الرسائل ---
+        function handleUserMessage(snapshot) {
+            const messageId = snapshot.key;
+            const message = snapshot.val();
 
-        if (attemptsLeft > 0) {
-            ui.spinWheel.btn.disabled = false;
-            ui.spinWheel.btn.style.display = 'block';
-            ui.spinWheel.timerContainer.style.display = 'none';
-            resetSpinButton();
-        } else {
+            if (!message || !message.text || sessionProcessedMessageIds.has(messageId)) {
+                return;
+            }
+
+            sessionProcessedMessageIds.add(messageId);
+            saveProcessedMessageIds(sessionProcessedMessageIds);
+
+            Swal.fire({
+                title: 'رسالة من الإدارة!',
+                text: message.text,
+                icon: 'info',
+                confirmButtonText: 'تم الاطلاع',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // فقط قم بحذف الرسالة من قاعدة البيانات. لا تلمس sessionStorage.
+                    snapshot.ref.remove().catch(err => {
+                        console.error("Firebase: Failed to remove message after viewing.", err);
+                    });
+                }
+            });
+        }
+        // --- END: الدالة النهائية لمعالجة الرسائل ---
+
+        function handleUsersSnapshot(snapshot) { if (ui.loadingSpinner && ui.loadingSpinner.parentElement) ui.loadingSpinner.parentElement.style.display = 'none'; const usersData = snapshot.val() || {}; allUsersCache = Object.keys(usersData).map(k => ({ name: k, ...usersData[k] })).sort((a, b) => (b.points || 0) - (a.points || 0)); renderUserTable(); renderTop3(); updateDuelSelectors(); }
+        function handleHonorRollSnapshot(snapshot) { const honorData = snapshot.val() || {}; honorRollCache = Object.values(honorData).map(i => i.name); renderHonorRollList(); if(allUsersCache.length > 0) renderUserTable(); }
+        function handleCandidatesSnapshot(snapshot) { candidatesCache = Object.keys(snapshot.val() || {}); renderCandidatesList(); }
+        function handleAnnouncementsSnapshot(snapshot) { const annData = snapshot.val() || {}; announcementsCache = Object.values(annData); renderAnnouncements(); }
+        function renderUserTable() { if (!ui.tableBody) return; const term = ui.searchInput.value.toLowerCase(); const filteredUsers = allUsersCache.filter(u => u.name.toLowerCase().includes(term)); let tableHtml = ''; if (filteredUsers.length > 0) { filteredUsers.forEach((user) => { const rank = allUsersCache.findIndex(u => u.name === user.name) + 1; const honorBadge = honorRollCache.includes(user.name) ? ` <span class="badge rounded-pill" style="background:var(--primary-glow);color:#fff;"><i class="bi bi-award-fill"></i></span>` : ''; const hasLiked = (new Set(JSON.parse(localStorage.getItem('likedUsers')) || [])).has(user.name); tableHtml += ` <tr> <th class="align-middle">#${rank}</th> <td class="align-middle fw-bold">${user.name}${honorBadge}</td> <td class="text-center align-middle fs-5 fw-bold">${formatNumber(user.points)}</td> <td class="text-center align-middle"> <button class="btn btn-sm like-btn ${hasLiked ? 'liked' : 'btn-outline-danger'}" data-username="${user.name}"> <i class="bi bi-heart-fill"></i> <span class="like-count">${formatNumber(user.likes)}</span> </button> <button class="btn btn-sm btn-outline-info ms-2 chart-btn" data-username="${user.name}" title="عرض تقدم الزاحف"> <i class="bi bi-graph-up-arrow"></i> </button> </td> </tr>`; }); } else { tableHtml = `<tr><td colspan="4" class="text-center py-4">${term ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد بيانات لعرضها.'}</td></tr>`; } ui.tableBody.innerHTML = tableHtml; }
+        function renderTop3() { if (!ui.hallOfFame) return; ui.hallOfFame.innerHTML = allUsersCache.slice(0, 3).map((u, i) => `<li class="list-group-item d-flex justify-content-between"><span>${['🥇','🥈','🥉'][i]} ${u.name}</span><span class="badge rounded-pill" style="background-color:var(--primary-glow)">${formatNumber(u.points)}</span></li>` ).join('') || `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`; }
+        function renderHonorRollList() { if (!ui.honorRollList) return; ui.honorRollList.innerHTML = honorRollCache.length ? honorRollCache.map(name => `<li class="list-group-item fw-bold text-center"><i class="bi bi-star-fill text-warning me-2"></i>${name}</li>`).join('') : `<li class="list-group-item text-muted text-center">القائمة فارغة.</li>`; }
+        function renderCandidatesList() { if (!ui.candidatesList) return; ui.candidatesList.innerHTML = candidatesCache.length ? candidatesCache.map(name => `<li class="list-group-item"><i class="bi bi-person-check-fill me-2"></i>${name}</li>`).join('') : `<li class="list-group-item text-muted text-center">لا يوجد مرشحون.</li>`; }
+        function renderAnnouncements() { if (!ui.announcementsTicker || !ui.announcementsContainer) return; ui.announcementsTicker.innerHTML = ''; if (announcementInterval) clearInterval(announcementInterval); if (announcementsCache.length > 0) { ui.announcementsContainer.style.display = 'block'; announcementsCache.forEach(ann => { const item = document.createElement('div'); item.className = 'ticker-item'; item.textContent = ann.text; ui.announcementsTicker.appendChild(item); }); const items = ui.announcementsTicker.querySelectorAll('.ticker-item'); if (items.length === 0) return; let currentIndex = 0; if(items[currentIndex]) items[currentIndex].classList.add('active'); if (items.length > 1) { announcementInterval = setInterval(() => { if(items[currentIndex]) items[currentIndex].classList.remove('active'); currentIndex = (currentIndex + 1) % items.length; if(items[currentIndex]) items[currentIndex].classList.add('active'); }, 5000); } } else { ui.announcementsContainer.style.display = 'none'; } }
+        function updateDuelSelectors() { if (!ui.duelUser1Select || !ui.duelUser2Select) return; const options = allUsersCache.map(u => `<option value="${u.name}">${u.name}</option>`).join(''); ui.duelUser1Select.innerHTML = options; ui.duelUser2Select.innerHTML = options; if (allUsersCache.length > 1 && ui.duelUser2Select.options.length > 1) { ui.duelUser2Select.selectedIndex = 1; } else if (allUsersCache.length === 1 && ui.duelUser2Select.options.length > 0) { ui.duelUser2Select.selectedIndex = 0; } }
+        function initializeSpinWheel() { if (!ui.spinWheel.canvas || typeof Winwheel === 'undefined' || typeof TweenMax === 'undefined' || !spinWheelSettings) return; const prizeSegments = spinWheelSettings.prizes.map((p, index) => { const colors = ['#eae56f', '#7de6ef', '#89f26e', '#e7706f', '#c789f2', '#f2a15f', '#6aaff2', '#f289b4']; const textFill = ['#000', '#000', '#000', '#fff', '#fff', '#000', '#fff', '#fff']; let prizeText = p.value.toLocaleString('en-US'); if (p.value >= 1000000) prizeText = "مليون!"; return { 'fillStyle': colors[index % colors.length], 'text': prizeText, 'textFillStyle': textFill[index % textFill.length] }; }); try { theWheel = new Winwheel({ 'canvasId' : ui.spinWheel.canvas.id, 'numSegments' : prizeSegments.length, 'outerRadius' : 212, 'textFontSize' : 22, 'textFontWeight': 'bold', 'segments' : prizeSegments, 'animation' : { 'type' : 'spinToStop', 'duration' : 8, 'spins' : 10, 'callbackFinished' : handleSpinFinish, 'easing' : 'Power4.easeOut' }, 'pins' : { 'number' : prizeSegments.length * 2, 'fillStyle' : 'silver', 'outerRadius': 4, 'margin': 5 } }); } catch (e) { console.error("Error initializing Winwheel:", e); if (ui.spinWheel.card) ui.spinWheel.card.innerHTML = '<p class="text-danger p-3">خطأ عند إنشاء عجلة الحظ.</p>'; } }
+        function getWinwheelState() { try { const state = JSON.parse(localStorage.getItem('winwheelState') || '{}'); return { lastReset: state.lastReset || 0, attemptsUsed: state.attemptsUsed || 0 }; } catch { return { lastReset: 0, attemptsUsed: 0 }; } }
+        function saveWinwheelState(state) { localStorage.setItem('winwheelState', JSON.stringify(state)); }
+        async function handleSpinStart() {
+            if (wheelSpinning || !theWheel) return;
+            if (allUsersCache.length === 0) { Swal.fire('انتظر!', 'لا يوجد زواحف للتبرع لهم حالياً.', 'info'); return; }
             ui.spinWheel.btn.disabled = true;
-            ui.spinWheel.btn.style.display = 'none';
-            ui.spinWheel.timerContainer.style.display = 'block';
-            let timeLeft = cooldownMillis - timeSinceReset;
-            const updateTimer = () => {
-                timeLeft -= 1000;
-                if (timeLeft <= 0) {
-                    clearInterval(cooldownInterval);
-                    updateSpinWheelUI();
-                    return;
+            ui.spinWheel.btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جاري الدوران...`;
+            try {
+                const res = await fetch('/api/spin_wheel', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok || !data.success) { throw new Error(data.message || `Server error: ${res.status}`); }
+                let state = getWinwheelState();
+                state.attemptsUsed++;
+                saveWinwheelState(state);
+                updateSpinWheelUI();
+                const prizeWon = data.prize;
+                let stopAtSegmentIndex = -1;
+                for (let i = 1; i <= theWheel.numSegments; i++) {
+                    if (theWheel.segments[i]) {
+                        let segmentText = theWheel.segments[i].text.replace(/,/g, '');
+                        let segmentValue = (segmentText === 'مليون!') ? 1000000 : parseInt(segmentText);
+                        if (segmentValue === prizeWon) { stopAtSegmentIndex = i; break; }
+                    }
                 }
-                const h = Math.floor(timeLeft / (1000 * 60 * 60)).toString().padStart(2, '0');
-                const m = Math.floor((timeLeft / (1000 * 60)) % 60).toString().padStart(2, '0');
-                const s = Math.floor((timeLeft / 1000) % 60).toString().padStart(2, '0');
-                if(ui.spinWheel.timer) ui.spinWheel.timer.textContent = `${h}:${m}:${s}`;
-            };
-            updateTimer();
-            cooldownInterval = setInterval(updateTimer, 1000);
-        }
-    }
-
-    function resetSpinButton() {
-        if (ui.spinWheel.btn) {
-            ui.spinWheel.btn.disabled = false;
-            ui.spinWheel.btn.innerHTML = `<i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!`;
-        }
-    }
-
-    function resetWheel() {
-        if (theWheel) {
-            theWheel.stopAnimation(false);
-            theWheel.rotationAngle = theWheel.getRotationPosition();
-            theWheel.draw();
-            wheelSpinning = false;
-        }
-        resetSpinButton();
-    }
-
-    function setupEventListeners() {
-        if (ui.searchInput) ui.searchInput.addEventListener('input', renderUserTable);
-        if (ui.spinWheel.btn) ui.spinWheel.btn.addEventListener('click', handleSpinStart);
-        if (ui.spinWheel.modalCloseBtn) {
-            ui.spinWheel.modalCloseBtn.addEventListener('click', () => {
-                if (!wheelSpinning) ui.spinWheel.modal.classList.remove('show');
-            });
-        }
-        document.querySelectorAll('.custom-modal .custom-close-btn:not(#spinWheelModal .custom-close-btn)').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const modal = e.target.closest('.custom-modal');
-                if (modal) modal.classList.remove('show');
-            });
-        });
-        window.addEventListener('click', (e) => {
-            if (e.target.classList.contains('custom-modal')) {
-                if (e.target.id === 'spinWheelModal' && wheelSpinning) return;
-                e.target.classList.remove('show');
+                if (stopAtSegmentIndex === -1) {
+                    console.warn(`Prize ${prizeWon} not found, selecting random segment.`);
+                    stopAtSegmentIndex = Math.floor(Math.random() * theWheel.numSegments) + 1;
+                }
+                theWheel.animation.stopAngle = theWheel.getRandomForSegment(stopAtSegmentIndex);
+                wheelSpinning = true;
+                theWheel.startAnimation();
+                ui.spinWheel.modal.classList.add('show');
+                if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'none';
+            } catch (error) {
+                console.error("Spin Start Error:", error);
+                Swal.fire('خطأ', error.message || 'فشل الاتصال بالخادم.', 'error');
+                resetWheel();
+                updateSpinWheelUI();
             }
-        });
-        if (ui.tableBody) {
-            ui.tableBody.addEventListener('click', e => {
-                const likeBtn = e.target.closest('.like-btn');
-                const chartBtn = e.target.closest('.chart-btn');
-                if (likeBtn) {
-                    const username = likeBtn.dataset.username;
-                    const likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers')) || []);
-                    const action = likedUsers.has(username) ? 'unlike' : 'like';
-                    const countSpan = likeBtn.querySelector('.like-count');
-                    let currentCount = parseInt((countSpan.textContent || '0').replace(/,/g, ''));
-                    if(action === 'like') {
-                        likedUsers.add(username);
-                        likeBtn.classList.add('liked');
-                        likeBtn.classList.remove('btn-outline-danger');
-                        countSpan.textContent = formatNumber(currentCount + 1);
-                    } else {
-                        likedUsers.delete(username);
-                        likeBtn.classList.remove('liked');
-                        likeBtn.classList.add('btn-outline-danger');
-                        countSpan.textContent = formatNumber(Math.max(0, currentCount - 1));
-                    }
-                    localStorage.setItem('likedUsers', JSON.stringify([...likedUsers]));
-                    fetch(`/like/${username}?action=${action}`, { method:'POST', body: new URLSearchParams({visitor_name: visitorName}) });
-                }
-                if (chartBtn && ui.userChartModal) {
-                    showUserHistoryChart(chartBtn.dataset.username);
-                }
+        }
+        function handleSpinFinish(indicatedSegment) {
+            wheelSpinning = false;
+            if (ui.spinWheel.modalCloseBtn) ui.spinWheel.modalCloseBtn.style.display = 'block';
+            if (!indicatedSegment || typeof indicatedSegment.text === 'undefined') {
+                console.error("Indicated segment is invalid:", indicatedSegment);
+                Swal.fire('عذراً', 'حدث خطأ غير متوقع أثناء تحديد الجائزة. لم يتم التبرع بأي نقاط.', 'error');
+                resetWheel();
+                updateSpinWheelUI();
+                return;
+            }
+            const prizeText = indicatedSegment.text.replace(/,/g, '');
+            const prizeWon = (prizeText === 'مليون!') ? 1000000 : parseFloat(prizeText);
+            Swal.fire({
+                title: `🎉 مبروك! لقد فزت بـ ${new Intl.NumberFormat('en-US').format(prizeWon)} نقطة! 🎉`,
+                html: `<div>اختر الزاحف الذي تريد التبرع له بالنقاط:</div> <select id="swal-donate-select" class="swal2-select mt-3" style="min-width: 200px;"></select>`,
+                confirmButtonText: 'تبرع الآن!', showCancelButton: true, cancelButtonText: 'إلغاء (عدم التبرع)',
+                didOpen: () => {
+                    const select = document.getElementById('swal-donate-select');
+                    if (allUsersCache.length > 0) { allUsersCache.forEach(user => select.add(new Option(user.name, user.name))); select.selectedIndex = 0; } else { select.innerHTML = '<option value="">لا يوجد زواحف للتبرع!</option>'; Swal.getConfirmButton().disabled = true; }
+                },
+                preConfirm: () => { const selectedUser = document.getElementById('swal-donate-select').value; if (!selectedUser && allUsersCache.length > 0) { Swal.showValidationMessage('الرجاء اختيار زاحف للتبرع له.'); return false; } return selectedUser; },
+                allowOutsideClick: false
+            }).then(async (result) => {
+                if (result.isConfirmed && result.value) {
+                    const usernameToDonate = result.value;
+                    try { const res = await fetch('/api/donate_points', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams({ username: usernameToDonate }) }); const data = await res.json(); Swal.fire(data.success ? 'شكراً لك!' : 'خطأ!', data.message, data.success ? 'success' : 'error');
+                    } catch(e){ Swal.fire('خطأ!', 'فشل الاتصال بالخادم عند التبرع.', 'error'); }
+                } else if (result.dismiss === Swal.DismissReason.cancel) { Swal.fire('تم الإلغاء', 'لم يتم التبرع بالنقاط.', 'info'); }
+                resetWheel(); updateSpinWheelUI();
             });
         }
-        if (ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', handleCrawlCheck);
-        if (ui.startDuelBtn) ui.startDuelBtn.addEventListener('click', handleDuelStart);
+        function updateSpinWheelUI() {
+            if (!spinWheelSettings || !ui.spinWheel.btn) return; if(cooldownInterval) clearInterval(cooldownInterval);
+            let state = getWinwheelState(); const cooldownMillis = spinWheelSettings.cooldownHours * 60 * 60 * 1000; const timeSinceReset = Date.now() - state.lastReset;
+            if (timeSinceReset >= cooldownMillis) { state = { lastReset: Date.now(), attemptsUsed: 0 }; saveWinwheelState(state); }
+            const attemptsLeft = Math.max(0, spinWheelSettings.maxAttempts - state.attemptsUsed);
 
-        if (ui.nominateBtn) {
-            ui.nominateBtn.addEventListener('click', async () => {
-                try {
-                    const { value: nameToNominate } = await Swal.fire({
-                        title: 'رشح نفسك أو صديقك كزاحف',
-                        input: 'text', inputLabel: 'اكتب الاسم للترشيح',
-                        inputPlaceholder: 'الاسم المراد ترشيحه...', showCancelButton: true,
-                        confirmButtonText: 'إرسال الترشيح', cancelButtonText: 'إلغاء',
-                        inputValidator: (v) => (!v || v.trim().length === 0) && 'يجب كتابة اسم!'
-                    });
-                    if (nameToNominate) {
-                        const res = await fetch('/api/nominate', { method: 'POST', body: new URLSearchParams({ name: nameToNominate, visitor_name: visitorName }) });
-                        const j = await res.json();
-                        if (j.action === "ban") {
-                            await Swal.fire({ title: 'محظور!', text: j.message, icon: 'error' });
-                            window.location.reload();
-                        } else if (res.ok && j.success) {
-                            Swal.fire('تم!', j.message, 'success');
-                        } else {
-                            Swal.fire('خطأ!', j.message || 'فشل إرسال طلب الترشيح.', 'error');
-                        }
-                    }
-                } catch (e) {
-                    console.error("Nomination error:", e);
-                    Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');
-                }
-            });
+            // START: تحسين نص عجلة الحظ
+            if (attemptsLeft > 0) {
+                 ui.spinWheel.attemptsText.textContent = `لديك ${attemptsLeft} / ${spinWheelSettings.maxAttempts} محاولات متبقية`;
+                 ui.spinWheel.btn.disabled = false;
+                 ui.spinWheel.btn.style.display = 'block';
+                 ui.spinWheel.timerContainer.style.display = 'none';
+                 resetSpinButton();
+            } else {
+                 ui.spinWheel.attemptsText.textContent = 'لا توجد محاولات متبقية حالياً';
+                 ui.spinWheel.btn.disabled = true;
+                 ui.spinWheel.btn.style.display = 'none';
+                 ui.spinWheel.timerContainer.style.display = 'block';
+                 let timeLeft = cooldownMillis - timeSinceReset;
+                const updateTimer = () => { timeLeft -= 1000; if (timeLeft <= 0) { clearInterval(cooldownInterval); updateSpinWheelUI(); return; }
+                    const h = Math.floor(timeLeft / (1000 * 60 * 60)).toString().padStart(2, '0'); const m = Math.floor((timeLeft / (1000 * 60)) % 60).toString().padStart(2, '0'); const s = Math.floor((timeLeft / 1000) % 60).toString().padStart(2, '0');
+                    if(ui.spinWheel.timer) ui.spinWheel.timer.textContent = `${h}:${m}:${s}`;
+                }; updateTimer(); cooldownInterval = setInterval(updateTimer, 1000);
+            }
+            // END: تحسين نص عجلة الحظ
         }
+        function resetSpinButton() { if (ui.spinWheel.btn) { ui.spinWheel.btn.disabled = false; ui.spinWheel.btn.innerHTML = `<i class="bi bi-arrow-repeat me-2"></i>لف العجلة الآن!`; } }
+        function resetWheel() { if (theWheel) { theWheel.stopAnimation(false); theWheel.rotationAngle = 0; theWheel.draw(); wheelSpinning = false; } if(ui.spinWheel.modal) ui.spinWheel.modal.classList.remove('show'); resetSpinButton(); }
+        function setupEventListeners() {
+            if (ui.searchInput) ui.searchInput.addEventListener('input', renderUserTable);
+            if (ui.spinWheel.btn) ui.spinWheel.btn.addEventListener('click', handleSpinStart);
+            if (ui.spinWheel.modalCloseBtn) { ui.spinWheel.modalCloseBtn.addEventListener('click', () => { if (!wheelSpinning) ui.spinWheel.modal.classList.remove('show'); resetWheel(); }); }
+            document.querySelectorAll('.custom-modal .custom-close-btn:not(#spinWheelModal .custom-close-btn)').forEach(btn => { btn.addEventListener('click', (e) => { const modal = e.target.closest('.custom-modal'); if (modal) modal.classList.remove('show'); }); });
+            window.addEventListener('click', (e) => { if (e.target.classList.contains('custom-modal')) { if (e.target.id === 'spinWheelModal' && wheelSpinning) return; e.target.classList.remove('show'); } });
+            if (ui.tableBody) { ui.tableBody.addEventListener('click', e => { const likeBtn = e.target.closest('.like-btn'); const chartBtn = e.target.closest('.chart-btn');
+                    if (likeBtn) {
+                        const username = likeBtn.dataset.username; const likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers')) || []); const action = likedUsers.has(username) ? 'unlike' : 'like'; const countSpan = likeBtn.querySelector('.like-count');
+                        let currentCount = parseInt(String(countSpan.textContent || '0').replace(/[^0-9.-]+/g,""));
+                        if(action === 'like') { likedUsers.add(username); likeBtn.classList.add('liked'); likeBtn.classList.remove('btn-outline-danger'); countSpan.textContent = formatNumber(currentCount + 1); }
+                        else { likedUsers.delete(username); likeBtn.classList.remove('liked'); likeBtn.classList.add('btn-outline-danger'); countSpan.textContent = formatNumber(Math.max(0, currentCount - 1)); }
+                        localStorage.setItem('likedUsers', JSON.stringify([...likedUsers]));
+                        fetch(`/like/${username}?action=${action}`, { method:'POST' });
+                    }
+                    if (chartBtn && ui.userChartModal) { showUserHistoryChart(chartBtn.dataset.username); }
+                });
+            }
+            if (ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', handleCrawlCheck);
+            if (ui.startDuelBtn) ui.startDuelBtn.addEventListener('click', handleDuelStart);
+            if (ui.nominateBtn) { ui.nominateBtn.addEventListener('click', async () => { try { const { value: nameToNominate } = await Swal.fire({ title: 'رشح نفسك أو صديقك كزاحف', input: 'text', inputLabel: 'اكتب الاسم للترشيح', inputPlaceholder: 'الاسم المراد ترشيحه...', showCancelButton: true, confirmButtonText: 'إرسال الترشيح', cancelButtonText: 'إلغاء', inputValidator: (v) => (!v || v.trim().length === 0) && 'يجب كتابة اسم!' }); if (nameToNominate) { const res = await fetch('/api/nominate', { method: 'POST', body: new URLSearchParams({ name: nameToNominate }) }); const j = await res.json(); if (res.ok && j.success) { Swal.fire('تم!', j.message, 'success'); } else { Swal.fire('خطأ!', j.message || 'فشل إرسال طلب الترشيح.', 'error'); } } } catch (e) { console.error("Nomination error:", e); Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error'); } }); }
+            if (ui.reportBtn) { ui.reportBtn.addEventListener('click', async () => { if (!allUsersCache.length) return Swal.fire('لا يوجد زواحف للإبلاغ عنهم حالياً.', '', 'info'); const userOptions = allUsersCache.reduce((obj, user) => { obj[user.name] = user.name; return obj; }, {}); try { const result = await Swal.fire({ title: 'الإبلاغ عن زاحف', html: `<label for="swal-reported-user" class="swal2-label" style="display: block; margin-bottom: .5em;">اختر الزاحف:</label> <select id="swal-reported-user" class="swal2-select" style="min-width: 200px; margin-bottom: 1em;"></select> <label for="swal-report-reason" class="swal2-label" style="display: block; margin-bottom: .5em;">سبب الإبلاغ:</label> <textarea id="swal-report-reason" class="swal2-textarea" placeholder="اشرح المشكلة أو سبب الإبلاغ..."></textarea>`, showCancelButton: true, confirmButtonText: 'إرسال البلاغ', cancelButtonText: 'إلغاء', didOpen: () => { const select = document.getElementById('swal-reported-user'); Object.keys(userOptions).forEach(key => select.add(new Option(userOptions[key], key))); if(select.options.length > 0) select.selectedIndex = 0; }, preConfirm: () => { const user = document.getElementById('swal-reported-user').value; const reason = document.getElementById('swal-report-reason').value; if (!user) { Swal.showValidationMessage('يجب اختيار زاحف للإبلاغ عنه!'); return false; } if (!reason) { Swal.showValidationMessage('يجب كتابة سبب البلاغ!'); return false;} return { user, reason }; } }); if (result.isConfirmed && result.value) { const res = await fetch('/api/report', { method: 'POST', body: new URLSearchParams({ reported_user: result.value.user, reason: result.value.reason }) }); const j = await res.json(); if (res.ok && j.success) { Swal.fire('تم!', j.message, 'success'); } else { Swal.fire('خطأ!', j.message || 'فشل إرسال البلاغ.', 'error'); } } } catch(e) { console.error("Report error:", e); Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error'); } }); }
+        }
+        function handleCrawlCheck() { if(!ui.crawlNameInput || !ui.crawlModalTitle || !ui.crawlChartCanvas || !ui.crawlModal) return; const name = ui.crawlNameInput.value.trim(); if (!name) return Swal.fire('خطأ', 'الرجاء إدخال اسم لفحص النسبة.', 'warning'); const existingUser = allUsersCache.find(u => u.name.toLowerCase() === name.toLowerCase()); let percentage, title, text, color; if (existingUser) { const maxPoints = Math.max(...allUsersCache.map(u => u.points || 0), 1); percentage = Math.min(Math.round(((existingUser.points || 0) / maxPoints) * 100), 100); title = `نتيجة الزاحف الأصلي: ${existingUser.name}`; text = ` زاحف معتمد بنسبة🦎 ${percentage}%. ولدَ زاحفاً و  سيبقى زاحف  محتل هذه اللوحة!`; color = '#8e44ad'; } else { let hash = 0; for (let i = 0; i < name.length; i++) { hash = name.charCodeAt(i) + ((hash << 5) - hash); hash = hash & hash; } percentage = (Math.abs(hash) % 100) + 1; title = `نتيجة فحص الزحف لـِ "${name}"`; if (percentage < 30) { text = `نسبة زحفك ${percentage}%. زاحف مبتدئ، أمامك طريق للتوبة !`; color = '#2ecc71'; } else if (percentage < 50) { text = `نسبة زحفك ${percentage}%. زاحف الايزي ، كلنا عارفين قصصك لا تحاول تتغير!`; color = '#f1c40f'; } else if (percentage < 70) { text = `نسبة زحفك ${percentage}%. زاحف خرائي ، بديت تغوص ولا عودة بعد اليوم!`; color = '#f1c40f'; } else { text = `نسبة زحفك ${percentage}%. خطر على المجتمع! الله يعوض عليها بشوال رز!`; color = '#e74c3c'; } } ui.crawlModalTitle.textContent = "جاري الفحص..."; ui.crawlModalText.textContent = ""; if (crawlChartInstance) { crawlChartInstance.destroy(); } ui.crawlModal.classList.add('show'); const ctx = ui.crawlChartCanvas.getContext('2d'); setTimeout(() => { ui.crawlModalTitle.textContent = title; ui.crawlModalText.textContent = text; ui.crawlModalText.style.color = color; crawlChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['نسبة الزحف', 'نسبة البراءة'], datasets: [{ data: [percentage, 100 - percentage], backgroundColor: [color, 'rgba(255, 255, 255, 0.1)'], borderColor: 'var(--card-bg)', borderWidth: 4 }] }, options: { animation: { animateRotate: true, duration: 2000 }, responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: false } } } }); }, 1500); }
+        async function showUserHistoryChart(username) { if(!ui.userChartModal || !ui.chartModalLabel || !ui.userPointsChartCanvas) return; try { const response = await fetch(`/api/user_history/${username}`); if(!response.ok) throw new Error("Failed to fetch history"); let history = await response.json(); if(!history || !history.length) { return Swal.fire({icon: 'info', title: 'لا توجد بيانات', text: 'لا يوجد سجل نقاط لهذا الزاحف بعد.'}); } ui.chartModalLabel.innerText = `تقدم الزاحف: ${username}`; if (userChartInstance) userChartInstance.destroy(); const chartContext = ui.userPointsChartCanvas.getContext('2d'); const gradient = chartContext.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(0, 242, 255, 0.4)'); gradient.addColorStop(1, 'rgba(159, 122, 234, 0.1)'); userChartInstance = new Chart(chartContext, { type: 'line', data: { labels: history.map(h => new Date(h.timestamp * 1000).toLocaleDateString('ar-EG', { day: '2-digit', month: 'short', hour:'2-digit', minute:'2-digit'})), datasets: [{ label: 'النقاط', data: history.map(h => h.points), fill: true, backgroundColor: gradient, borderColor: '#00f2ff', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#00f2ff', pointRadius: 5, pointHoverRadius: 8, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }, x: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { display: false } } }, plugins: { legend: { display: false }, tooltip: { titleFont: { family: "Almarai" }, bodyFont: { family: "Almarai" } } } } }); ui.userChartModal.classList.add('show'); } catch(e) { console.error("User History Chart Error:", e); Swal.fire('خطأ', 'لم نتمكن من جلب أو عرض سجل نقاط هذا الزاحف.', 'error'); } }
+        function handleDuelStart() { if (!ui.duelUser1Select || !ui.duelUser2Select || !ui.fighter1Name || !ui.fighter2Name || !ui.fighter1Health || !ui.fighter2Health || !ui.duelResultText || !ui.fighter1Div || !ui.fighter2Div || !ui.duelModal) return; const name1 = ui.duelUser1Select.value; const name2 = ui.duelUser2Select.value; if (!name1 || !name2) return Swal.fire('خطأ!', 'الرجاء التأكد من وجود زواحف في القائمة أولاً.', 'error'); if (name1 === name2) return Swal.fire('لا يمكنك مواجهة نفس الزاحف!', 'الرجاء اختيار زاحفين مختلفين.', 'warning'); ui.fighter1Name.textContent = name1; ui.fighter2Name.textContent = name2; ui.fighter1Health.style.width = '100%'; ui.fighter2Health.style.width = '100%'; ui.duelResultText.textContent = ''; ui.fighter1Div.classList.remove('fighting'); ui.fighter2Div.classList.remove('fighting'); ui.duelModal.classList.add('show'); const winner = Math.random() < 0.5 ? 1 : 2; setTimeout(() => { ui.fighter1Div.classList.add('fighting'); ui.fighter2Div.classList.add('fighting'); ui.duelResultText.textContent = 'الزحفنة تبدأ...!'; if (winner === 1) { ui.fighter2Health.style.width = '0%'; } else { ui.fighter1Health.style.width = '0%'; } }, 500); setTimeout(() => { ui.fighter1Div.classList.remove('fighting'); ui.fighter2Div.classList.remove('fighting'); const winnerName = winner === 1 ? name1 : name2; ui.duelResultText.innerHTML = `🏆 الزاحف الاكبر هو: <strong>${winnerName}</strong> 🏆`; }, 2500); }
 
-        if (ui.reportBtn) {
-            ui.reportBtn.addEventListener('click', async () => {
-                if (!allUsersCache.length) return Swal.fire('لا يوجد زواحف للإبلاغ عنهم حالياً.', '', 'info');
-                const userOptions = allUsersCache.reduce((obj, user) => { obj[user.name] = user.name; return obj; }, {});
-                try {
-                    const result = await Swal.fire({
-                        title: 'الإبلاغ عن زاحف',
-                        html: `<label for="swal-reported-user" class="swal2-label" style="display: block; margin-bottom: .5em;">اختر الزاحف:</label> <select id="swal-reported-user" class="swal2-select" style="min-width: 200px; margin-bottom: 1em;"></select> <label for="swal-report-reason" class="swal2-label" style="display: block; margin-bottom: .5em;">سبب الإبلاغ:</label> <textarea id="swal-report-reason" class="swal2-textarea" placeholder="اشرح المشكلة أو سبب الإبلاغ..."></textarea>`,
-                        showCancelButton: true, confirmButtonText: 'إرسال البلاغ', cancelButtonText: 'إلغاء',
-                        didOpen: () => {
-                            const select = document.getElementById('swal-reported-user');
-                            Object.keys(userOptions).forEach(key => select.add(new Option(userOptions[key], key)));
-                            if(select.options.length > 0) select.selectedIndex = 0;
-                        },
-                        preConfirm: () => {
-                            const user = document.getElementById('swal-reported-user').value;
-                            const reason = document.getElementById('swal-report-reason').value;
-                            if (!user) { Swal.showValidationMessage('يجب اختيار زاحف للإبلاغ عنه!'); return false; }
-                            if (!reason) { Swal.showValidationMessage('يجب كتابة سبب البلاغ!'); return false;}
-                            return { user, reason };
-                        }
-                    });
-                    if (result.isConfirmed && result.value) {
-                        const res = await fetch('/api/report', { method: 'POST', body: new URLSearchParams({ reported_user: result.value.user, reason: result.value.reason, visitor_name: visitorName }) });
-                        const j = await res.json();
-                         if (j.action === "ban") {
-                            await Swal.fire({ title: 'محظور!', text: j.message, icon: 'error' });
-                            window.location.reload();
-                        } else if (res.ok && j.success) {
-                            Swal.fire('تم!', j.message, 'success');
-                        } else {
-                            Swal.fire('خطأ!', j.message || 'فشل إرسال البلاغ.', 'error');
-                        }
-                    }
-                } catch(e) {
-                    console.error("Report error:", e);
-                    Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');
-                }
-            });
-        }
+        setupApp();
     }
-
-    function handleCrawlCheck() { if(!ui.crawlNameInput || !ui.crawlModalTitle || !ui.crawlChartCanvas || !ui.crawlModal) return; const name = ui.crawlNameInput.value.trim(); if (!name) return Swal.fire('خطأ', 'الرجاء إدخال اسم لفحص النسبة.', 'warning'); const existingUser = allUsersCache.find(u => u.name.toLowerCase() === name.toLowerCase()); let percentage, title, text, color; if (existingUser) { const maxPoints = Math.max(...allUsersCache.map(u => u.points || 0), 1); percentage = Math.min(Math.round(((existingUser.points || 0) / maxPoints) * 100), 100); title = `نتيجة الزاحف الأصلي: ${existingUser.name}`; text = ` زاحف معتمد بنسبة🦎 ${percentage}%. ولدَ زاحفاً و  سيبقى زاحف  محتل هذه اللوحة!`; color = '#8e44ad'; } else { let hash = 0; for (let i = 0; i < name.length; i++) { hash = name.charCodeAt(i) + ((hash << 5) - hash); hash = hash & hash; } percentage = (Math.abs(hash) % 100) + 1; title = `نتيجة فحص الزحف لـِ "${name}"`; if (percentage < 30) { text = `نسبة زحفك ${percentage}%. زاحف مبتدئ، أمامك طريق للتوبة !`; color = '#2ecc71'; } else if (percentage < 50) { text = `نسبة زحفك ${percentage}%. زاحف الايزي ، كلنا عارفين قصصك لا تحاول تتغير!`; color = '#f1c40f'; } else if (percentage < 70) { text = `نسبة زحفك ${percentage}%. زاحف خرائي ، بديت تغوص ولا عودة بعد اليوم!`; color = '#f1c40f'; } else { text = `نسبة زحفك ${percentage}%. خطر على المجتمع! الله يعوض عليها بشوال رز!`; color = '#e74c3c'; } } ui.crawlModalTitle.textContent = "جاري الفحص..."; ui.crawlModalText.textContent = ""; if (crawlChartInstance) { crawlChartInstance.destroy(); } ui.crawlModal.classList.add('show'); const ctx = ui.crawlChartCanvas.getContext('2d'); setTimeout(() => { ui.crawlModalTitle.textContent = title; ui.crawlModalText.textContent = text; ui.crawlModalText.style.color = color; crawlChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['نسبة الزحف', 'نسبة البراءة'], datasets: [{ data: [percentage, 100 - percentage], backgroundColor: [color, 'rgba(255, 255, 255, 0.1)'], borderColor: 'var(--card-bg)', borderWidth: 4 }] }, options: { animation: { animateRotate: true, duration: 2000 }, responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: false } } } }); }, 1500); }
-    async function showUserHistoryChart(username) { if(!ui.userChartModal || !ui.chartModalLabel || !ui.userPointsChartCanvas) return; try { const response = await fetch(`/api/user_history/${username}`); if(!response.ok) throw new Error("Failed to fetch history"); let history = await response.json(); if(!history || !history.length) { return Swal.fire({icon: 'info', title: 'لا توجد بيانات', text: 'لا يوجد سجل نقاط لهذا الزاحف بعد.'}); } if (history.length === 1) { const firstPoint = history[0]; history.unshift({ points: firstPoint.points, timestamp: firstPoint.timestamp - (24 * 60 * 60) }); } ui.chartModalLabel.innerText = `تقدم الزاحف: ${username}`; if (userChartInstance) userChartInstance.destroy(); const chartContext = ui.userPointsChartCanvas.getContext('2d'); const gradient = chartContext.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(0, 242, 255, 0.4)'); gradient.addColorStop(1, 'rgba(159, 122, 234, 0.1)'); userChartInstance = new Chart(chartContext, { type: 'line', data: { labels: history.map(h => new Date(h.timestamp * 1000).toLocaleDateString('ar-EG', { day: '2-digit', month: 'short', hour:'2-digit', minute:'2-digit'})), datasets: [{ label: 'النقاط', data: history.map(h => h.points), fill: true, backgroundColor: gradient, borderColor: '#00f2ff', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#00f2ff', pointRadius: 5, pointHoverRadius: 8, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }, x: { ticks: { color: 'var(--text-color)', font: { family: "Almarai" } }, grid: { display: false } } }, plugins: { legend: { display: false }, tooltip: { titleFont: { family: "Almarai" }, bodyFont: { family: "Almarai" } } } } }); ui.userChartModal.classList.add('show'); } catch(e) { console.error("User History Chart Error:", e); Swal.fire('خطأ', 'لم نتمكن من جلب أو عرض سجل نقاط هذا الزاحف.', 'error'); } }
-    function handleDuelStart() { if (!ui.duelUser1Select || !ui.duelUser2Select || !ui.fighter1Name || !ui.fighter2Name || !ui.fighter1Health || !ui.fighter2Health || !ui.duelResultText || !ui.fighter1Div || !ui.fighter2Div || !ui.duelModal) return; const name1 = ui.duelUser1Select.value; const name2 = ui.duelUser2Select.value; if (!name1 || !name2) return Swal.fire('خطأ!', 'الرجاء التأكد من وجود زواحف في القائمة أولاً.', 'error'); if (name1 === name2) return Swal.fire('لا يمكنك مواجهة نفس الزاحف!', 'الرجاء اختيار زاحفين مختلفين.', 'warning'); ui.fighter1Name.textContent = name1; ui.fighter2Name.textContent = name2; ui.fighter1Health.style.width = '100%'; ui.fighter2Health.style.width = '100%'; ui.duelResultText.textContent = ''; ui.fighter1Div.classList.remove('fighting'); ui.fighter2Div.classList.remove('fighting'); ui.duelModal.classList.add('show'); const winner = Math.random() < 0.5 ? 1 : 2; setTimeout(() => { ui.fighter1Div.classList.add('fighting'); ui.fighter2Div.classList.add('fighting'); ui.duelResultText.textContent = 'الزحفنة تبدأ...!'; if (winner === 1) { ui.fighter2Health.style.width = '0%'; } else { ui.fighter1Health.style.width = '0%'; } }, 500); setTimeout(() => { ui.fighter1Div.classList.remove('fighting'); ui.fighter2Div.classList.remove('fighting'); const winnerName = winner === 1 ? name1 : name2; ui.duelResultText.innerHTML = `🏆 الزاحف الاكبر هو: <strong>${winnerName}</strong> 🏆`; }, 2500); }
 
     initializeApp();
 });
 </script>
 {% endblock %}
-<!-- END OF FILE user_view.html -->
+<!-- END OF FILE templates/user_view.html -->

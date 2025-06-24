@@ -1,10 +1,9 @@
-<!-- START OF FILE login.html -->
+<!-- START OF FILE templates/login.html -->
 {% extends "base.html" %} {% block title %}تسجيل الدخول{% endblock %} {% block
 header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% endblock %}
 
 {% block styles %}
 <style>
-    /* --- START: NEW ANNOUNCEMENTS CAROUSEL STYLES --- */
     .announcements-wrapper {
         opacity: 0;
         transform: translateY(20px);
@@ -30,7 +29,6 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
         background: linear-gradient(135deg, #6b46c1, #2b6cb0);
     }
 
-
     #announcementsCarousel .carousel-inner {
         padding: 2.5rem 4rem;
         text-align: center;
@@ -42,13 +40,12 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
         color: #fff;
     }
 
-    /* Improved carousel item fade transition */
     #announcementsCarousel .carousel-item {
         transition: opacity 0.8s ease-in-out;
         opacity: 0;
         position: absolute;
         width: 100%;
-        display: block; /* Override Bootstrap's display none */
+        display: block;
     }
 
         #announcementsCarousel .carousel-item.active {
@@ -68,8 +65,7 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
         text-shadow: none;
     }
 
-    #announcementsCarousel .carousel-control-prev,
-    #announcementsCarousel .carousel-control-next {
+    #announcementsCarousel .carousel-control-prev, #announcementsCarousel .carousel-control-next {
         width: 5%;
         background: rgba(0,0,0,0.1);
     }
@@ -83,13 +79,10 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
         border-top-left-radius: 0.75rem;
         border-bottom-left-radius: 0.75rem;
     }
-    /* --- END: NEW ANNOUNCEMENTS CAROUSEL STYLES --- */
-
 </style>
 {% endblock %}
 
 {% block content %}
-
 {% if announcements and announcements|length > 0 %}
 <div class="row justify-content-center mb-5 announcements-wrapper">
     <div class="col-lg-10 col-xl-8">
@@ -103,34 +96,31 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
                 {% endfor %}
             </div>
             {% if announcements|length > 1 %}
-            <button class="carousel-control-prev" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="prev">
-                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                <span class="visually-hidden">Previous</span>
-            </button>
-            <button class="carousel-control-next" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="next">
-                <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                <span class="visually-hidden">Next</span>
-            </button>
+            <button class="carousel-control-prev" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="prev"><span class="carousel-control-prev-icon" aria-hidden="true"></span><span class="visually-hidden">Previous</span></button>
+            <button class="carousel-control-next" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="next"><span class="carousel-control-next-icon" aria-hidden="true"></span><span class="visually-hidden">Next</span></button>
             {% endif %}
         </div>
     </div>
 </div>
 {% endif %}
 
-
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-5">
         <div class="card p-4 shadow-lg">
             <div class="card-body">
-                <h5 class="card-title text-center mb-4 fs-4">دخول المسؤول</h5>
+                <h5 class="card-title text-center mb-4 fs-4">تسجيل الدخول</h5>
                 <form id="loginForm">
+                    <div class="form-floating mb-3">
+                        <input type="email" class="form-control" id="email" name="email" placeholder="البريد الإلكتروني" required />
+                        <label for="email">البريد الإلكتروني</label>
+                    </div>
                     <div class="form-floating mb-3">
                         <input type="password" class="form-control" id="password" name="password" placeholder="كلمة المرور" required />
                         <label for="password">كلمة المرور</label>
                     </div>
                     <div class="d-grid gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-shield-lock-fill me-2"></i> دخول كمسؤول</button>
-                        <a href="{{ url_for('user_view') }}" class="btn btn-outline-success btn-lg"><i class="bi bi-eye-fill me-2"></i> عرض قائمة نقاط لزواحف</a>
+                        <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-box-arrow-in-right me-2"></i> دخول</button>
+                        <a href="{{ url_for('register_page') }}" class="btn btn-outline-success btn-lg"><i class="bi bi-person-plus-fill me-2"></i> إنشاء حساب جديد</a>
                     </div>
                 </form>
             </div>
@@ -138,23 +128,7 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
     </div>
 </div>
 <div class="row justify-content-center mt-5">
-    <div class="col-lg-8">
-        <div class="card bg-transparent border-0 text-center">
-            <div class="card-body">
-                <hr style="border-color: var(--card-border); opacity: 0.5;">
-                <p class="text-muted mt-4 fs-6 lh-lg">
-                    هذا النظام مخصص لمتابعة وتحديث نقاط الزواحف في كلية ال IT بشكل دوري و نظم معينة و حقائق تم
-                    جمعها من قبل اشخاص و شهود قائمة على ادله و براهين.
-                    <br>
-                    يمكنم مشاركة الاسماء و سيتم رفعها مع وجود ادلة و براهين  و سيتم حسابها بمعادلة معينة.
-                    <br>
-                    الرجاء اخذ الموقع  بمزح و دون شخصنة و دون الاساءة باي الحالات  عشان ما افضح عرض رخيص او زاحف
-                    <br />
-                    نأمل أن يعجبكم النظام و يكون مفيدًا وسهل الاستخدام.
-                </p>
-            </div>
-        </div>
-    </div>
+    <div class="col-lg-8"><div class="card bg-transparent border-0 text-center"><div class="card-body"><hr style="border-color: var(--card-border); opacity: 0.5;"><p class="text-muted mt-4 fs-6 lh-lg">هذا النظام مخصص لمتابعة وتحديث نقاط الزواحف في كلية ال IT بشكل دوري و نظم معينة و حقائق تم جمعها من قبل اشخاص و شهود قائمة على ادله و براهين.<br>يمكنم مشاركة الاسماء و سيتم رفعها مع وجود ادلة و براهين  و سيتم حسابها بمعادلة معينة.<br>الرجاء اخذ الموقع  بمزح و دون شخصنة و دون الاساءة باي الحالات  عشان ما افضح عرض رخيص او زاحف<br />نأمل أن يعجبكم النظام و يكون مفيدًا وسهل الاستخدام.</p></div></div></div>
 </div>
 {% endblock %}
 
@@ -163,16 +137,50 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
 <script>
   document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const btn = e.submitter, original = btn.innerHTML;
-    btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+    const btn = e.submitter, originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> جارِ الدخول...`;
+
     try {
-      const res = await fetch("{{ url_for('login') }}", { method: "POST", body: new FormData(e.target) });
-      const j = await res.json();
-      if (j.success) window.location.href = j.redirect_url;
-      else Swal.fire({ icon: "error", title: "خطأ", text: j.message });
-    } catch { Swal.fire("خطأ!", "فشل الاتصال بالخادم.", "error"); }
-    finally { btn.disabled = false; btn.innerHTML = original; }
+      const response = await fetch("{{ url_for('login_page') }}", {
+          method: "POST",
+          body: new FormData(e.target)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+          // --- START: الكود الجديد لحفظ التوكن (الحل الرئيسي) ---
+          if (data.token) {
+            // نخزن التوكن الذي أرسله الخادم في sessionStorage
+            // ليتم استخدامه في الصفحات التالية للمصادقة مع Firebase
+            sessionStorage.setItem('firebaseToken', data.token);
+          } else {
+            // هذا لا يجب أن يحدث، ولكنه إجراء احترازي
+            throw new Error("لم يتم استلام توكن المصادقة من الخادم.");
+          }
+          // --- END: الكود الجديد لحفظ التوكن ---
+
+          // الانتقال إلى الصفحة التالية
+          window.location.href = data.redirect_url;
+      } else {
+          Swal.fire({
+              icon: "error",
+              title: "خطأ في الدخول",
+              text: data.message
+          });
+      }
+    } catch(err) {
+        Swal.fire({
+            icon: "error",
+            title: "خطأ!",
+            text: err.message || "فشل الاتصال بالخادم. يرجى المحاولة مرة أخرى."
+        });
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
   });
 </script>
 {% endblock %}
-<!-- END OF FILE login.html -->
+<!-- END OF FILE templates/login.html -->
