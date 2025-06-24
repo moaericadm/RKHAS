@@ -162,22 +162,36 @@ def register_page():
         email = request.form.get('email', '').strip().lower()
         phone = request.form.get('phone_number', '').strip()
         password = request.form.get('password', '')
+        password_confirm = request.form.get('password_confirm', '')
 
-        if not all([name, email, phone, password]):
-            return jsonify(success=False, message="جميع الحقول مطلوبة.")
+        # --- التحقق الشامل من المدخلات ---
+        if not all([name, email, phone, password, password_confirm]):
+            return jsonify(success=False, message="جميع الحقول مطلوبة."), 400
 
+        if password != password_confirm:
+            return jsonify(success=False, message="كلمتا المرور غير متطابقتين."), 400
+
+        if len(password) < 6:
+            return jsonify(success=False, message="كلمة المرور يجب أن تتكون من 6 أحرف على الأقل."), 400
+            
+        if not re.match(r'^\+[1-9]\d{6,14}$', phone):
+            return jsonify(success=False, message="رقم الهاتف غير صالح. يجب أن يكون بالصيغة الدولية ويبدأ بعلامة + (مثال: +962791234567)."), 400
+        
         admin_email = os.getenv('ADMIN_EMAIL')
         is_admin_registering = admin_email and email == admin_email
 
         try:
+            # --- محاولة إنشاء الحساب في Firebase ---
             new_auth_user = auth.create_user(
                 email=email,
                 phone_number=phone,
                 display_name=name,
+                password=password, # إرسال كلمة المرور مباشرة ليقوم Firebase بالتحقق منها
                 disabled=not is_admin_registering
             )
             uid = new_auth_user.uid
 
+            # --- تخزين كلمة المرور المشفرة في قاعدة البيانات الخاصة بك ---
             hashed_password = generate_password_hash(password)
             
             user_ref = ref_registered_users.child(uid)
@@ -193,13 +207,21 @@ def register_page():
             }
             user_ref.set(user_data)
         
+        # --- معالجة الأخطاء المحددة من Firebase ---
         except auth.EmailAlreadyExistsError:
             return jsonify(success=False, message="هذا البريد الإلكتروني مسجل بالفعل."), 409
         except auth.PhoneNumberAlreadyExistsError:
              return jsonify(success=False, message="رقم الهاتف هذا مسجل بالفعل."), 409
+        except auth.InvalidEmailError:
+             return jsonify(success=False, message="صيغة البريد الإلكتروني غير صالحة."), 400
+        except auth.InvalidPasswordError:
+             return jsonify(success=False, message="كلمة المرور ضعيفة جداً أو غير صالحة. يجب أن تتكون من 6 أحرف على الأقل."), 400
+        except auth.AuthError as e:
+            print(f"!!! Firebase Auth Error during registration: {e}", file=sys.stderr)
+            return jsonify(success=False, message="حدث خطأ غير متوقع في المصادقة. يرجى المحاولة مرة أخرى."), 400
         except Exception as e:
-            print(f"!!! Registration Error: {e}", file=sys.stderr)
-            return jsonify(success=False, message="حدث خطأ غير متوقع أثناء التسجيل."), 500
+            print(f"!!! Generic Registration Error: {e}", file=sys.stderr)
+            return jsonify(success=False, message="حدث خطأ غير متوقع في الخادم أثناء التسجيل."), 500
         
         message = "تم تسجيل حساب الأدمن بنجاح. يمكنك الآن تسجيل الدخول." if is_admin_registering else "تم إرسال طلب تسجيلك بنجاح. ستتم مراجعته من قبل الإدارة."
         return jsonify(success=True, message=message)
@@ -563,5 +585,3 @@ def donate_points_api():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-# --- END OF FILE app.py ---
