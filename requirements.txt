@@ -2,3 +2,5 @@ Flask
 gunicorn
 firebase-admin
 python-dotenv
+Pyrebase4
+requests

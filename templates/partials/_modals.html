@@ -1,0 +1,85 @@
+﻿<!-- START OF FILE templates/partials/_modals.html -->
+<!-- Spin Wheel Modal -->
+<div id="spinWheelModal" class="custom-modal">
+    <div class="custom-modal-content">
+        <span class="custom-close-btn">×</span>
+        <div id="wheel-container">
+            <canvas id="spin-canvas" width="450" height="450">
+                <p>عذراً, متصفحك لا يدعم هذه الميزة (Canvas).</p>
+            </canvas>
+        </div>
+    </div>
+</div>
+
+<!-- User History Chart Modal -->
+<div id="userChartModal" class="custom-modal">
+    <div class="custom-modal-content">
+        <span class="custom-close-btn">×</span>
+        <h5 class="mb-3" id="chartModalLabel">سجل نقاط الزاحف</h5>
+        <div id="user-chart-container" style="height: 300px;">
+            <canvas id="userPointsChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Crawl Detector Modal -->
+<div id="crawlModal" class="custom-modal">
+    <div class="custom-modal-content text-center">
+        <span class="custom-close-btn">×</span>
+        <h3 class="mb-3" id="crawl-modal-title">نتيجة فحص الزحفنة</h3>
+        <div id="crawl-chart-container" style="height: 250px; max-width: 250px; margin: auto;">
+            <canvas id="crawlChart"></canvas>
+        </div>
+        <p id="crawl-modal-text" class="fs-5 mt-3 fw-bold"></p>
+    </div>
+</div>
+
+<!-- Investment Modal -->
+<div id="investmentModal" class="custom-modal">
+    <div class="custom-modal-content">
+        <span class="custom-close-btn">×</span>
+        <h4 class="mb-3 text-center">الاستثمار في <strong id="invest-crawler-name" class="text-info"></strong></h4>
+        <p class="text-muted text-center">أدخل كمية نقاط الزحف الداعم (SP) التي ترغب في استثمارها.</p>
+        <form id="investment-form">
+            <input type="hidden" id="invest-crawler-name-hidden" name="crawler_name">
+            <div class="form-floating mb-3">
+                <input type="number" id="sp-amount-input" name="sp_amount" class="form-control" placeholder="كمية SP" required min="1">
+                <label for="sp-amount-input">كمية SP للاستثمار</label>
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary">تأكيد الاستثمار الزاحف </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- *** الإضافة الجديدة هنا: نافذة معلومات الاستثمار *** -->
+<div id="investmentInfoModal" class="custom-modal">
+    <div class="custom-modal-content">
+        <span class="custom-close-btn" data-bs-dismiss="modal" aria-label="Close">×</span>
+        <h4 class="mb-3 text-center">تفاصيل استثمارك في <strong id="infoModalCrawlerName" class="text-info"></strong></h4>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item d-flex justify-content-between">
+                <span>المبلغ المستثمر:</span>
+                <strong id="infoModalInvestedSP">--</strong>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>نقاط السهم عند الشراء:</span>
+                <strong id="infoModalPointsThen">--</strong>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>نقاط السهم الحالية:</span>
+                <strong id="infoModalPointsNow">--</strong>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>الربح / الخسارة:</span>
+                <strong id="infoModalProfitLoss">--</strong>
+            </li>
+        </ul>
+        <div class="d-grid mt-4">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">ازحف برا</button>
+        </div>
+    </div>
+</div>
+<!-- END OF FILE templates/partials/_modals.html -->

@@ -4,9 +4,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}نظام النقاط{% endblock %} -  زواحف افاق كلية ال (IT)</title>
+    <title>{% block title %}الزواحف{% endblock %} - نظام نقاط IT</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
@@ -37,7 +40,7 @@
         }
 
         body {
-            font-family: "Almarai", sans-serif;
+            font-family: "Almarai", Tahoma, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
         }
@@ -75,6 +78,10 @@
             text-shadow: 0 0 10px var(--header-color);
         }
 
+        .card-body, .card-body p {
+            color: var(--text-color);
+        }
+
         .btn-primary {
             background: linear-gradient(45deg, var(--secondary-glow), var(--primary-glow));
             border: none;
@@ -89,16 +96,22 @@
                 box-shadow: 0 6px 20px -5px var(--primary-glow);
             }
 
+        .form-control, .form-label, .form-text {
+            color: var(--text-color);
+        }
+
+        html:not(.dark-mode) .form-label, html:not(.dark-mode) .form-text {
+            color: var(--text-color);
+        }
+
         .form-control {
             background-color: rgba(11, 2, 29, 0.5);
             border: 1px solid var(--card-border);
-            color: var(--text-color);
         }
 
         html:not(.dark-mode) .form-control {
             background-color: #fff;
             border-color: #d0d7de;
-            color: var(--text-color);
         }
 
         .form-control:focus {
@@ -110,18 +123,6 @@
         html:not(.dark-mode) .form-control:focus {
             box-shadow: 0 0 0 0.25rem rgba(107, 70, 193, 0.25);
             border-color: var(--primary-glow);
-        }
-
-        .table {
-            --bs-table-color: var(--text-color);
-            --bs-table-striped-bg: rgba(159, 122, 234, 0.05);
-            --bs-table-hover-bg: rgba(159, 122, 234, 0.1);
-        }
-
-        html:not(.dark-mode) .table {
-            --bs-table-color: var(--text-color);
-            --bs-table-striped-bg: rgba(0,0,0,0.03);
-            --bs-table-hover-bg: rgba(0,0,0,0.06);
         }
 
         .swal2-popup {
@@ -146,9 +147,116 @@
             border-color: #d0d7de !important;
         }
 
+        .list-group-item {
+            background-color: transparent !important;
+            border-color: var(--card-border) !important;
+            color: var(--text-color) !important;
+        }
+
+        .table, .table td, .table th {
+            color: var(--text-color);
+            vertical-align: middle;
+        }
+
+        .table-hover > tbody > tr:hover > * {
+            color: var(--text-color);
+            background-color: rgba(159, 122, 234, 0.1);
+        }
+
+        .nav-tabs .nav-link {
+            color: var(--text-muted-color);
+            border: 1px solid transparent;
+            border-bottom-color: var(--card-border);
+        }
+
+            .nav-tabs .nav-link:hover, .nav-tabs .nav-link:focus {
+                color: var(--text-color);
+                border-color: var(--card-border);
+                isolation: isolate;
+            }
+
+            .nav-tabs .nav-link.active {
+                color: var(--primary-glow);
+                background-color: var(--card-bg);
+                border-color: var(--card-border) var(--card-border) transparent;
+            }
+
+        html:not(.dark-mode) .nav-tabs .nav-link.active {
+            border-color: #dee2e6 #dee2e6 #fff;
+        }
+
+        .nav-pills .nav-link {
+            color: var(--text-muted-color);
+        }
+
+            .nav-pills .nav-link.active {
+                background-color: var(--primary-glow);
+            }
+
+        a {
+            color: var(--secondary-glow);
+            text-decoration: none;
+        }
+
+            a:hover {
+                color: var(--primary-glow);
+            }
+
+            .btn a, a.btn {
+                color: inherit !important;
+                text-decoration: none !important;
+            }
+
+        .btn-outline-secondary {
+            color: var(--text-muted-color);
+            border-color: var(--text-muted-color);
+        }
+
+            .btn-outline-secondary:hover {
+                color: #fff;
+                background-color: var(--text-muted-color);
+                border-color: var(--text-muted-color);
+            }
+
         .container {
             z-index: 10;
             position: relative;
+        }
+
+        .main-header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        @keyframes flash-up-animation {
+            from {
+                background-color: rgba(40, 167, 69, 0.4);
+            }
+
+            to {
+                background-color: transparent;
+            }
+        }
+
+        .flash-up {
+            animation: flash-up-animation 2s ease-out;
+        }
+
+        @keyframes flash-down-animation {
+            from {
+                background-color: rgba(220, 53, 69, 0.4);
+            }
+
+            to {
+                background-color: transparent;
+            }
+        }
+
+        .flash-down {
+            animation: flash-down-animation 2s ease-out;
         }
     </style>
     {% block styles %}{% endblock %}
@@ -157,55 +265,105 @@
 <body>
     <div id="particles-js"></div>
     <div class="container mt-5 mb-5">
-        <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom" style="border-color: var(--card-border) !important">
-            <h1 class="h3 fw-bold" style="color: var(--header-color); text-shadow: 0 0 10px var(--header-color);">{% block header_title %}{% endblock %}</h1>
-            <div class="d-flex align-items-center">
+        <header class="main-header mb-4 pb-3 border-bottom" style="border-color: var(--card-border) !important">
+            <h1 class="h3 fw-bold mb-0" style="color: var(--header-color); text-shadow: 0 0 10px var(--header-color);">{% block header_title %}الزواحف{% endblock %}</h1>
+            <div class="d-flex align-items-center gap-2">
                 {% if session.logged_in %}
-                <span class="me-3 d-none d-md-inline">أهلاً، {{ session.name }}</span>
+                <span class="me-2 d-none d-md-inline">أهلاً، {{ session.name }}</span>
+                <a href="{{ url_for('views.user_view') }}" class="btn btn-sm btn-outline-info"><i class="bi bi-graph-up-arrow me-1"></i> بالة الزواحف</a>
+                <a href="{{ url_for('views.shop_page') }}" class="btn btn-sm btn-outline-success"><i class="bi bi-shop me-1"></i> المتجر الزحفي</a>
+                <a href="{{ url_for('views.guide_page') }}" class="btn btn-sm btn-outline-warning"><i class="bi bi-question-circle-fill me-1"></i> الدليل</a>
                 {% if session.role == 'admin' %}
-                <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-info me-2">لوحة التحكم</a>
-                <!-- START: الإضافة الجديدة لزر التنقل -->
-                <a href="{{ url_for('user_view') }}" class="btn btn-outline-primary me-2">عرض قائمة الزواحف</a>
-                <!-- END: الإضافة الجديدة -->
-                {% else %}
-                <a href="{{ url_for('user_view') }}" class="btn btn-outline-info me-2">قائمة الزواحف</a>
+                <a href="{{ url_for('views.admin_panel') }}" class="btn btn-sm btn-outline-light"><i class="bi bi-shield-lock-fill me-1"></i> لوحة التحكم</a>
                 {% endif %}
-                <a href="{{ url_for('logout') }}" class="btn btn-danger me-2">خروج</a>
+                <!-- ***  התיקון כאן | THE FIX IS HERE  *** -->
+                <!-- تم تغيير الرابط ليكون له ID لتسهيل الوصول إليه من JavaScript -->
+                <a id="logout-btn" href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-danger"><i class="bi bi-box-arrow-right"></i></a>
                 {% endif %}
-                <button class="btn btn-outline-secondary" id="theme-toggle" title="تبديل المظهر"><i class="bi bi-moon-stars-fill d-none" id="moon-icon"></i><i class="bi bi-sun-fill d-none" id="sun-icon"></i></button>
+                <button class="btn btn-outline-secondary btn-sm" id="theme-toggle" title="تبديل المظهر">
+                    <i class="bi bi-moon-stars-fill" id="moon-icon" style="display: none;"></i>
+                    <i class="bi bi-sun-fill" id="sun-icon" style="display: none;"></i>
+                </button>
             </div>
         </header>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
         {% block content %}{% endblock %}
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js" defer></script>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
 
     <script>
-      try {
-        const firebaseConfigStr = '{{ firebase_config | tojson | safe }}';
-        if (!firebaseConfigStr || firebaseConfigStr === '"{}"' || firebaseConfigStr === '{}') {
-          throw new Error("إعدادات Firebase غير موجودة في الخادم.");
+      document.addEventListener('DOMContentLoaded', () => {
+        try {
+          const firebaseConfigStr = '{{ firebase_config | tojson | safe }}';
+          if (!firebaseConfigStr || firebaseConfigStr === '"{}"' || firebaseConfigStr === '{}') throw new Error("إعدادات Firebase غير موجودة في الخادم.");
+
+          window.firebaseConfig = JSON.parse(firebaseConfigStr);
+          if (!window.firebaseConfig.apiKey) throw new Error("مفتاح API الخاص بـ Firebase (apiKey) مفقود في الإعدادات.");
+
+          if (!firebase.apps.length) {
+              firebase.initializeApp(window.firebaseConfig);
+              console.log("Firebase App Initialized Successfully.");
+              document.dispatchEvent(new Event('firebase-ready'));
+          } else {
+              document.dispatchEvent(new Event('firebase-ready'));
+          }
+        } catch(e) {
+          console.error("Critical Firebase Config Error:", e.message);
+          const errorContainer = document.querySelector('.container') || document.body;
+          if (errorContainer) {
+              const alertHtml = `<div class="alert alert-danger m-3"><strong>فشل حاسم في تحميل إعدادات التطبيق:</strong> ${e.message}<br>لا يمكن للتطبيق العمل بدون هذه الإعدادات. يرجى مراجعة مسؤول النظام.</div>`;
+              const mainContent = document.querySelector('.tab-content, .row');
+              if (mainContent) {
+                  mainContent.innerHTML = alertHtml;
+              } else {
+                  errorContainer.innerHTML = alertHtml;
+              }
+          }
         }
-        window.firebaseConfig = JSON.parse(firebaseConfigStr);
-        if (!window.firebaseConfig.apiKey) {
-          throw new Error("مفتاح API الخاص بـ Firebase (apiKey) مفقود في الإعدادات.");
-        }
-      } catch(e) {
-        console.error("Critical Firebase Config Error:", e.message);
-        const errorContainer = document.querySelector('.container') || document.body;
-        if (errorContainer) {
-            errorContainer.innerHTML = `<div class="alert alert-danger m-3">
-                <strong>فشل حاسم في تحميل إعدادات التطبيق:</strong> ${e.message}<br>
-                لا يمكن للتطبيق العمل بدون هذه الإعدادات. يرجى مراجعة مسؤول النظام.
-            </div>`;
-        }
-      }
+      });
+    </script>
+
+    <script>
+        document.addEventListener('firebase-ready', () => {
+            const currentUserId = {{ current_user_id | tojson | safe }};
+            const currentUserName = {{ current_user_name | tojson | safe }};
+            const currentUserRole = {{ session.role | default(none) | tojson | safe }};
+
+            // لا تقم بتسجيل حالة الاتصال إذا كان المستخدم هو الأدمن
+            if (currentUserId && currentUserName && currentUserRole !== 'admin') {
+                const db = firebase.database();
+                const userStatusRef = db.ref('/online_visitors/' + currentUserId);
+
+                db.ref('.info/connected').on('value', (snapshot) => {
+                    if (snapshot.val() === true) {
+                        userStatusRef.set({ name: currentUserName, online_since: firebase.database.ServerValue.TIMESTAMP });
+                        userStatusRef.onDisconnect().remove();
+                    }
+                });
+            }
+        });
     </script>
 
     <script>
       const freshToken = '{{ firebase_token | default("", true) | safe }}';
       if (freshToken) {
-          sessionStorage.setItem('firebaseToken', freshToken);
+        sessionStorage.setItem('firebaseToken', freshToken);
       }
     </script>
 
@@ -213,13 +371,50 @@
         document.addEventListener("DOMContentLoaded", () => {
             const themeToggle = document.getElementById("theme-toggle"), rootHtml = document.documentElement;
             const moonIcon = document.getElementById('moon-icon'), sunIcon = document.getElementById('sun-icon');
-            const updateIcons = () => { if (!moonIcon || !sunIcon) return; const isDark = rootHtml.classList.contains('dark-mode'); moonIcon.classList.toggle('d-none', !isDark); sunIcon.classList.toggle('d-none', isDark); };
-            const setupParticles = () => { if (typeof particlesJS === 'undefined') return; const isDark = rootHtml.classList.contains('dark-mode'); particlesJS("particles-js", { particles: { number: { value: 60, density: { enable: true, value_area: 800 } }, color: { value: isDark ? "#9f7aea" : "#2b6cb0" }, shape: { type: "circle" }, opacity: { value: 0.5, random: true }, size: { value: 3, random: true }, line_linked: { enable: true, distance: 150, color: isDark ? "#00f2ff" : "#a0aec0", opacity: 0.2, width: 1 }, move: { enable: true, speed: 1.5, direction: "none", out_mode: "out" } }, interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "repel" }, onclick: { enable: false } } } }); };
+
+            const updateIcons = () => { if (!moonIcon || !sunIcon) return; const isDark = rootHtml.classList.contains('dark-mode'); moonIcon.style.display = isDark ? 'inline-block' : 'none'; sunIcon.style.display = isDark ? 'none' : 'inline-block'; };
+            const setupParticles = () => { if (typeof particlesJS === 'undefined' || !document.getElementById('particles-js')) return; const isDark = rootHtml.classList.contains('dark-mode'); if (window.pJSDom && window.pJSDom[0]) { window.pJSDom[0].pJS.fn.vendors.destroypJS(); } particlesJS("particles-js", { particles: { number: { value: 60, density: { enable: true, value_area: 800 } }, color: { value: isDark ? "#9f7aea" : "#2b6cb0" }, shape: { type: "circle" }, opacity: { value: 0.5, random: true }, size: { value: 3, random: true }, line_linked: { enable: true, distance: 150, color: isDark ? "#00f2ff" : "#a0aec0", opacity: 0.2, width: 1 }, move: { enable: true, speed: 1.5, direction: "none", out_mode: "out" } }, interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "repel" }, onclick: { enable: false } } } }); };
+
             if (themeToggle) {
-                themeToggle.addEventListener("click", () => { rootHtml.classList.toggle("dark-mode"); localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light"); updateIcons(); setupParticles(); });
+                themeToggle.addEventListener("click", () => {
+                    rootHtml.classList.toggle("dark-mode");
+                    localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light");
+                    updateIcons();
+                    setupParticles();
+                });
             }
             updateIcons();
             setupParticles();
+
+            // ***  התיקון כאן | THE FIX IS HERE  ***
+            // إضافة معالج لزر تسجيل الخروج
+            const logoutBtn = document.getElementById('logout-btn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', (event) => {
+                    // 1. منع السلوك الافتراضي للرابط (منع الانتقال الفوري)
+                    event.preventDefault();
+
+                    // 2. التحقق من وجود مكتبة Firebase قبل محاولة استخدامها
+                    if (typeof firebase !== 'undefined' && firebase.auth) {
+                        // 3. تسجيل الخروج من Firebase في المتصفح
+                        firebase.auth().signOut()
+                            .then(() => {
+                                // 4. بعد تسجيل الخروج بنجاح، انتقل إلى رابط تسجيل الخروج في الخادم
+                                console.log('Client-side Firebase sign-out successful.');
+                                window.location.href = logoutBtn.href;
+                            })
+                            .catch((error) => {
+                                // 5. في حالة حدوث خطأ، اطبعه في الكونسول وانتقل إلى رابط الخروج على أي حال
+                                console.error('Client-side Firebase sign-out failed:', error);
+                                window.location.href = logoutBtn.href;
+                            });
+                    } else {
+                        // إذا لم تكن مكتبة Firebase متاحة، انتقل مباشرة إلى رابط الخروج
+                        console.warn('Firebase auth is not available, redirecting directly.');
+                        window.location.href = logoutBtn.href;
+                    }
+                });
+            }
         });
     </script>
     {% block scripts %}{% endblock %}

@@ -1,7 +1,7 @@
 <!-- START OF FILE templates/dashboard.html -->
 {% extends "base.html" %}
 {% block title %}لوحة التحكم{% endblock %}
-{% block header_title %}أهلاً بك، {{ user.name }}{% endblock %}
+{% block header_title %}والله منور ، {{ session.name }}{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -9,17 +9,16 @@
         <div class="card shadow-lg">
             <div class="card-header"><i class="bi bi-person-circle me-2"></i>معلومات حسابك</div>
             <div class="card-body">
-                <p><strong>الاسم:</strong> {{ user.name }}</p>
-                <p><strong>البريد الإلكتروني:</strong> {{ user.email }}</p>
-                <p><strong>رقم الهاتف:</strong> {{ user.phone_number }}</p>
-                <p><strong>حالة الحساب:</strong> <span class="badge bg-success">مقبول</span></p>
+                <p><strong>الاسم:</strong> {{ session.name }}</p>
+                <p><strong>البريد الإلكتروني:</strong> {{ session.email }}</p>
+                <p><strong>حالة الحساب:</strong> <span class="badge bg-success">مزحوف </span></p>
                 <hr>
                 <div class="d-flex gap-2">
-                    <a href="{{ url_for('user_view') }}" class="btn btn-primary">
-                        <i class="bi bi-eye-fill me-2"></i>الذهاب إلى قائمة الزواحف
+                    <a href="{{ url_for('views.user_view') }}" class="btn btn-primary">
+                        <i class="bi bi-eye-fill me-2"></i>الذهاب إلى بالة الزواحف
                     </a>
-                    <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
-                        <i class="bi bi-box-arrow-right me-2"></i>تسجيل الخروج
+                    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger">
+                        <i class="bi bi-box-arrow-right me-2"></i>تسجيل خروج زحفي
                     </a>
                 </div>
             </div>

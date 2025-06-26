@@ -79,10 +79,58 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
         border-top-left-radius: 0.75rem;
         border-bottom-left-radius: 0.75rem;
     }
+
+    .divider-text {
+        position: relative;
+        text-align: center;
+        margin-top: 15px;
+        margin-bottom: 15px;
+        color: var(--text-muted-color);
+    }
+
+        .divider-text span {
+            padding: 7px;
+            font-size: 12px;
+            position: relative;
+            z-index: 2;
+            background-color: var(--card-bg);
+        }
+
+        .divider-text:after {
+            content: "";
+            position: absolute;
+            width: 100%;
+            height: 1px;
+            background-color: var(--card-border);
+            left: 0;
+            top: 50%;
+            z-index: 1;
+        }
+
+    .btn-google {
+        background-color: #fff;
+        color: #757575;
+        border: 1px solid #dcdcdc;
+        box-shadow: 0 2px 2px 0 rgba(0,0,0,.14), 0 3px 1px -2px rgba(0,0,0,.2), 0 1px 5px 0 rgba(0,0,0,.12);
+    }
+
+        .btn-google:hover {
+            background-color: #f5f5f5;
+            color: #2d3748;
+        }
+
+        .btn-google img {
+            width: 20px;
+            margin-right: 10px;
+        }
 </style>
 {% endblock %}
 
 {% block content %}
+<div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;">
+    <div class="spinner-border text-light" style="width: 3rem; height: 3rem;"></div>
+</div>
+
 {% if announcements and announcements|length > 0 %}
 <div class="row justify-content-center mb-5 announcements-wrapper">
     <div class="col-lg-10 col-xl-8">
@@ -118,11 +166,23 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
                         <input type="password" class="form-control" id="password" name="password" placeholder="كلمة المرور" required />
                         <label for="password">كلمة المرور</label>
                     </div>
+
+                    <div class="text-start mt-2">
+                        <a href="{{ url_for('auth.forgot_password_page') }}">هل نسيت كلمة المرور؟</a>
+                    </div>
+
                     <div class="d-grid gap-2 mt-4">
                         <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-box-arrow-in-right me-2"></i> دخول</button>
-                        <a href="{{ url_for('register_page') }}" class="btn btn-outline-success btn-lg"><i class="bi bi-person-plus-fill me-2"></i> إنشاء حساب جديد</a>
+                        <a href="{{ url_for('auth.register_page') }}" class="btn btn-outline-success btn-lg"><i class="bi bi-person-plus-fill me-2"></i> إنشاء حساب جديد</a>
                     </div>
                 </form>
+                <p class="divider-text mt-4"><span>أو</span></p>
+                <div class="d-grid">
+                    <button id="google-login-btn" class="btn btn-google btn-lg">
+                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon">
+                        <span>تسجيل الدخول باستخدام Google</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -133,54 +193,107 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" defer></script>
 <script>
-  document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const btn = e.submitter, originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> جارِ الدخول...`;
+  document.addEventListener('firebase-ready', () => {
+    const auth = firebase.auth();
+    const loadingOverlay = document.getElementById('loading-overlay');
 
-    try {
-      const response = await fetch("{{ url_for('login_page') }}", {
-          method: "POST",
-          body: new FormData(e.target)
-      });
+    // --- دالة لمعالجة الرد من الخادم ---
+    async function processBackendResponse(idToken) {
+        try {
+            const response = await fetch("{{ url_for('auth.google_login') }}", {
+                method: "POST",
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_token: idToken })
+            });
+            const data = await response.json();
 
-      const data = await response.json();
-
-      if (data.success) {
-          // --- START: الكود الجديد لحفظ التوكن (الحل الرئيسي) ---
-          if (data.token) {
-            // نخزن التوكن الذي أرسله الخادم في sessionStorage
-            // ليتم استخدامه في الصفحات التالية للمصادقة مع Firebase
-            sessionStorage.setItem('firebaseToken', data.token);
-          } else {
-            // هذا لا يجب أن يحدث، ولكنه إجراء احترازي
-            throw new Error("لم يتم استلام توكن المصادقة من الخادم.");
-          }
-          // --- END: الكود الجديد لحفظ التوكن ---
-
-          // الانتقال إلى الصفحة التالية
-          window.location.href = data.redirect_url;
-      } else {
-          Swal.fire({
-              icon: "error",
-              title: "خطأ في الدخول",
-              text: data.message
-          });
-      }
-    } catch(err) {
-        Swal.fire({
-            icon: "error",
-            title: "خطأ!",
-            text: err.message || "فشل الاتصال بالخادم. يرجى المحاولة مرة أخرى."
-        });
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
+            if (data.success) {
+                window.location.href = data.redirect_url;
+            } else {
+                loadingOverlay.style.display = 'none';
+                let messageHtml = data.message;
+                if (data.status === 'pending') {
+                    messageHtml += '<br><small>سيتم إعلامك عند قبول طلبك.</small>';
+                }
+                Swal.fire({
+                    icon: data.status === 'pending' ? "info" : "error",
+                    title: data.status === 'pending' ? "حسابك قيد المراجعة" : "خطأ في الدخول",
+                    html: messageHtml
+                });
+            }
+        } catch (error) {
+            loadingOverlay.style.display = 'none';
+            Swal.fire('خطأ!', 'فشل الاتصال بالخادم بعد تسجيل الدخول.', 'error');
+        }
     }
+
+    // --- معالج تسجيل الدخول العادي (بريد وكلمة سر) ---
+    document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = e.submitter;
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+        try {
+            const response = await fetch("{{ url_for('auth.login_page') }}", {
+                method: "POST",
+                body: new FormData(e.target)
+            });
+            const data = await response.json();
+            if (data.success) {
+                sessionStorage.setItem('firebaseToken', data.token);
+                window.location.href = data.redirect_url;
+            } else {
+                Swal.fire({ icon: data.status === 'pending' ? "info" : "error", title: data.status === 'pending' ? "حسابك قيد المراجعة" : "خطأ في الدخول", text: data.message });
+            }
+        } catch (err) {
+            Swal.fire({ icon: "error", title: "خطأ!", text: err.message || "فشل الاتصال بالخادم." });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    });
+
+    // ***  התיקון כאן | THE FIX IS HERE  ***
+    // --- استخدام طريقة النافذة المنبثقة (signInWithPopup) لتسجيل الدخول بجوجل ---
+    document.getElementById("google-login-btn")?.addEventListener("click", () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        loadingOverlay.style.display = 'flex';
+
+        auth.signInWithPopup(provider)
+            .then((result) => {
+                // عند نجاح المصادقة مع جوجل
+                if (result.user) {
+                    // احصل على التوكن وأرسله للخادم
+                    return result.user.getIdToken(true);
+                } else {
+                    // في حال لم يتم الحصول على المستخدم (حالة نادرة)
+                    throw new Error("لم يتم الحصول على معلومات المستخدم من Google.");
+                }
+            })
+            .then((idToken) => {
+                // الآن وبعد الحصول على التوكن، أرسله إلى الخادم للمعالجة
+                return processBackendResponse(idToken);
+            })
+            .catch((error) => {
+                // التعامل مع الأخطاء، مثل إغلاق المستخدم للنافذة
+                loadingOverlay.style.display = 'none';
+                console.error("Google Popup Error:", error.code, error.message);
+
+                // لا نعرض رسالة خطأ مزعجة إذا كان المستخدم قد أغلق النافذة بنفسه
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'فشل تسجيل الدخول',
+                        text: "حدث خطأ أثناء المصادقة مع Google. قد يكون السبب إغلاق النافذة أو مشكلة في الشبكة."
+                    });
+                }
+            });
+    });
+
+    // الكود القديم الذي يستخدم `getRedirectResult` لم يعد ضرورياً ويمكن حذفه
   });
 </script>
 {% endblock %}
-<!-- END OF FILE templates/login.html -->

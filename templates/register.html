@@ -2,13 +2,21 @@
 {% extends "base.html" %}
 {% block title %}تسجيل حساب جديد{% endblock %}
 {% block header_title %}إنشاء حساب جديد{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-5">
         <div class="card p-4 shadow-lg">
             <div class="card-body">
                 <h5 class="card-title text-center mb-4 fs-4">تعبئة بيانات التسجيل</h5>
-                <p class="text-muted text-center small">بعد التسجيل، سيتم مراجعة طلبك من قبل الإدارة.</p>
+                <p class="text-muted text-center small">بعد التسجيل، سيتم مراجعة طلب انضمامك من قبل الإدارة.</p>
+
+                <!-- *** الإضافة الجديدة هنا *** -->
+                <div class="alert alert-info small" role="alert">
+                    <i class="bi bi-google me-2"></i>
+                    <b>هل تريد التسجيل عبر Google؟</b> استخدم زر "تسجيل الدخول باستخدام Google" في <a href="{{ url_for('auth.login_page') }}">صفحة تسجيل الدخول</a>.
+                </div>
+
                 <form id="registerForm" novalidate>
                     <div class="form-floating mb-3">
                         <input type="text" class="form-control" id="name" name="name" placeholder="الاسم الكامل" required>
@@ -18,24 +26,19 @@
                         <input type="email" class="form-control" id="email" name="email" placeholder="البريد الإلكتروني" required>
                         <label for="email">البريد الإلكتروني</label>
                     </div>
-                    <div class="form-floating mb-3">
-                        <input type="tel" class="form-control" id="phone_number" name="phone_number" placeholder="رقم الهاتف (مثال: +962...)" required pattern="\+.*" title="يجب أن يبدأ الرقم بعلامة + ثم رمز الدولة.">
-                        <label for="phone_number">رقم الهاتف (بالصيغة الدولية)</label>
-                    </div>
+
                     <div class="form-floating mb-3">
                         <input type="password" class="form-control" id="password" name="password" placeholder="كلمة المرور" required minlength="6">
                         <label for="password">كلمة المرور</label>
                         <div class="form-text">يجب أن تتكون من 6 أحرف على الأقل.</div>
                     </div>
-                    <!-- START: إضافة حقل تأكيد كلمة المرور -->
                     <div class="form-floating mb-3">
                         <input type="password" class="form-control" id="password_confirm" name="password_confirm" placeholder="تأكيد كلمة المرور" required minlength="6">
                         <label for="password_confirm">تأكيد كلمة المرور</label>
                     </div>
-                    <!-- END: إضافة حقل تأكيد كلمة المرور -->
                     <div class="d-grid gap-2 mt-4">
                         <button type="submit" class="btn btn-primary btn-lg">إرسال طلب التسجيل</button>
-                        <a href="{{ url_for('login_page') }}" class="text-center mt-2">لديك حساب بالفعل؟ سجل الدخول</a>
+                        <a href="{{ url_for('auth.login_page') }}" class="text-center mt-2">لديك حساب بالفعل؟ سجل الدخول</a>
                     </div>
                 </form>
             </div>
@@ -48,7 +51,6 @@
 document.getElementById("registerForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    // --- التحقق من تطابق كلمة المرور في الواجهة الأمامية ---
     const password = document.getElementById('password').value;
     const passwordConfirm = document.getElementById('password_confirm').value;
 
@@ -58,7 +60,7 @@ document.getElementById("registerForm")?.addEventListener("submit", async (e) =>
             title: 'خطأ في التحقق',
             text: 'كلمتا المرور غير متطابقتين. يرجى التأكد منهما.'
         });
-        return; // إيقاف التنفيذ
+        return;
     }
 
     const btn = e.submitter, originalHTML = btn.innerHTML;
@@ -66,7 +68,7 @@ document.getElementById("registerForm")?.addEventListener("submit", async (e) =>
     btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جارِ الإرسال...`;
 
     try {
-        const response = await fetch("{{ url_for('register_page') }}", {
+        const response = await fetch("{{ url_for('auth.register_page') }}", {
             method: "POST",
             body: new FormData(e.target)
         });
@@ -80,7 +82,7 @@ document.getElementById("registerForm")?.addEventListener("submit", async (e) =>
                 text: data.message,
                 confirmButtonText: 'حسناً'
             });
-            window.location.href = "{{ url_for('login_page') }}";
+            window.location.href = "{{ url_for('auth.login_page') }}";
         } else {
             Swal.fire({ icon: "error", title: "خطأ", text: data.message });
         }
@@ -94,4 +96,3 @@ document.getElementById("registerForm")?.addEventListener("submit", async (e) =>
 });
 </script>
 {% endblock %}
-<!-- END OF FILE templates/register.html -->
