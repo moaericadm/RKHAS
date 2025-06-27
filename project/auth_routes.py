@@ -1,4 +1,5 @@
 ﻿# --- START OF FILE project/auth_routes.py ---
+
 import os
 import time
 import sys
@@ -37,7 +38,7 @@ except Exception as e:
 
 
 # --- تعريف Blueprint ---
-bp = Blueprint('auth', __name__, url_prefix='/auth')
+bp = Blueprint('auth', __name__)
 
 # --- Decorators للتحقق من صلاحيات المستخدم ---
 def login_required(f):
@@ -137,7 +138,6 @@ def google_login():
         if not id_token:
             return jsonify(success=False, message="Token not provided"), 400
 
-        # ***  התיקון כאן | THE FIX IS HERE  ***
         # إضافة هامش سماحية زمني (30 ثانية) للتعامل مع عدم تزامن ساعة الخادم
         decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=30)
         uid = decoded_token['uid']
@@ -245,9 +245,18 @@ def register_page():
 @bp.route('/logout')
 @login_required
 def logout():
+    # *** התיקון כאן | THE FIX IS HERE ***
     user_id = session.get('user_id')
     if user_id:
-        db.reference(f'online_visitors/{user_id}').delete()
+        try:
+            # هذه العملية ليست حرجة. يجب أن يتمكن المستخدم من تسجيل الخروج
+            # حتى لو فشل الاتصال بقاعدة البيانات.
+            db.reference(f'online_visitors/{user_id}').delete()
+        except Exception as e:
+            # نسجل الخطأ للمراجعة لاحقاً، لكن لا نوقف التطبيق
+            print(f"!!! Logout-Cleanup-Error: Could not delete online status for user {user_id}. Error: {e}", file=sys.stderr)
+    
+    # هذه هي الأجزاء الأكثر أهمية في تسجيل الخروج
     session.clear()
     flash('تم تسجيل خروجك بنجاح.', 'success')
     return redirect(url_for('auth.login_page'))
@@ -271,4 +280,5 @@ def forgot_password_page():
             return jsonify(success=True, message="إذا كان بريدك الإلكتروني مسجلاً، فستصلك رسالة لإعادة التعيين.")
             
     return render_template('forgot_password.html')
+
 # --- END OF FILE project/auth_routes.py ---
