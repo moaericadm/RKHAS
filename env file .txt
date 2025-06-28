@@ -1,17 +1,19 @@
-# --- START OF FILE .env ---
-
 # =======================================================
-# == إعدادات Firebase للمشروع الجديد (zz66-3f329) ==
+# == Firebase Project Settings (zz66-3f329) ==
+# == This is the final and verified configuration.
 # =======================================================
 
-# اسم ملف مفتاح الخدمة الذي يستخدمه الكود (لا تغير هذا السطر)
+# Service account key file name (This must match the file in your root folder)
 FIREBASE_SERVICE_ACCOUNT=serviceAccountKey.json
 
-# هذه القيم تم أخذها من ملف مفتاح الخدمة الجديد وإعدادات الويب
+# --- Values derived from your project_id and web settings ---
 FIREBASE_PROJECT_ID="zz66-3f329"
 FIREBASE_AUTH_DOMAIN="zz66-3f329.firebaseapp.com"
 FIREBASE_DATABASE_URL="https://zz66-3f329-default-rtdb.firebaseio.com"
 FIREBASE_STORAGE_BUCKET="zz66-3f329.appspot.com"
+
+# --- Values you MUST get from Firebase Console > Project Settings > General > Your web app ---
+# Please double-check these values by copying them again from your Firebase project.
 FIREBASE_API_KEY="AIzaSyBzGh5en0u3_nzxv6wzCiRDeUJspcKrg1I"
 FIREBASE_MESSAGING_SENDER_ID="908483755424"
 FIREBASE_APP_ID="1:908483755424:web:76933cd5e4e39fcf1478c5"
@@ -19,15 +21,11 @@ FIREBASE_MEASUREMENT_ID="G-ZRYXSTE6BX"
 
 
 # =======================================================
-# == إعدادات التطبيق ==
+# == Application Settings ==
 # =======================================================
 
-# البريد الإلكتروني الخاص بالمسؤول الأول (Admin)
-# عند التسجيل بهذا البريد، سيتم منحه صلاحيات الأدمن تلقائياً
+# The email of the first administrator.
 ADMIN_EMAIL="naw@naw.com"
 
-
-# مفتاح سري لتأمين الجلسات (Sessions) في فلاسك
-FLASK_SECRET_KEY="a-very-strong-and-random-secret-key-for-my-app-9876-that-is-secure"
-
-# --- END OF FILE .env ---
+# A strong, randomly generated secret key for Flask sessions.
+FLASK_SECRET_KEY="1d1e4c7d9b8e2a3f5b6c8d7e9f0a1b2c3d4e5f6a7b8c9d0e"

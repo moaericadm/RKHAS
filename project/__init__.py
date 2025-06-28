@@ -2,7 +2,6 @@
 
 import os
 import sys
-import json
 from flask import Flask, session
 from dotenv import load_dotenv
 import firebase_admin
@@ -15,35 +14,19 @@ load_dotenv()
 # هذا هو المكان الصحيح للتهيئة
 try:
     if not firebase_admin._apps:
-        # *** התיקון כאן | THE FIX IS HERE ***
-        # الطريقة المفضلة للإنتاج (مثل Render): قراءة الإعدادات من متغير بيئة يحتوي على JSON
-        firebase_creds_json_str = os.getenv('FIREBASE_CREDENTIALS_JSON')
-        
-        if firebase_creds_json_str:
-            print(">> Initializing Firebase Admin from JSON environment variable...")
-            creds_dict = json.loads(firebase_creds_json_str)
-            cred = credentials.Certificate(creds_dict)
-        else:
-            # الطريقة البديلة (للتطوير المحلي): قراءة الإعدادات من ملف باستخدام مسار مطلق
-            print(">> WARNING: FIREBASE_CREDENTIALS_JSON not found. Falling back to file-based initialization.")
-            SERVICE_ACCOUNT_FILE = os.getenv('FIREBASE_SERVICE_ACCOUNT')
-            
-            # بناء مسار مطلق للملف لضمان العثور عليه دائمًا
-            basedir = os.path.abspath(os.path.dirname(__file__)) # مجلد project
-            project_root = os.path.dirname(basedir) # المجلد الرئيسي للمشروع
-            absolute_path_to_key = os.path.join(project_root, SERVICE_ACCOUNT_FILE)
-
-            if not SERVICE_ACCOUNT_FILE or not os.path.exists(absolute_path_to_key):
-                raise ValueError(f"ملف مفتاح الخدمة '{absolute_path_to_key}' غير موجود أو المسار خاطئ.")
-            
-            cred = credentials.Certificate(absolute_path_to_key)
-
+        SERVICE_ACCOUNT_FILE = os.getenv('FIREBASE_SERVICE_ACCOUNT')
         FIREBASE_DATABASE_URL = os.getenv('FIREBASE_DATABASE_URL')
+        
+        if not SERVICE_ACCOUNT_FILE or not os.path.exists(SERVICE_ACCOUNT_FILE):
+            raise ValueError(f"ملف مفتاح الخدمة '{SERVICE_ACCOUNT_FILE}' غير موجود أو المسار خاطئ.")
+            
+        cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
         print(">> Firebase Admin Initialized Successfully!")
 
 except Exception as e:
     print(f"!!! CRITICAL: Firebase Admin initialization failed: {e}", file=sys.stderr)
+    sys.exit(1)
 
 
 def create_app():
@@ -71,6 +54,7 @@ def create_app():
     app.register_blueprint(user_interactions_api.bp)
     app.register_blueprint(spin_wheel_api.bp)
 
+    # ***  התיקון כאן | THE FIX IS HERE  ***
     # --- إضافة ترويسة الأمان للسماح بالنوافذ المنبثقة من Google ---
     @app.after_request
     def apply_coop_header(response):
@@ -102,17 +86,12 @@ def create_app():
             context_data['current_user_id'] = session['user_id']
             context_data['current_user_name'] = session.get('name')
             try:
-                # التأكد من أن Firebase مهيأ قبل محاولة إنشاء التوكن
-                if firebase_admin._apps:
-                    token_bytes = auth.create_custom_token(session['user_id'])
-                    context_data['firebase_token'] = token_bytes.decode('utf-8')
-                else:
-                    print("!!! WARNING: Firebase not initialized, cannot create custom token.", file=sys.stderr)
+                token_bytes = auth.create_custom_token(session['user_id'])
+                context_data['firebase_token'] = token_bytes.decode('utf-8')
             except Exception as e:
                 print(f"!!! CRITICAL: Failed to create custom token for user '{session['user_id']}'. Error: {e}", file=sys.stderr)
         
         return context_data
 
     return app
-
 # --- END OF FILE project/__init__.py ---
