@@ -223,3 +223,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     exportInteractionFunctions();
 });
+// --- END OF FILE static/js/user_interactions.js ---

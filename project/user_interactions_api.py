@@ -1,16 +1,98 @@
 ﻿# --- START OF FILE project/user_interactions_api.py ---
+
 import time
 import re
 import sys
+import os
 from datetime import datetime
 from flask import (
-    Blueprint, request, jsonify, session
+    Blueprint, request, jsonify, session, url_for
 )
-# *** التعديل: استيراد الوحدات الفرعية المطلوبة فقط ***
-from firebase_admin import db
-from .auth_routes import login_required
+from firebase_admin import db, auth
+from google.auth.exceptions import RefreshError
+# *** התיקון כאן | THE FIX IS HERE ***
+# استيراد pyrebase لتسجيل الدخول
+from .auth_routes import login_required, check_user_status, pyrebase_auth
 
 bp = Blueprint('interactions', __name__, url_prefix='/api')
+
+# *** התיקון כאן | THE FIX IS HERE ***
+# إعادة بناء المسار بالكامل ليكون قوياً وموثوقاً
+@bp.route('/verify_token', methods=['POST'])
+def verify_token():
+    id_token = request.json.get('id_token')
+    if not id_token:
+        return jsonify(success=False, message="Token not provided"), 400
+
+    # الخطوة 1: التحقق من صحة التوكن باستخدام Pyrebase (لا يعتمد على ساعة الخادم)
+    try:
+        # إذا نجح هذا الاستدعاء، فهذا يعني أن المستخدم قام بتسجيل الدخول بنجاح في المتصفح
+        user_info = pyrebase_auth.get_account_info(id_token)['users'][0]
+        uid = user_info['localId']
+    except Exception as e:
+        # هذا يعني أن التوكن الذي أرسله المتصفح غير صالح
+        print(f"Client-side Token Invalid: {e}", file=sys.stderr)
+        return jsonify(success=False, message="فشل التحقق من هوية المستخدم. يرجى المحاولة مرة أخرى."), 401
+
+    # الخطوة 2: الآن فقط، نحاول الاتصال بقاعدة البيانات باستخدام حساب الخدمة
+    try:
+        status, db_user_data = check_user_status(uid)
+
+        if status == 'db_error':
+            return jsonify(success=False, message="حدث خطأ أثناء الوصول لبيانات المستخدم."), 500
+        if status == 'banned':
+            return jsonify(success=False, status='banned', message="هذا الحساب محظور."), 403
+        
+        if status == 'approved':
+            session.clear()
+            session['user_id'] = uid
+            session['name'] = db_user_data.get('name', 'مستخدم')
+            session['email'] = db_user_data.get('email')
+            session['role'] = db_user_data.get('role', 'user')
+            session['logged_in'] = True
+            return jsonify(success=True, redirect_url=url_for('views.home'))
+            
+        elif status in ['pending', 'rejected']:
+             return jsonify(success=False, status='pending', message="حسابك غير فعال أو قيد المراجعة."), 403
+
+        # مستخدم جديد عبر جوجل (status == 'not_found')
+        if user_info.get('providerUserInfo', [{}])[0].get('providerId') == 'google.com':
+            ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
+            user_email = user_info.get('email')
+            is_admin = user_email and user_email.lower() == ADMIN_EMAIL.lower()
+            
+            new_user_data = {
+                'uid': uid, 'name': user_info.get('displayName', 'مستخدم جوجل'), 'email': user_email,
+                'status': 'approved' if is_admin else 'pending',
+                'registered_at': int(time.time()), 'role': 'admin' if is_admin else 'user',
+                'provider': 'google.com'
+            }
+            db.reference(f'registered_users/{uid}').set(new_user_data)
+            
+            if is_admin:
+                auth.update_user(uid, disabled=False)
+                session.clear()
+                session['user_id'] = uid
+                session['name'] = new_user_data['name']
+                session['email'] = new_user_data['email']
+                session['role'] = 'admin'
+                session['logged_in'] = True
+                return jsonify(success=True, redirect_url=url_for('views.home'))
+            else:
+                return jsonify(success=False, status='pending', message="تم استلام طلب تسجيلك عبر جوجل. حسابك الآن قيد المراجعة من قبل الإدارة.")
+        
+        return jsonify(success=False, message="المستخدم غير موجود."), 404
+
+    except RefreshError as e:
+        # هذا الخطأ يحدث فقط إذا فشلت مصادقة الخادم (مشكلة الساعة)
+        print(f"Server Authentication Error (likely clock sync issue): {e}", file=sys.stderr)
+        message = "حدث خطأ في مصادقة الخادم. يرجى التأكد من أن ساعة جهاز الخادم مضبوطة بشكل صحيح."
+        return jsonify(success=False, message=message), 500
+    except Exception as e:
+        # أي خطأ آخر غير متوقع
+        print(f"Token Verification - Unhandled Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ غير متوقع في الخادم."), 500
+
 
 BANNED_WORDS = ["منيك", "شرموطة", "بتنتاك", "بنيك", "كس اختك", "كسختك", "امك", "اختك"]
 

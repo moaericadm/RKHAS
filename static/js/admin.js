@@ -73,14 +73,17 @@ function initializeAdminPanel() {
     try {
         db = firebase.database();
         const token = sessionStorage.getItem('firebaseToken');
+        // *** התיקון כאן | THE FIX IS HERE ***
+        // التحقق من وجود التوكن قبل محاولة استخدامه
         if (!token) throw new Error("Authentication token not found.");
+
         firebase.auth().signInWithCustomToken(token).then(() => {
             console.log("Admin authenticated successfully.");
             initializeDataListeners();
             setupEventListeners();
         }).catch(e => {
             console.error("Firebase Auth Error:", e);
-            Swal.fire({ title: 'Authentication Error', text: e.message, icon: 'error' }).then(() => window.location.href = '/login');
+            Swal.fire({ title: 'Authentication Error', text: e.message, icon: 'error' }).then(() => window.location.href = '/auth/login');
         });
     } catch (e) {
         console.error("Initialization Error:", e);

@@ -276,8 +276,6 @@
                 {% if session.role == 'admin' %}
                 <a href="{{ url_for('views.admin_panel') }}" class="btn btn-sm btn-outline-light"><i class="bi bi-shield-lock-fill me-1"></i> لوحة التحكم</a>
                 {% endif %}
-                <!-- ***  התיקון כאן | THE FIX IS HERE  *** -->
-                <!-- تم تغيير الرابط ليكون له ID لتسهيل الوصول إليه من JavaScript -->
                 <a id="logout-btn" href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-danger"><i class="bi bi-box-arrow-right"></i></a>
                 {% endif %}
                 <button class="btn btn-outline-secondary btn-sm" id="theme-toggle" title="تبديل المظهر">
@@ -341,11 +339,29 @@
 
     <script>
         document.addEventListener('firebase-ready', () => {
+            const freshToken = '{{ firebase_token | default("", true) | safe }}';
+            if (freshToken) {
+                firebase.auth().signInWithCustomToken(freshToken)
+                    .then((userCredential) => {
+                        console.log('Firebase client authenticated successfully.');
+                        document.dispatchEvent(new Event('firebase-auth-ready'));
+                    })
+                    .catch((error) => {
+                        console.error('Firebase Auth Error:', error.code, error.message);
+                        // *** התיקון כאן | THE FIX IS HERE ***
+                        // إعادة التوجيه إلى مسار الخروج لمسح جلسة الخادم وكسر حلقة إعادة التوجيه
+                        window.location.href = "{{ url_for('auth.logout') }}";
+                    });
+            } else {
+                 console.log('No user token found. Waiting for server-side redirect.');
+            }
+        });
+
+        document.addEventListener('firebase-auth-ready', () => {
             const currentUserId = {{ current_user_id | tojson | safe }};
             const currentUserName = {{ current_user_name | tojson | safe }};
             const currentUserRole = {{ session.role | default(none) | tojson | safe }};
 
-            // لا تقم بتسجيل حالة الاتصال إذا كان المستخدم هو الأدمن
             if (currentUserId && currentUserName && currentUserRole !== 'admin') {
                 const db = firebase.database();
                 const userStatusRef = db.ref('/online_visitors/' + currentUserId);
@@ -358,13 +374,6 @@
                 });
             }
         });
-    </script>
-
-    <script>
-      const freshToken = '{{ firebase_token | default("", true) | safe }}';
-      if (freshToken) {
-        sessionStorage.setItem('firebaseToken', freshToken);
-      }
     </script>
 
     <script>
@@ -386,30 +395,21 @@
             updateIcons();
             setupParticles();
 
-            // ***  התיקון כאן | THE FIX IS HERE  ***
-            // إضافة معالج لزر تسجيل الخروج
             const logoutBtn = document.getElementById('logout-btn');
             if (logoutBtn) {
                 logoutBtn.addEventListener('click', (event) => {
-                    // 1. منع السلوك الافتراضي للرابط (منع الانتقال الفوري)
                     event.preventDefault();
-
-                    // 2. التحقق من وجود مكتبة Firebase قبل محاولة استخدامها
                     if (typeof firebase !== 'undefined' && firebase.auth) {
-                        // 3. تسجيل الخروج من Firebase في المتصفح
                         firebase.auth().signOut()
                             .then(() => {
-                                // 4. بعد تسجيل الخروج بنجاح، انتقل إلى رابط تسجيل الخروج في الخادم
                                 console.log('Client-side Firebase sign-out successful.');
                                 window.location.href = logoutBtn.href;
                             })
                             .catch((error) => {
-                                // 5. في حالة حدوث خطأ، اطبعه في الكونسول وانتقل إلى رابط الخروج على أي حال
                                 console.error('Client-side Firebase sign-out failed:', error);
                                 window.location.href = logoutBtn.href;
                             });
                     } else {
-                        // إذا لم تكن مكتبة Firebase متاحة، انتقل مباشرة إلى رابط الخروج
                         console.warn('Firebase auth is not available, redirecting directly.');
                         window.location.href = logoutBtn.href;
                     }

@@ -199,14 +199,17 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
     const auth = firebase.auth();
     const loadingOverlay = document.getElementById('loading-overlay');
 
-    // --- دالة لمعالجة الرد من الخادم ---
-    async function processBackendResponse(idToken) {
+    // *** התיקון כאן | THE FIX IS HERE ***
+    // دالة موحدة للتحقق من التوكن وإنشاء الجلسة في الخادم
+    async function verifyTokenOnServer(idToken) {
         try {
-            const response = await fetch("{{ url_for('auth.google_login') }}", {
+            // تصحيح المسار ليشير إلى blueprint الصحيح
+            const response = await fetch("{{ url_for('interactions.verify_token') }}", {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id_token: idToken })
             });
+
             const data = await response.json();
 
             if (data.success) {
@@ -225,7 +228,8 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
             }
         } catch (error) {
             loadingOverlay.style.display = 'none';
-            Swal.fire('خطأ!', 'فشل الاتصال بالخادم بعد تسجيل الدخول.', 'error');
+            console.error("Server verification failed:", error);
+            Swal.fire('خطأ!', 'فشل الاتصال بالخادم بعد المصادقة.', 'error');
         }
     }
 
@@ -234,66 +238,53 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
         e.preventDefault();
         const btn = e.submitter;
         const originalHTML = btn.innerHTML;
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
         btn.disabled = true;
         btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+        loadingOverlay.style.display = 'flex';
+
         try {
-            const response = await fetch("{{ url_for('auth.login_page') }}", {
-                method: "POST",
-                body: new FormData(e.target)
-            });
-            const data = await response.json();
-            if (data.success) {
-                sessionStorage.setItem('firebaseToken', data.token);
-                window.location.href = data.redirect_url;
-            } else {
-                Swal.fire({ icon: data.status === 'pending' ? "info" : "error", title: data.status === 'pending' ? "حسابك قيد المراجعة" : "خطأ في الدخول", text: data.message });
-            }
-        } catch (err) {
-            Swal.fire({ icon: "error", title: "خطأ!", text: err.message || "فشل الاتصال بالخادم." });
-        } finally {
+            const userCredential = await auth.signInWithEmailAndPassword(email, password);
+            const idToken = await userCredential.user.getIdToken(true);
+            await verifyTokenOnServer(idToken);
+        } catch (error) {
+            loadingOverlay.style.display = 'none';
             btn.disabled = false;
             btn.innerHTML = originalHTML;
+            console.error("Email/Pass Login Error:", error.code, error.message);
+            Swal.fire({ icon: "error", title: "خطأ في الدخول", text: "بيانات الدخول غير صحيحة. يرجى التأكد والمحاولة مرة أخرى." });
         }
     });
 
-    // ***  התיקון כאן | THE FIX IS HERE  ***
-    // --- استخدام طريقة النافذة المنبثقة (signInWithPopup) لتسجيل الدخول بجوجل ---
+    // --- معالج تسجيل الدخول عبر جوجل ---
     document.getElementById("google-login-btn")?.addEventListener("click", () => {
         const provider = new firebase.auth.GoogleAuthProvider();
         loadingOverlay.style.display = 'flex';
 
         auth.signInWithPopup(provider)
-            .then((result) => {
-                // عند نجاح المصادقة مع جوجل
+            .then(async (result) => {
                 if (result.user) {
-                    // احصل على التوكن وأرسله للخادم
-                    return result.user.getIdToken(true);
+                    const idToken = await result.user.getIdToken(true);
+                    await verifyTokenOnServer(idToken);
                 } else {
-                    // في حال لم يتم الحصول على المستخدم (حالة نادرة)
                     throw new Error("لم يتم الحصول على معلومات المستخدم من Google.");
                 }
             })
-            .then((idToken) => {
-                // الآن وبعد الحصول على التوكن، أرسله إلى الخادم للمعالجة
-                return processBackendResponse(idToken);
-            })
             .catch((error) => {
-                // التعامل مع الأخطاء، مثل إغلاق المستخدم للنافذة
                 loadingOverlay.style.display = 'none';
                 console.error("Google Popup Error:", error.code, error.message);
-
-                // لا نعرض رسالة خطأ مزعجة إذا كان المستخدم قد أغلق النافذة بنفسه
                 if (error.code !== 'auth/popup-closed-by-user') {
                     Swal.fire({
                         icon: 'error',
                         title: 'فشل تسجيل الدخول',
-                        text: "حدث خطأ أثناء المصادقة مع Google. قد يكون السبب إغلاق النافذة أو مشكلة في الشبكة."
+                        text: "حدث خطأ أثناء المصادقة مع Google."
                     });
                 }
             });
     });
-
-    // الكود القديم الذي يستخدم `getRedirectResult` لم يعد ضرورياً ويمكن حذفه
   });
 </script>
 {% endblock %}
+<!-- END OF FILE templates/login.html -->

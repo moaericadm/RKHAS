@@ -1,4 +1,5 @@
 ﻿# --- START OF FILE project/auth_routes.py ---
+
 import os
 import time
 import sys
@@ -8,6 +9,9 @@ from flask import (
 )
 import pyrebase
 from firebase_admin import auth, db
+# *** התיקון כאן (الحل الجذري والنهائي) | THE FIX (The final and definitive solution) ***
+# استيراد الاستثناء المحدد للتعامل معه
+from google.auth.exceptions import RefreshError
 
 # --- تهيئة Pyrebase (للتفاعل مع مصادقة العميل من جهة الخادم) ---
 # يتم تهيئتها مرة واحدة عند بدء تشغيل التطبيق لضمان الكفاءة وتجنب الأخطاء
@@ -65,29 +69,37 @@ def admin_required(f):
 
 # --- دوال مساعدة ---
 def check_user_status(uid):
-    ref_registered_users = db.reference('registered_users/')
-    ref_banned_users = db.reference('banned_users/')
-    
-    if ref_banned_users.child(uid).get():
-        return 'banned', None
-    
-    user_data = ref_registered_users.child(uid).get()
-    if not user_data:
-        return 'not_found', None
+    # هذه الدالة الآن تعالج خطأ مصادقة الخادم بنفسها
+    try:
+        ref_registered_users = db.reference('registered_users/')
+        ref_banned_users = db.reference('banned_users/')
         
-    return user_data.get('status', 'pending'), user_data
+        if ref_banned_users.child(uid).get():
+            return 'banned', None
+        
+        user_data = ref_registered_users.child(uid).get()
+        if not user_data:
+            return 'not_found', None
+            
+        return user_data.get('status', 'pending'), user_data
+    except RefreshError as e:
+        # إذا فشلت المصادقة هنا، نمرر الاستثناء للأعلى
+        raise e
+    except Exception as e:
+        # لأي أخطاء أخرى في قاعدة البيانات
+        print(f"Error in check_user_status: {e}", file=sys.stderr)
+        return 'db_error', None
 
 
 # --- Routes ---
-@bp.route('/login', methods=('GET', 'POST'))
+@bp.route('/login', methods=['GET', 'POST'])
 def login_page():
     if 'user_id' in session:
         return redirect(url_for('views.home'))
         
     if request.method == 'POST':
-        # التأكد من أن Pyrebase مهيأ بشكل صحيح
         if not pyrebase_auth:
-            return jsonify({"success": False, "message": "خطأ في إعدادات الخادم. لا يمكن تسجيل الدخول الآن."}), 500
+            return jsonify({"success": False, "message": "خدمة المصادقة غير مهيأة بشكل صحيح."}), 500
 
         email = request.form.get('email', '').strip()
         password = request.form.get('password')
@@ -99,13 +111,14 @@ def login_page():
             uid = user['localId']
             
             status, db_user_data = check_user_status(uid)
-
+            
+            if status == 'db_error':
+                return jsonify(success=False, message="حدث خطأ أثناء الوصول لبيانات المستخدم."), 500
             if status == 'banned':
                 return jsonify(success=False, message="هذا الحساب محظور."), 403
             if status == 'pending' or status == 'not_found' or status == 'rejected':
                  return jsonify(success=False, status='pending', message="حسابك غير فعال أو قيد المراجعة."), 403
             
-            # إذا كان المستخدم مقبول (approved)
             session.clear()
             session['user_id'] = uid
             session['name'] = db_user_data.get('name', 'مستخدم')
@@ -115,17 +128,23 @@ def login_page():
 
             token = auth.create_custom_token(uid)
             return jsonify(success=True, redirect_url=url_for('views.home'), token=token.decode('utf-8'))
-
+        
+        except RefreshError as e:
+            print(f"Server Authentication Error (likely clock sync issue): {e}", file=sys.stderr)
+            message = "حدث خطأ في مصادقة الخادم. يرجى التأكد من أن ساعة جهاز الخادم مضبوطة بشكل صحيح."
+            return jsonify(success=False, message=message), 500
         except Exception as e:
-            # التعامل مع أخطاء المصادقة من Pyrebase
             error_message = "بيانات الدخول غير صحيحة. يرجى التأكد والمحاولة مرة أخرى."
-            print(f"Login Error: {e}", file=sys.stderr)
+            print(f"User Login Error: {e}", file=sys.stderr)
             return jsonify(success=False, message=error_message), 401
 
-    # جلب الإعلانات من قاعدة البيانات
-    announcements_data = db.reference('site_settings/announcements').get()
-    # تحويل القاموس إلى قائمة لكي يتمكن القالب من التعامل معها بشكل صحيح
-    announcements_list = list(announcements_data.values()) if announcements_data else []
+    announcements_list = []
+    try:
+        announcements_data = db.reference('site_settings/announcements').get()
+        if announcements_data:
+            announcements_list = list(announcements_data.values())
+    except Exception as e:
+        print(f"!!! DB Connection Warning: Could not fetch announcements for login page. Reason: {e}", file=sys.stderr)
     
     return render_template('login.html', announcements=announcements_list)
 
@@ -136,17 +155,16 @@ def google_login():
         id_token = request.json.get('id_token')
         if not id_token:
             return jsonify(success=False, message="Token not provided"), 400
-
-        # ***  התיקון כאן | THE FIX IS HERE  ***
-        # إضافة هامش سماحية زمني (30 ثانية) للتعامل مع عدم تزامن ساعة الخادم
-        decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=30)
+        
+        decoded_token = auth.verify_id_token(id_token)
         uid = decoded_token['uid']
         
         status, db_user_data = check_user_status(uid)
 
+        if status == 'db_error':
+            return jsonify(success=False, message="حدث خطأ أثناء الوصول لبيانات المستخدم."), 500
         if status == 'banned':
             return jsonify(success=False, status='banned', message="هذا الحساب محظور."), 403
-
         if status == 'approved':
             session.clear()
             session['user_id'] = uid
@@ -159,7 +177,6 @@ def google_login():
         elif status in ['pending', 'rejected']:
              return jsonify(success=False, status='pending', message="حسابك غير فعال أو قيد المراجعة.")
         
-        # New user via Google (status == 'not_found')
         ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
         user_email = decoded_token.get('email')
         is_admin = user_email and user_email.lower() == ADMIN_EMAIL.lower()
@@ -173,6 +190,7 @@ def google_login():
         db.reference(f'registered_users/{uid}').set(new_user_data)
         
         if is_admin:
+            auth.update_user(uid, disabled=False)
             session.clear()
             session['user_id'] = uid
             session['name'] = new_user_data['name']
@@ -184,12 +202,14 @@ def google_login():
             return jsonify(success=False, status='pending', message="تم استلام طلب تسجيلك عبر جوجل. حسابك الآن قيد المراجعة من قبل الإدارة.")
 
     except auth.InvalidIdTokenError as e:
-        # طباعة الخطأ في سجل الخادم للمساعدة في التشخيص
-        print(f"Google Login - Invalid ID Token: {e}", file=sys.stderr)
-        return jsonify(success=False, message="Invalid ID token"), 401
+        return jsonify(success=False, message=f"فشل التحقق من هوية المستخدم: {e}"), 401
+    except RefreshError as e:
+        print(f"Server Authentication Error (likely clock sync issue): {e}", file=sys.stderr)
+        message = "حدث خطأ في مصادقة الخادم. يرجى التأكد من أن ساعة جهاز الخادم مضبوطة بشكل صحيح."
+        return jsonify(success=False, message=message), 500
     except Exception as e:
         print(f"Google Login Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message=f"An error occurred: {e}"), 500
+        return jsonify(success=False, message="حدث خطأ غير متوقع أثناء تسجيل الدخول."), 500
 
 
 @bp.route('/register', methods=('GET', 'POST'))
@@ -211,11 +231,9 @@ def register_page():
             return jsonify(success=False, message="كلمة المرور يجب أن لا تقل عن 6 أحرف."), 400
 
         try:
-            # Step 1: Create user in Firebase Auth (will be disabled by default)
             new_user = auth.create_user(email=email, password=password, display_name=name, disabled=True)
             uid = new_user.uid
 
-            # Step 2: Add user to our Realtime Database with 'pending' status
             ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
             is_admin = email.lower() == ADMIN_EMAIL.lower()
 
@@ -227,7 +245,6 @@ def register_page():
                 'provider': 'password'
             })
 
-            # If user is admin, enable them immediately
             if is_admin:
                 auth.update_user(uid, disabled=False)
                 return jsonify(success=True, message="تم تسجيل حساب المدير بنجاح! يمكنك الآن تسجيل الدخول.")
@@ -247,12 +264,17 @@ def register_page():
 def logout():
     user_id = session.get('user_id')
     if user_id:
-        db.reference(f'online_visitors/{user_id}').delete()
+        try:
+            db.reference(f'online_visitors/{user_id}').delete()
+        except Exception as e:
+            print(f"!!! Logout DB Error: Could not remove online visitor '{user_id}'. Reason: {e}", file=sys.stderr)
+    
     session.clear()
     flash('تم تسجيل خروجك بنجاح.', 'success')
     return redirect(url_for('auth.login_page'))
 
-@bp.route('/forgot-password', methods=['GET', 'POST'])
+
+@bp.route('/forgot-password', methods=('GET', 'POST'))
 def forgot_password_page():
     if request.method == 'POST':
         if not pyrebase_auth:
@@ -267,7 +289,6 @@ def forgot_password_page():
             return jsonify(success=True, message="تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.")
         except Exception as e:
             print(f"Forgot Password Error: {e}", file=sys.stderr)
-            # لا نكشف ما إذا كان البريد موجوداً أم لا لأسباب أمنية
             return jsonify(success=True, message="إذا كان بريدك الإلكتروني مسجلاً، فستصلك رسالة لإعادة التعيين.")
             
     return render_template('forgot_password.html')

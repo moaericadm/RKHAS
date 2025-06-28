@@ -1,0 +1,270 @@
+/*
+=====================================================
+== Core Application Stylesheet
+=====================================================
+*/
+
+/* --- 1. Color Palette & Variables --- */
+:root {
+    --bg-color: #0b021d;
+    --primary-glow: #9f7aea;
+    --secondary-glow: #00f2ff;
+    --accent-glow: #ff00f3;
+    --card-bg: rgba(26, 18, 54, 0.8);
+    --card-border: rgba(159, 122, 234, 0.2);
+    --text-color: #f0f2f5;
+    --text-muted-color: #a0aec0;
+    --header-color: var(--primary-glow);
+    --bs-body-bg: var(--bg-color);
+    --bs-body-color: var(--text-color);
+}
+
+html:not(.dark-mode) {
+    --bg-color: #f5f7fa;
+    --primary-glow: #6b46c1;
+    --secondary-glow: #2b6cb0;
+    --card-bg: rgba(255, 255, 255, 0.9);
+    --card-border: #e2e8f0;
+    --text-color: #2d3748;
+    --text-muted-color: #718096;
+    --header-color: var(--primary-glow);
+}
+
+
+/* --- 2. Base & Typography --- */
+body {
+    font-family: "Almarai", Tahoma, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+.text-muted {
+    color: var(--text-muted-color) !important;
+}
+
+a {
+    color: var(--secondary-glow);
+    text-decoration: none;
+    transition: color 0.2s ease-in-out;
+}
+
+    a:hover {
+        color: var(--primary-glow);
+    }
+
+    .btn a, a.btn {
+        color: inherit !important;
+        text-decoration: none !important;
+    }
+
+
+/* --- 3. Layout & Background --- */
+#particles-js {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: -1;
+}
+
+.container {
+    z-index: 10;
+    position: relative;
+}
+
+.main-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+
+/* --- 4. Card Component --- */
+.card {
+    background: var(--card-bg);
+    border-radius: 0.75rem;
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--card-border);
+    box-shadow: 0 0 30px rgba(159, 122, 234, 0.15);
+}
+
+html:not(.dark-mode) .card {
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+}
+
+.card-header {
+    background: linear-gradient(90deg, rgba(159, 122, 234, 0.1), transparent);
+    border-bottom: 1px solid var(--card-border);
+    color: var(--header-color);
+    font-weight: bold;
+    text-shadow: 0 0 10px var(--header-color);
+}
+
+.card-body, .card-body p {
+    color: var(--text-color);
+}
+
+
+/* --- 5. Form & Button Components --- */
+.btn-primary {
+    background: linear-gradient(45deg, var(--secondary-glow), var(--primary-glow));
+    border: none;
+    font-weight: bold;
+    color: #fff;
+    box-shadow: 0 4px 15px -5px var(--primary-glow);
+    transition: all 0.3s ease;
+}
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -5px var(--primary-glow);
+    }
+
+.btn-outline-secondary {
+    color: var(--text-muted-color);
+    border-color: var(--text-muted-color);
+}
+
+    .btn-outline-secondary:hover {
+        color: #fff;
+        background-color: var(--text-muted-color);
+        border-color: var(--text-muted-color);
+    }
+
+.form-control, .form-label, .form-text {
+    color: var(--text-color);
+}
+
+html:not(.dark-mode) .form-label, html:not(.dark-mode) .form-text {
+    color: var(--text-color);
+}
+
+.form-control {
+    background-color: rgba(11, 2, 29, 0.5);
+    border: 1px solid var(--card-border);
+}
+
+html:not(.dark-mode) .form-control {
+    background-color: #fff;
+    border-color: #d0d7de;
+}
+
+.form-control:focus {
+    background-color: var(--bg-color);
+    box-shadow: 0 0 10px var(--primary-glow);
+    border-color: var(--primary-glow);
+}
+
+html:not(.dark-mode) .form-control:focus {
+    box-shadow: 0 0 0 0.25rem rgba(107, 70, 193, 0.25);
+    border-color: var(--primary-glow);
+}
+
+
+/* --- 6. Table & List Components --- */
+.table, .table td, .table th {
+    color: var(--text-color);
+    vertical-align: middle;
+}
+
+.table-hover > tbody > tr:hover > * {
+    color: var(--text-color);
+    background-color: rgba(159, 122, 234, 0.1);
+}
+
+.list-group-item {
+    background-color: transparent !important;
+    border-color: var(--card-border) !important;
+    color: var(--text-color) !important;
+}
+
+
+/* --- 7. Nav Component (Tabs & Pills) --- */
+.nav-tabs .nav-link {
+    color: var(--text-muted-color);
+    border: 1px solid transparent;
+    border-bottom-color: var(--card-border);
+}
+
+    .nav-tabs .nav-link:hover, .nav-tabs .nav-link:focus {
+        color: var(--text-color);
+        border-color: var(--card-border);
+        isolation: isolate;
+    }
+
+    .nav-tabs .nav-link.active {
+        color: var(--primary-glow);
+        background-color: var(--card-bg);
+        border-color: var(--card-border) var(--card-border) transparent;
+    }
+
+html:not(.dark-mode) .nav-tabs .nav-link.active {
+    border-color: #dee2e6 #dee2e6 #fff;
+}
+
+.nav-pills .nav-link {
+    color: var(--text-muted-color);
+}
+
+    .nav-pills .nav-link.active {
+        background-color: var(--primary-glow);
+    }
+
+
+/* --- 8. SweetAlert2 Customization --- */
+.swal2-popup {
+    background: var(--card-bg) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--card-border) !important;
+}
+
+.swal2-title, .swal2-html-container {
+    color: var(--text-color) !important;
+}
+
+.swal2-input, .swal2-select, .swal2-textarea {
+    background: #0b021d !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--primary-glow) !important;
+}
+
+html:not(.dark-mode) .swal2-input,
+html:not(.dark-mode) .swal2-select,
+html:not(.dark-mode) .swal2-textarea {
+    background: #fff !important;
+    color: var(--text-color) !important;
+    border-color: #d0d7de !important;
+}
+
+
+/* --- 9. Animations & Effects --- */
+@keyframes flash-up-animation {
+    from {
+        background-color: rgba(40, 167, 69, 0.4);
+    }
+
+    to {
+        background-color: transparent;
+    }
+}
+
+.flash-up {
+    animation: flash-up-animation 2s ease-out;
+}
+
+@keyframes flash-down-animation {
+    from {
+        background-color: rgba(220, 53, 69, 0.4);
+    }
+
+    to {
+        background-color: transparent;
+    }
+}
+
+.flash-down {
+    animation: flash-down-animation 2s ease-out;
+}
