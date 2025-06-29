@@ -1,39 +1,23 @@
---- START OF FILE env file .txt ---
-
 # =======================================================
-# == Firebase Project Settings (zz66-3f329) ==
-# == CORRECTED AND FINAL - 2024
+# == Firebase Project Settings (zz66-3f329)
 # =======================================================
-
-# ملف حساب الخدمة (تأكد أن اسم الملف مطابق)
 FIREBASE_SERVICE_ACCOUNT=serviceAccountKey.json
-
-# --- قيم مشتقة من معرف المشروع (تم التحقق منها) ---
 FIREBASE_PROJECT_ID="zz66-3f329"
 FIREBASE_AUTH_DOMAIN="zz66-3f329.firebaseapp.com"
-
-# <<<  التصحيح هنا >>>
 FIREBASE_DATABASE_URL="https://zz66-3f329-default-rtdb.firebaseio.com"
-# <<<  التصحيح هنا >>>
 FIREBASE_STORAGE_BUCKET="zz66-3f329.appspot.com"
-
-# --- قيم الواجهة الأمامية (تم التحقق منها من قبلك) ---
 FIREBASE_API_KEY="AIzaSyBzGh5en0u3_nzxv6wzCiRDeUJspcKrg1I"
 FIREBASE_MESSAGING_SENDER_ID="908483755424"
 FIREBASE_APP_ID="1:908483755424:web:76933cd5e4e39fcf1478c5"
 FIREBASE_MEASUREMENT_ID="G-ZRYXSTE6BX"
 
 # =======================================================
-# == Application Settings ==
+# == Application Settings
 # =======================================================
-
-# بريد المدير
 ADMIN_EMAIL="naw@naw.com"
-
-# مفتاح سري لتطبيق فلاسك
 FLASK_SECRET_KEY="1d1e4c7d9b8e2a3f5b6c8d7e9f0a1b2c3d4e5f6a7b8c9d0e"
 
-# --- Google Drive Folder ID ---
-# معرف المجلد الذي سيتم رفع الصور إليه
+# =======================================================
+# == Google Drive Settings
+# =======================================================
 GOOGLE_DRIVE_FOLDER_ID="1POF9g-_gDkhJJwlDCHSUZ5OzEag112rv"
---- END OF FILE env file .txt ---

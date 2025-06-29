@@ -1,7 +1,5 @@
 
 
-# --- START OF FILE project/__init__.py ---
-
 import os
 import sys
 from flask import Flask, session
@@ -13,7 +11,6 @@ from firebase_admin import credentials, auth, db
 load_dotenv()
 
 # --- الخطوة 2: تهيئة Firebase خارج الدالة لضمان تنفيذها مرة واحدة ---
-# هذا هو المكان الصحيح للتهيئة
 try:
     if not firebase_admin._apps:
         SERVICE_ACCOUNT_FILE = os.getenv('FIREBASE_SERVICE_ACCOUNT')
@@ -22,10 +19,10 @@ try:
         if not SERVICE_ACCOUNT_FILE or not os.path.exists(SERVICE_ACCOUNT_FILE):
             raise ValueError(f"ملف مفتاح الخدمة '{SERVICE_ACCOUNT_FILE}' غير موجود أو المسار خاطئ.")
             
-        cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
+        creds = credentials.Certificate(SERVICE_ACCOUNT_FILE)
         
-        # <<< التعديل هنا: تمت إزالة storageBucket لأننا سنستخدم Google Drive >>>
-        firebase_admin.initialize_app(cred, {
+        # <<< التعديل هنا: تصحيح الخطأ الإملائي من cred إلى creds >>>
+        firebase_admin.initialize_app(creds, {
             'databaseURL': FIREBASE_DATABASE_URL
         })
         print(">> Firebase Admin Initialized Successfully!")
@@ -54,24 +51,17 @@ def create_app():
     from . import user_interactions_api
     from . import spin_wheel_api
     
-    # <<<  هذا هو الحل المطلوب >>>
-    # أضفنا url_prefix='/auth' لجعل جميع مسارات المصادقة تبدأ بـ /auth
     app.register_blueprint(auth_routes.bp, url_prefix='/auth') 
-    # <<< نهاية الحل >>>
-    
     app.register_blueprint(views.bp)
     app.register_blueprint(admin_api.bp)
     app.register_blueprint(user_interactions_api.bp)
     app.register_blueprint(spin_wheel_api.bp)
 
-    # ***  هذا هو الحل لمشكلة النافذة المنبثقة لجوجل  ***
-    # --- إضافة ترويسة الأمان للسماح بالنوافذ المنبثقة من Google ---
     @app.after_request
     def apply_coop_header(response):
         response.headers['Cross-Origin-Opener-Policy'] = 'same-origin-allow-popups'
         return response
         
-    # --- جعل إعدادات Firebase والبيانات العامة متاحة لكل القوالب (Templates) ---
     @app.context_processor
     def inject_firebase_config():
         firebase_config = {
@@ -92,19 +82,17 @@ def create_app():
             'current_user_name': None
         }
 
-        if 'user_id' in session:
-            context_data['current_user_id'] = session['user_id']
+        uid_from_session = session.get('user_id')
+        if uid_from_session:
+            context_data['current_user_id'] = uid_from_session
             context_data['current_user_name'] = session.get('name')
             try:
-                # التأكد من أن UID ليس فارغاً قبل إنشاء التوكن
-                if session['user_id']:
-                    token_bytes = auth.create_custom_token(session['user_id'])
-                    context_data['firebase_token'] = token_bytes.decode('utf-8')
+                token_bytes = auth.create_custom_token(uid_from_session)
+                context_data['firebase_token'] = token_bytes.decode('utf-8')
             except Exception as e:
-                print(f"!!! CRITICAL: Failed to create custom token for user '{session['user_id']}'. Error: {e}", file=sys.stderr)
+                print(f"!!! CRITICAL: Failed to create custom token for user '{uid_from_session}'. Error: {e}", file=sys.stderr)
         
         return context_data
 
     return app
 
-# --- END OF FILE project/__init__.py ---

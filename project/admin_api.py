@@ -74,60 +74,57 @@ def add_user():
         print(f"!!! Add/Edit User Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
 
-# <<< التعديل الجذري والنهائي هنا >>>
+# <<< التعديل الجذري والنهائي هنا: إعادة المنطق الصحيح للدالة >>>
 @bp.route('/market/update_trends', methods=['POST'])
 @admin_required
 def update_market_trends():
     try:
-        all_users = db.reference('users').get()
+        users_ref = db.reference('users')
+        all_users = users_ref.get()
         if not all_users:
             return jsonify(success=False, message="لا يوجد زواحف لتحديثهم."), 404
 
-        crawlers_with_trend = {
-            name: data.get('stock_trend', 0) 
-            for name, data in all_users.items() 
-            if isinstance(data, dict) and data.get('stock_trend')
-        }
-
-        if not crawlers_with_trend:
-            return jsonify(success=True, message="لا يوجد اتجاهات أسهم جديدة لتطبيقها.")
-
-        all_investments = db.reference('investments').get()
-        if not all_investments:
-            # إذا لم تكن هناك استثمارات، فقط قم بتصفير الاتجاهات
-            updates_for_trends_only = {f'users/{name}/stock_trend': 0 for name in crawlers_with_trend}
-            db.reference().update(updates_for_trends_only)
-            return jsonify(success=True, message="تم تصفير اتجاهات الأسهم. لا توجد استثمارات لتحديثها.")
-
         updates = {}
-        updated_investments_count = 0
+        history_updates = {}
+        updated_crawlers_count = 0
+        now = int(time.time())
 
-        for user_id, user_investments in all_investments.items():
-            for crawler_name, investment_data in user_investments.items():
-                if crawler_name in crawlers_with_trend:
-                    trend = float(crawlers_with_trend[crawler_name])
-                    current_sp = float(investment_data.get('invested_sp', 0))
+        # المرور على كل الزواحف
+        for name, data in all_users.items():
+            if isinstance(data, dict):
+                trend = data.get('stock_trend', 0.0)
+                # فقط إذا كان هناك اتجاه محدد
+                if trend != 0:
+                    current_points = int(data.get('points', 0))
+                    # 1. تطبيق النسبة على نقاط الزاحف نفسه (السلوك الصحيح)
+                    new_points = round(current_points * (1 + (trend / 100.0)))
                     
-                    # تطبيق النسبة مباشرة على قيمة الاستثمار
-                    new_sp_value = current_sp * (1 + (trend / 100.0))
+                    if new_points < 0: 
+                        new_points = 0
                     
-                    if new_sp_value < 0:
-                        new_sp_value = 0
+                    # 2. إضافة تحديث النقاط وتحديث السجل
+                    if new_points != current_points:
+                        updates[f'users/{name}/points'] = new_points
+                        history_updates[f'points_history/{name}'] = {'points': new_points, 'timestamp': now}
+                        updated_crawlers_count += 1
 
-                    updates[f'investments/{user_id}/{crawler_name}/invested_sp'] = new_sp_value
-                    updated_investments_count += 1
+                # 3. تصفير اتجاه السهم بعد تطبيقه
+                if data.get('stock_trend') is not None and data.get('stock_trend') != 0:
+                    updates[f'users/{name}/stock_trend'] = 0
         
-        # تصفير اتجاهات الأسهم بعد تطبيقها
-        for crawler_name in crawlers_with_trend:
-            updates[f'users/{crawler_name}/stock_trend'] = 0
-
+        # 4. تنفيذ جميع التحديثات دفعة واحدة
         if updates:
             db.reference().update(updates)
 
-        log_text = f"الأدمن '{session.get('name')}' قام بتحديث السوق. تم تعديل قيمة {updated_investments_count} استثمار مباشرة."
-        db.reference('activity_log').push({'type': 'admin_edit', 'text': log_text, 'timestamp': int(time.time())})
+        # 5. إضافة السجلات الجديدة في حلقة منفصلة لضمان التوافق
+        if history_updates:
+            for path, record in history_updates.items():
+                db.reference(path).push(record)
+
+        log_text = f"الأدمن '{session.get('name')}' قام بتحديث السوق. تم تعديل نقاط {updated_crawlers_count} زاحف."
+        db.reference('activity_log').push({'type': 'admin_edit', 'text': log_text, 'timestamp': now})
         
-        return jsonify(success=True, message=f"تم تحديث السوق بنجاح. تم تعديل قيمة {updated_investments_count} استثمار.")
+        return jsonify(success=True, message=f"تم تحديث السوق بنجاح. تم تعديل نقاط {updated_crawlers_count} زاحف.")
 
     except Exception as e:
         print(f"!!! Market Update Error: {e}", file=sys.stderr)
@@ -144,7 +141,6 @@ def delete_user(username):
     return jsonify(success=True)
 
 # ... (باقي الملف يبقى كما هو دون تغيير)
-# ... (rest of the file remains the same)
 @bp.route('/candidate/add', methods=['POST'])
 @admin_required
 def add_candidate():
@@ -322,6 +318,9 @@ def reset_all_free_spins():
     for uid in users_approved: updates[f'user_spin_state/{uid}/freeAttempts'] = atts; updates[f'user_spin_state/{uid}/lastFreeUpdateTimestamp'] = now
     if updates: db.reference('/').update(updates)
     return jsonify(success=True)
+
+
+# --- Avatar Management API ---
 
 @bp.route('/shop/add_avatar', methods=['POST'])
 @admin_required
