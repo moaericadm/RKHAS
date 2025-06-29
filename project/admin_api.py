@@ -1,303 +1,463 @@
-﻿# --- START OF FILE project/admin_api.py ---
-
+﻿
 import time
 import sys
-from flask import (
-    Blueprint, request, jsonify, session
-)
+import os
+import io
+from flask import Blueprint, request, jsonify, session
 from firebase_admin import db, auth
-from .auth_routes import admin_required
+from .utils import admin_required
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+
 
 bp = Blueprint('admin_api', __name__, url_prefix='/api/admin')
 
-# --- USER MANAGEMENT ---
+def _get_drive_service():
+    SERVICE_ACCOUNT_FILE = os.getenv('FIREBASE_SERVICE_ACCOUNT')
+    SCOPES = ['https://www.googleapis.com/auth/drive']
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    service = build('drive', 'v3', credentials=creds)
+    return service
+
 @bp.route('/add_user', methods=['POST'])
 @admin_required
 def add_user():
-    ref_users = db.reference('users/')
-    ref_points_history = db.reference('points_history/')
-    ref_candidates = db.reference('candidates/')
-    
-    name = request.form.get('name', '').strip()
-    points_str = request.form.get('points', '0')
-    original_name = request.form.get('original_name', '').strip()
-    if not name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
-    try: points = int(points_str)
-    except (ValueError, TypeError): return jsonify(success=False, message="النقاط يجب أن تكون رقماً صحيحاً."), 400
-    if not original_name and ref_users.child(name).get(): return jsonify(success=False, message="هذا الاسم موجود بالفعل."), 409
-    if original_name and original_name != name:
-        if ref_users.child(name).get(): return jsonify(success=False, message=f"الاسم الجديد '{name}' موجود بالفعل."), 409
-        old_data = ref_users.child(original_name).get()
-        if old_data:
-            old_data['name'] = name
-            ref_users.child(name).set(old_data)
-            ref_users.child(original_name).delete()
-            old_history = ref_points_history.child(original_name).get()
+    try:
+        name = request.form.get('name', '').strip()
+        points_str = request.form.get('points', '0')
+        stock_trend_str = request.form.get('stock_trend')
+        avatar_url = request.form.get('avatar_url', '') 
+        original_name = request.form.get('original_name', '').strip()
+
+        if not name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
+        points = int(points_str)
+        stock_trend = float(stock_trend_str) if stock_trend_str else 0.0
+        
+        ref_users = db.reference('users/')
+        ref_history = db.reference('points_history/')
+        
+        if not original_name and ref_users.child(name).get():
+            return jsonify(success=False, message="هذا الاسم موجود بالفعل."), 409
+        if original_name and original_name != name and ref_users.child(name).get():
+            return jsonify(success=False, message=f"الاسم الجديد '{name}' موجود بالفعل."), 409
+            
+        if original_name and original_name != name:
+            old_data = ref_users.child(original_name).get()
+            if old_data:
+                ref_users.child(name).set(old_data)
+                ref_users.child(original_name).delete()
+            old_history = ref_history.child(original_name).get()
             if old_history: 
-                ref_points_history.child(name).set(old_history)
-                ref_points_history.child(original_name).delete()
-            if ref_candidates.child(original_name).get():
-                ref_candidates.child(name).set(True)
-                ref_candidates.child(original_name).delete()
-        ref_users.child(name).update({'points': points})
-    else:
+                ref_history.child(name).set(old_history)
+                ref_history.child(original_name).delete()
+                
         user_data = ref_users.child(name).get() or {}
-        current_likes = user_data.get('likes', 0)
-        ref_users.child(name).update({'name': name, 'points': points, 'likes': current_likes})
-    ref_points_history.child(name).push({'points': points, 'timestamp': int(time.time())})
-    return jsonify(success=True)
+        user_data.update({
+            'name': name, 
+            'points': points, 
+            'stock_trend': stock_trend,
+            'avatar_url': avatar_url
+        })
+        
+        if 'likes' not in user_data: user_data['likes'] = 0
+        ref_users.child(name).set(user_data)
+        
+        db.reference(f'points_history/{name}').push({'points': points, 'timestamp': int(time.time())})
+        return jsonify(success=True)
+        
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="النقاط واتجاه السهم يجب أن تكون أرقاماً صالحة."), 400
+    except Exception as e:
+        print(f"!!! Add/Edit User Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
+
+# <<< التعديل الجذري والنهائي هنا >>>
+@bp.route('/market/update_trends', methods=['POST'])
+@admin_required
+def update_market_trends():
+    try:
+        all_users = db.reference('users').get()
+        if not all_users:
+            return jsonify(success=False, message="لا يوجد زواحف لتحديثهم."), 404
+
+        crawlers_with_trend = {
+            name: data.get('stock_trend', 0) 
+            for name, data in all_users.items() 
+            if isinstance(data, dict) and data.get('stock_trend')
+        }
+
+        if not crawlers_with_trend:
+            return jsonify(success=True, message="لا يوجد اتجاهات أسهم جديدة لتطبيقها.")
+
+        all_investments = db.reference('investments').get()
+        if not all_investments:
+            # إذا لم تكن هناك استثمارات، فقط قم بتصفير الاتجاهات
+            updates_for_trends_only = {f'users/{name}/stock_trend': 0 for name in crawlers_with_trend}
+            db.reference().update(updates_for_trends_only)
+            return jsonify(success=True, message="تم تصفير اتجاهات الأسهم. لا توجد استثمارات لتحديثها.")
+
+        updates = {}
+        updated_investments_count = 0
+
+        for user_id, user_investments in all_investments.items():
+            for crawler_name, investment_data in user_investments.items():
+                if crawler_name in crawlers_with_trend:
+                    trend = float(crawlers_with_trend[crawler_name])
+                    current_sp = float(investment_data.get('invested_sp', 0))
+                    
+                    # تطبيق النسبة مباشرة على قيمة الاستثمار
+                    new_sp_value = current_sp * (1 + (trend / 100.0))
+                    
+                    if new_sp_value < 0:
+                        new_sp_value = 0
+
+                    updates[f'investments/{user_id}/{crawler_name}/invested_sp'] = new_sp_value
+                    updated_investments_count += 1
+        
+        # تصفير اتجاهات الأسهم بعد تطبيقها
+        for crawler_name in crawlers_with_trend:
+            updates[f'users/{crawler_name}/stock_trend'] = 0
+
+        if updates:
+            db.reference().update(updates)
+
+        log_text = f"الأدمن '{session.get('name')}' قام بتحديث السوق. تم تعديل قيمة {updated_investments_count} استثمار مباشرة."
+        db.reference('activity_log').push({'type': 'admin_edit', 'text': log_text, 'timestamp': int(time.time())})
+        
+        return jsonify(success=True, message=f"تم تحديث السوق بنجاح. تم تعديل قيمة {updated_investments_count} استثمار.")
+
+    except Exception as e:
+        print(f"!!! Market Update Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ أثناء تحديث السوق."), 500
+
 
 @bp.route('/delete_user/<username>', methods=['POST'])
 @admin_required
 def delete_user(username):
-    ref_users = db.reference('users/')
-    ref_candidates = db.reference('candidates/')
-    ref_points_history = db.reference('points_history/')
-    if not ref_users.child(username).get(): return jsonify(success=False, message="المستخدم غير موجود"), 404
-    ref_users.child(username).delete()
-    ref_candidates.child(username).delete()
-    ref_points_history.child(username).delete()
+    if username: 
+        db.reference(f'users/{username}').delete()
+        db.reference(f'candidates/{username}').delete()
+        db.reference(f'points_history/{username}').delete()
     return jsonify(success=True)
+
+# ... (باقي الملف يبقى كما هو دون تغيير)
+# ... (rest of the file remains the same)
+@bp.route('/candidate/add', methods=['POST'])
+@admin_required
+def add_candidate():
+    name = request.form.get('name', '').strip()
+    if not name:
+        return jsonify(success=False, message="اسم المرشح مطلوب."), 400
+    if db.reference(f'users/{name}').get():
+        return jsonify(success=False, message="هذا الاسم موجود بالفعل كزاحف."), 409
+    if db.reference(f'candidates/{name}').get():
+        return jsonify(success=False, message="هذا الاسم موجود بالفعل في قائمة المرشحين."), 409
+    try:
+        db.reference(f'candidates/{name}').set(True) 
+        return jsonify(success=True, message=f"تمت إضافة '{name}' إلى قائمة المرشحين بنجاح.")
+    except Exception as e:
+        print(f"!!! Add Candidate Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء إضافة المرشح."), 500
 
 @bp.route('/ban_user', methods=['POST'])
 @admin_required
 def ban_user():
-    ref_banned_users = db.reference('banned_users/')
-    user_id, user_name = request.form.get('user_id_to_ban', ''), request.form.get('user_name_to_ban', 'مستخدم')
-    if not user_id: return jsonify(success=False, message="معرف المستخدم مطلوب."), 400
-    ref_banned_users.child(user_id).set({'banned': True, 'name': user_name, 'timestamp': int(time.time()), 'banned_by': session.get('name', 'Admin')})
-    return jsonify(success=True, message=f"تم حظر المستخدم '{user_name}' بنجاح.")
+    user_id = request.form.get('user_id_to_ban')
+    if user_id: 
+        db.reference(f'banned_users/{user_id}').set({
+            'name': request.form.get('user_name_to_ban', 'مستخدم'), 
+            'timestamp': int(time.time()), 'banned_by': session.get('name', 'Admin')})
+    return jsonify(success=True)
 
 @bp.route('/unban_user/<user_id>', methods=['POST'])
 @admin_required
 def unban_user(user_id):
-    ref_banned_users = db.reference('banned_users/')
-    if not ref_banned_users.child(user_id).get(): return jsonify(success=False, message="هذا المستخدم غير محظور."), 404
-    ref_banned_users.child(user_id).delete()
-    return jsonify(success=True, message="تم رفع الحظر عن المستخدم.")
+    if user_id: db.reference(f'banned_users/{user_id}').delete()
+    return jsonify(success=True)
 
 @bp.route('/manage_user/<user_id>/<action>', methods=['POST'])
 @admin_required
 def manage_user(user_id, action):
-    ref_registered_users = db.reference('registered_users/')
-    user_ref = ref_registered_users.child(user_id)
-    user_data = user_ref.get()
-    if not user_data: 
-        return jsonify(success=False, message="المستخدم غير موجود."), 404
-    if action not in ['approve', 'reject']: 
-        return jsonify(success=False, message="إجراء غير صالح."), 400
-    
+    user_ref = db.reference(f'registered_users/{user_id}');
+    if not user_ref.get(): return jsonify(success=False, message="المستخدم غير موجود."), 404
     try:
-        if action == 'approve':
-            auth.update_user(user_id, disabled=False)
-            user_ref.update({'status': 'approved'})
-            message = "تم قبول المستخدم وتفعيل حسابه بنجاح."
-        else: # action == 'reject'
-            user_ref.update({'status': 'rejected'})
-            try:
-                auth.delete_user(user_id)
-            except auth.UserNotFoundError:
-                pass 
-            message = "تم رفض المستخدم وحذف طلبه."
-        return jsonify(success=True, message=message)
-    except Exception as e:
-        print(f"!!! User Management Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ في الخادم."), 500
+        if action == 'approve': auth.update_user(user_id, disabled=False); user_ref.update({'status': 'approved'}); return jsonify(success=True)
+        elif action == 'reject': auth.delete_user(user_id); user_ref.delete(); return jsonify(success=True)
+    except auth.UserNotFoundError: user_ref.delete(); return jsonify(success=True)
+    except Exception as e: return jsonify(success=False, message=str(e)), 500
 
-
-# --- CONTENT MANAGEMENT ---
-@bp.route('/candidate/<action>/<username>', methods=['POST'])
+@bp.route('/candidate/approve', methods=['POST'])
 @admin_required
-def manage_candidate(action, username):
-    ref_candidates = db.reference('candidates/')
-    if action == 'add': ref_candidates.child(username).set(True)
-    elif action == 'remove': ref_candidates.child(username).delete()
+def approve_candidate():
+    name = request.form.get('name', '').strip()
+    if name: db.reference(f'users/{name}').set({'name': name, 'points': 0, 'likes': 0, 'stock_trend': 0}); db.reference(f'candidates/{name}').delete()
     return jsonify(success=True)
 
-@bp.route('/announcements/<action>', methods=['POST'])
+@bp.route('/candidate/reject', methods=['POST'])
 @admin_required
-def manage_announcement(action):
-    ref_site_settings = db.reference('site_settings/')
-    if action == 'add':
-        text = request.form.get('text', '').strip()
-        if text: ref_site_settings.child('announcements').push({'text': text})
-    elif action.startswith('delete/'):
-        item_id = action.split('/')[-1]
-        ref_site_settings.child(f'announcements/{item_id}').delete()
+def reject_candidate():
+    name = request.form.get('name', '').strip()
+    if name: db.reference(f'candidates/{name}').delete()
     return jsonify(success=True)
 
-@bp.route('/honor_roll/<action>', methods=['POST'])
+@bp.route('/announcements/add', methods=['POST'])
 @admin_required
-def manage_honor_roll(action):
-    ref_site_settings = db.reference('site_settings/')
-    if action == 'add':
-        name = request.form.get('name', '').strip()
-        if name: ref_site_settings.child('honor_roll').push({'name': name})
-    elif action.startswith('delete/'):
-        item_id = action.split('/')[-1]
-        ref_site_settings.child(f'honor_roll/{item_id}').delete()
+def add_announcement():
+    text = request.form.get('text', '').strip()
+    if text: db.reference('site_settings/announcements').push({'text': text})
+    return jsonify(success=True)
+
+@bp.route('/announcements/delete/<item_id>', methods=['POST'])
+@admin_required
+def delete_announcement(item_id):
+    if item_id: db.reference(f'site_settings/announcements/{item_id}').delete()
+    return jsonify(success=True)
+
+@bp.route('/honor_roll/add', methods=['POST'])
+@admin_required
+def add_to_honor_roll():
+    name = request.form.get('name', '').strip()
+    if name: db.reference('site_settings/honor_roll').push({'name': name})
+    return jsonify(success=True)
+
+@bp.route('/honor_roll/delete/<item_id>', methods=['POST'])
+@admin_required
+def delete_from_honor_roll(item_id):
+    if item_id: db.reference(f'site_settings/honor_roll/{item_id}').delete()
     return jsonify(success=True)
 
 @bp.route('/user_message/send', methods=['POST'])
 @admin_required
 def send_user_message():
-    ref_user_messages = db.reference('user_messages/')
-    user_id, user_name, message = request.form.get('user_id'), request.form.get('user_name'), request.form.get('message')
-    if not all([user_id, message]): return jsonify(success=False, message="معرف المستخدم والرسالة مطلوبان."), 400
-    ref_user_messages.child(user_id).push({'text': message, 'timestamp': int(time.time())})
-    return jsonify(success=True, message=f"تم إرسال الرسالة إلى {user_name}")
-
-# --- SETTINGS MANAGEMENT ---
-@bp.route('/settings/spin_wheel', methods=['POST'])
-@admin_required
-def save_spin_wheel_settings():
-    ref_site_settings = db.reference('site_settings/')
-    settings = request.get_json()
-    if settings:
-        ref_site_settings.child('spin_wheel_settings').set(settings)
-    return jsonify(success=True, message=f"تم حفظ إعدادات عجلة الحظ بنجاح!")
-
-# --- SHOP & ECONOMY MANAGEMENT ---
-@bp.route('/shop/add_points_product', methods=['POST'])
-@admin_required
-def add_points_product():
-    ref_site_settings = db.reference('site_settings/')
-    try:
-        data = request.get_json()
-        product_type = data.get('type')
-        points = int(data.get('points_amount'))
-        price = int(data.get('sp_price'))
-        limit = int(data.get('daily_limit'))
-
-        if not all([product_type, points > 0, price > 0, limit > 0]):
-            return jsonify(success=False, message="بيانات المنتج غير صالحة."), 400
-        if product_type not in ['raise', 'drop']:
-            return jsonify(success=False, message="نوع المنتج غير صالح."), 400
-
-        new_product = {
-            "type": product_type,
-            "points_amount": points,
-            "sp_price": price,
-            "daily_limit": limit
-        }
-        ref_site_settings.child('shop_products_points').push(new_product)
-        return jsonify(success=True)
-    except (ValueError, TypeError, KeyError):
-        return jsonify(success=False, message="بيانات الإدخال غير صحيحة."), 400
-    except Exception as e:
-        print(f"!!! Add Points Product Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="خطأ في الخادم."), 500
-
-@bp.route('/shop/delete_points_product/<product_id>', methods=['POST'])
-@admin_required
-def delete_points_product(product_id):
-    ref_site_settings = db.reference('site_settings/')
-    if not product_id:
-        return jsonify(success=False, message="معرف المنتج مطلوب."), 400
-    ref_site_settings.child(f'shop_products_points/{product_id}').delete()
+    user_id = request.form.get('user_id'); message = request.form.get('message')
+    if all([user_id, message]): db.reference(f'user_messages/{user_id}').push({'text': message, 'timestamp': int(time.time())})
     return jsonify(success=True)
 
-
-# --- SPIN WHEEL & WALLET ADMIN CONTROLS ---
-
-# *** התיקון כאן | THE FIX IS HERE ***
 @bp.route('/update_wallet', methods=['POST'])
 @admin_required
 def update_wallet():
-    ref_wallets = db.reference('wallets/')
-    ref_activity_log = db.reference('activity_log/')
-    
-    user_id = request.form.get('user_id')
-    user_name = request.form.get('user_name') # للحفظ في سجل النشاط
-    
-    if not user_id:
-        return jsonify(success=False, message="معرف المستخدم مطلوب."), 400
-        
-    try:
-        new_cc = int(request.form.get('cc'))
-        new_sp = float(request.form.get('sp'))
-        
-        if new_cc < 0 or new_sp < 0:
-            return jsonify(success=False, message="لا يمكن أن تكون الأرصدة سالبة."), 400
-            
-    except (ValueError, TypeError):
-        return jsonify(success=False, message="الرجاء إدخال قيم رقمية صحيحة للأرصدة."), 400
-
-    try:
-        # تحديث المحفظة مباشرة
-        ref_wallets.child(user_id).update({
-            'cc': new_cc,
-            'sp': new_sp
-        })
-        
-        # تسجيل هذا الإجراء الإداري في سجل النشاط
-        admin_name = session.get('name', 'Admin')
-        ref_activity_log.push({
-            'type': 'admin_edit',
-            'text': f"'{admin_name}' قام بتعديل محفظة '{user_name}' إلى {new_cc} CC و {new_sp:.2f} SP.",
-            'timestamp': int(time.time()),
-            'admin_id': session.get('user_id'),
-            'target_user_id': user_id
-        })
-        
-        return jsonify(success=True, message="تم تحديث المحفظة بنجاح.")
-    except Exception as e:
-        print(f"!!! Update Wallet Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ في الخادم أثناء تحديث المحفظة."), 500
-
+    user_id = request.form.get('user_id'); user_name = request.form.get('user_name', 'مستخدم')
+    if not user_id: return jsonify(success=False, message="User ID is required."), 400
+    try: new_cc = int(request.form.get('cc', 0)); new_sp = float(request.form.get('sp', 0))
+    except (ValueError, TypeError): return jsonify(success=False, message="Invalid number format."), 400
+    db.reference(f'wallets/{user_id}').update({'cc': new_cc, 'sp': new_sp})
+    db.reference('activity_log').push({'type':'admin_edit', 'text': f"الأدمن '{session.get('name')}' عدل محفظة '{user_name}'", 'timestamp': int(time.time())})
+    return jsonify(success=True)
 
 @bp.route('/update_purchased_attempts', methods=['POST'])
 @admin_required
 def update_purchased_attempts():
-    ref_user_spin_state = db.reference('user_spin_state/')
     user_id = request.form.get('user_id')
+    if not user_id: return jsonify(success=False, message="User ID is required."), 400
     try:
-        attempts = int(request.form.get('attempts'))
+        attempts = int(request.form.get('attempts', 0))
         if attempts < 0: return jsonify(success=False, message="عدد المحاولات لا يمكن أن يكون سالباً."), 400
-    except (ValueError, TypeError):
-        return jsonify(success=False, message="الرجاء إدخال عدد صحيح للمحاولات."), 400
-    if not user_id: return jsonify(success=False, message="معرف المستخدم مطلوب."), 400
+        db.reference(f'user_spin_state/{user_id}/purchasedAttempts').set(attempts)
+        user_name = (db.reference(f'registered_users/{user_id}/name').get() or 'مستخدم')
+        db.reference('activity_log').push({'type':'admin_edit', 'text': f"الأدمن '{session.get('name')}' عدل المحاولات المشتراة لـ '{user_name}' إلى {attempts}.", 'timestamp': int(time.time())})
+        return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="عدد المحاولات يجب أن يكون رقماً صحيحاً."), 400
+
+@bp.route('/settings/spin_wheel', methods=['POST'])
+@admin_required
+def save_spin_wheel_settings():
+    data = request.get_json()
+    if not data: return jsonify(success=False, message="No data received."), 400
     try:
-        ref_user_spin_state.child(f"{user_id}/purchasedAttempts").set(attempts)
-        return jsonify(success=True, message="تم تحديث رصيد المحاولات المشتراة بنجاح.")
-    except Exception as e:
-        print(f"!!! Update Purchased Attempts Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ في الخادم."), 500
+        settings = {"enabled": bool(data.get('enabled')), "cooldownHours": int(data.get('cooldownHours')), "maxAttempts": int(data.get('maxAttempts')), "maxAccumulation": int(data.get('maxAccumulation')), "purchaseLimit": int(data.get('purchaseLimit')), "prizes": [{"value": int(p['value']), "weight": float(p['weight'])} for p in data.get('prizes', []) if p.get('value') and p.get('weight')]}
+        db.reference('site_settings/spin_wheel_settings').set(settings)
+        return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="بيانات غير صالحة."), 400
+
+@bp.route('/shop/add_product', methods=['POST'])
+@admin_required
+def add_product():
+    try:
+        sp = int(request.form.get('sp_amount')); cc = int(request.form.get('cc_price'))
+        if sp <= 0 or cc <= 0: raise ValueError
+        db.reference('site_settings/shop_products').push({'sp_amount': sp, 'cc_price': cc}); return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="الكميات والأسعار يجب أن تكون أرقاماً موجبة."), 400
+
+@bp.route('/shop/delete_product/<pid>', methods=['POST'])
+@admin_required
+def delete_product(pid):
+    if pid: db.reference(f'site_settings/shop_products/{pid}').delete(); return jsonify(success=True)
+
+@bp.route('/shop/add_spin_product', methods=['POST'])
+@admin_required
+def add_spin_product():
+    try:
+        att = int(request.form.get('attempts_amount')); sp = int(request.form.get('sp_price'))
+        if att <= 0 or sp <= 0: raise ValueError
+        db.reference('site_settings/shop_products_spins').push({'attempts_amount': att, 'sp_price': sp}); return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="الكميات والأسعار يجب أن تكون أرقاماً موجبة."), 400
+
+@bp.route('/shop/delete_spin_product/<pid>', methods=['POST'])
+@admin_required
+def delete_spin_product(pid):
+    if pid: db.reference(f'site_settings/shop_products_spins/{pid}').delete(); return jsonify(success=True)
+
+@bp.route('/shop/add_points_product', methods=['POST'])
+@admin_required
+def add_points_product():
+    try:
+        prod = {"type": request.form.get('type'), "points_amount": int(request.form.get('points_amount')), "sp_price": int(request.form.get('sp_price')), "daily_limit": int(request.form.get('daily_limit', 1))}
+        if not prod["type"] or prod["points_amount"] <= 0 or prod["sp_price"] <= 0 or prod["daily_limit"] <= 0: raise ValueError
+        db.reference('site_settings/shop_products_points').push(prod); return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="بيانات المنتج غير صالحة."), 400
+
+@bp.route('/shop/delete_points_product/<pid>', methods=['POST'])
+@admin_required
+def delete_points_product(pid):
+    if pid: db.reference(f'site_settings/shop_products_points/{pid}').delete(); return jsonify(success=True)
 
 @bp.route('/reset_all_free_spins', methods=['POST'])
 @admin_required
 def reset_all_free_spins():
-    ref_site_settings = db.reference('site_settings/')
-    ref_registered_users = db.reference('registered_users/')
-    
-    user_id_to_reset = request.form.get('user_id')
-    
+    settings = db.reference('site_settings/spin_wheel_settings').get() or {}; atts = settings.get('maxAttempts', 1); now = int(time.time()); updates = {}
+    users_approved = (db.reference('registered_users').order_by_child('status').equal_to('approved').get() or {})
+    for uid in users_approved: updates[f'user_spin_state/{uid}/freeAttempts'] = atts; updates[f'user_spin_state/{uid}/lastFreeUpdateTimestamp'] = now
+    if updates: db.reference('/').update(updates)
+    return jsonify(success=True)
+
+@bp.route('/shop/add_avatar', methods=['POST'])
+@admin_required
+def add_avatar():
+    if 'avatar_file' not in request.files: return jsonify(success=False, message="ملف الصورة مطلوب."), 400
+    file = request.files['avatar_file']
+    name = request.form.get('avatar_name', '').strip()
     try:
-        settings = ref_site_settings.child('spin_wheel_settings').get() or {}
-        free_attempts_to_add = settings.get('maxAttempts', 1)
-        now = int(time.time())
+        price_personal = int(request.form.get('price_sp_personal', 0))
+        price_gift = int(request.form.get('price_sp_gift', 0))
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="الأسعار يجب أن تكون أرقاماً صحيحة."), 400
 
-        updates = {}
-        target_users_count = 0
-        
-        if user_id_to_reset:
-            updates[f"user_spin_state/{user_id_to_reset}/freeAttempts"] = free_attempts_to_add
-            updates[f"user_spin_state/{user_id_to_reset}/lastFreeUpdateTimestamp"] = now
-            target_users_count = 1
-        else:
-            registered_users = ref_registered_users.get() or {}
-            if not registered_users:
-                return jsonify(success=True, message="لا يوجد مستخدمون مسجلون لمنحهم محاولات.")
-            for user_id in registered_users:
-                updates[f"user_spin_state/{user_id}/freeAttempts"] = free_attempts_to_add
-                updates[f"user_spin_state/{user_id}/lastFreeUpdateTimestamp"] = now
-            target_users_count = len(registered_users)
+    if not name or price_personal <= 0 or price_gift <= 0: return jsonify(success=False, message="اسم الأفاتار والأسعار الموجبة مطلوبة."), 400
+    if file.filename == '': return jsonify(success=False, message="لم يتم اختيار ملف."), 400
+    DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
+    if not DRIVE_FOLDER_ID: return jsonify(success=False, message="معرف مجلد Google Drive غير مهيأ في الخادم."), 500
 
-        if updates:
-            db.reference('/').update(updates)
-            
-        return jsonify(success=True, message=f"تم إرسال طلب إعادة التعيين لـ {target_users_count} مستخدم.")
+    try:
+        drive_service = _get_drive_service()
+        file_metadata = {'name': f"{int(time.time())}_{file.filename}", 'parents': [DRIVE_FOLDER_ID]}
+        media = MediaIoBaseUpload(io.BytesIO(file.read()), mimetype=file.content_type, resumable=True)
+        uploaded_file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        file_id = uploaded_file.get('id')
+        drive_service.permissions().create(fileId=file_id, body={'type': 'anyone', 'role': 'reader'}).execute()
+        image_url = f'https://lh3.googleusercontent.com/d/{file_id}'
+
+        new_avatar_ref = db.reference('site_settings/shop_avatars').push()
+        new_avatar_ref.set({
+            'name': name,
+            'price_sp_personal': price_personal,
+            'price_sp_gift': price_gift,
+            'image_url': image_url,
+            'storage_path': file_id,
+            'added_at': int(time.time())
+        })
+        return jsonify(success=True, message=f"تمت إضافة أفاتار '{name}' بنجاح!")
     except Exception as e:
-        print(f"!!! Reset All Free Spins Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ في الخادم أثناء إعادة التعيين."), 500
-# --- END OF FILE project/admin_api.py ---
+        error_type = type(e).__name__
+        print(f"!!! Avatar Upload Error (Google Drive) [{error_type}]: {str(e)}", file=sys.stderr)
+        return jsonify(success=False, message=f"فشل رفع الصورة. الخطأ: {error_type}"), 500
+
+@bp.route('/shop/delete_avatar/<avatar_id>', methods=['POST'])
+@admin_required
+def delete_avatar(avatar_id):
+    if not avatar_id: return jsonify(success=False, message="معرف الأفاتار مفقود."), 400
+    avatar_ref = db.reference(f'site_settings/shop_avatars/{avatar_id}')
+    avatar_data = avatar_ref.get()
+    if not avatar_data: return jsonify(success=False, message="الأفاتار غير موجود."), 404
+    try:
+        drive_file_id = avatar_data.get('storage_path')
+        if drive_file_id:
+            drive_service = _get_drive_service()
+            drive_service.files().delete(fileId=drive_file_id).execute()
+        avatar_ref.delete()
+        return jsonify(success=True, message="تم حذف الأفاتار بنجاح.")
+    except Exception as e:
+        error_type = type(e).__name__
+        if 'HttpError 404' in str(e):
+             avatar_ref.delete()
+             return jsonify(success=True, message="تم حذف الأفاتار من قاعدة البيانات (لم يكن موجوداً في Drive).")
+        print(f"!!! Avatar Deletion Error (Google Drive) [{error_type}]: {str(e)}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء الحذف من Google Drive."), 500
+
+@bp.route('/user_avatar/remove', methods=['POST'])
+@admin_required
+def remove_user_avatar():
+    user_id = request.form.get('user_id')
+    avatar_id = request.form.get('avatar_id')
+    if not all([user_id, avatar_id]): return jsonify(success=False, message="بيانات المستخدم والأفاتار مطلوبة."), 400
+    try:
+        avatar_ownership_ref = db.reference(f'user_avatars/{user_id}/owned/{avatar_id}')
+        if avatar_ownership_ref.get() is None: return jsonify(success=False, message="المستخدم لا يمتلك هذا الأفاتار أصلاً."), 404
+        avatar_ownership_ref.delete()
+        user_name = (db.reference(f'registered_users/{user_id}/name').get() or 'مستخدم')
+        avatar_name = (db.reference(f'site_settings/shop_avatars/{avatar_id}/name').get() or 'غير معروف')
+        log_text = f"الأدمن '{session.get('name')}' أزال أفاتار '{avatar_name}' من المستخدم '{user_name}'."
+        db.reference('activity_log').push({'type': 'admin_edit', 'text': log_text, 'timestamp': int(time.time())})
+        return jsonify(success=True, message=f"تمت إزالة الأفاتار من {user_name} بنجاح.")
+    except Exception as e:
+        print(f"!!! Remove User Avatar Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم."), 500
+
+@bp.route('/gift_request/<request_id>/<action>', methods=['POST'])
+@admin_required
+def handle_gift_request(request_id, action):
+    if action not in ['approve', 'reject']:
+        return jsonify(success=False, message="إجراء غير صالح."), 400
+
+    request_ref = db.reference(f'gift_requests/{request_id}')
+    gift_request = request_ref.get()
+
+    if not gift_request or gift_request.get('status') != 'pending':
+        return jsonify(success=False, message="الطلب غير موجود أو تمت معالجته بالفعل."), 404
+        
+    if action == 'reject':
+        request_ref.update({'status': 'rejected', 'processed_by': session.get('name')})
+        return jsonify(success=True, message="تم رفض الطلب بنجاح.")
+    
+    # Logic for approval
+    try:
+        gifter_id = gift_request.get('gifter_id')
+        target_user_id = gift_request.get('target_user_id')
+        avatar_id = gift_request.get('avatar_id')
+        price_sp = gift_request.get('price_sp', 0)
+
+        if not all([gifter_id, target_user_id, avatar_id]):
+            raise ValueError("بيانات الطلب غير مكتملة.")
+
+        gifter_wallet_ref = db.reference(f'wallets/{gifter_id}/sp')
+        
+        def deduct_sp_transaction(current_sp):
+            current_sp = current_sp or 0
+            if current_sp < price_sp:
+                return 
+            return current_sp - price_sp
+        
+        result = gifter_wallet_ref.transaction(deduct_sp_transaction)
+
+        if result is None:
+             request_ref.update({'status': 'failed', 'reason': 'رصيد غير كافٍ', 'processed_by': session.get('name')})
+             return jsonify(success=False, message="فشلت الموافقة: رصيد المُهدي غير كافٍ."), 400
+
+        db.reference(f'user_avatars/{target_user_id}/owned/{avatar_id}').set({
+            'purchased_at': int(time.time()),
+            'gifted_by': gift_request.get('gifter_name')
+        })
+
+        request_ref.update({'status': 'approved', 'processed_by': session.get('name')})
+        
+        log_text = f"الأدمن '{session.get('name')}' وافق على طلب إهداء أفاتار '{gift_request.get('avatar_name')}' من '{gift_request.get('gifter_name')}' إلى '{gift_request.get('target_user_name')}'."
+        db.reference('activity_log').push({'type': 'gift', 'text': log_text, 'timestamp': int(time.time())})
+
+        return jsonify(success=True, message="تمت الموافقة على الطلب بنجاح.")
+
+    except Exception as e:
+        request_ref.update({'status': 'failed', 'reason': str(e), 'processed_by': session.get('name')})
+        print(f"!!! Handle Gift Request Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء معالجة الطلب."), 500

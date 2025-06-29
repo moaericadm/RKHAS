@@ -1,647 +1,252 @@
-﻿// --- START OF FILE static/js/admin.js ---
+﻿// --- START OF FILE static/js/user_view.js (FINAL WITH AVATAR CHOOSER LOGIC) ---
 
 let isDomReady = false;
 let isFirebaseReady = false;
 
 function tryToStartApp() {
     if (isDomReady && isFirebaseReady) {
-        initializeAdminPanel();
+        initializeUserView();
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => { isDomReady = true; tryToStartApp(); });
 document.addEventListener('firebase-ready', () => { isFirebaseReady = true; tryToStartApp(); });
 
-const ui = {};
-let db;
-let usersCache = {};
-let candidatesData = {};
+function initializeUserView() {
+    const DEFAULT_AVATAR_URI = "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c757d'%3e%3cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3e%3c/svg%3e";
 
-// Helper function to format numbers, defined globally for this script
-const formatNumber = (num) => new Intl.NumberFormat('en-US').format(parseInt(num || 0));
+    const ui = {
+        tableBody: document.getElementById('user-table-body'),
+        loadingSpinner: document.getElementById('loading-spinner'),
+        hallOfFame: document.getElementById('hall-of-fame'),
+        honorRollList: document.getElementById('honor-roll-view-list'),
+        candidatesList: document.getElementById('candidates-list'),
+        richestInvestorsList: document.getElementById('richest-investors-list'),
+        userCcBalance: document.getElementById('user-cc-balance'),
+        userSpBalance: document.getElementById('user-sp-balance'),
+        searchInput: document.getElementById('searchInput'),
+        userChartModal: document.getElementById('userChartModal'),
+        chartModalLabel: document.getElementById('chartModalLabel'),
+        userPointsChartCanvas: document.getElementById('userPointsChart'),
+        investmentModal: document.getElementById('investmentModal'),
+        investmentForm: document.getElementById('investment-form'),
+        investCrawlerName: document.getElementById('invest-crawler-name'),
+        investCrawlerNameHidden: document.getElementById('invest-crawler-name-hidden'),
+        spAmountInput: document.getElementById('sp-amount-input'),
+        announcementsContainer: document.getElementById('announcements-container'),
+        announcementsTicker: document.getElementById('announcements-ticker'),
+        investmentInfoModal: document.getElementById('investmentInfoModal'),
+        // --- New Avatar UI ---
+        userAvatarPreview: document.getElementById('user-avatar-preview'),
+        avatarChooserModal: document.getElementById('avatarChooserModal'),
+        ownedAvatarsContainer: document.getElementById('owned-avatars-container'),
+    };
 
-// Helper function for API calls
-const apiCall = async (url, options = {}, successMsg) => {
-    try {
-        const response = await fetch(url, options);
-        const data = await response.json();
-        if (response.ok) {
-            if (successMsg) Swal.fire({ icon: 'success', title: 'تم!', text: successMsg, timer: 1500, showConfirmButton: false });
-            return data;
-        } else {
-            throw new Error(data.message || "An unknown error occurred");
+    let allUsersCache = [];
+    let honorRollCache = [];
+    let userInvestments = {};
+    let allWallets = {};
+    let userChartInstance = null;
+    let db;
+    let currentUserId;
+
+    async function initializeApp() {
+        console.log("User view initialization started.");
+        try {
+            db = firebase.database();
+            const token = sessionStorage.getItem('firebaseToken');
+            if (token) {
+                await firebase.auth().signInWithCustomToken(token);
+                currentUserId = firebase.auth().currentUser.uid;
+            } else {
+                await new Promise((resolve, reject) => {
+                    const unsubscribe = firebase.auth().onAuthStateChanged(user => {
+                        unsubscribe();
+                        if (user) { currentUserId = user.uid; resolve(); }
+                        else { reject(new Error("لا يوجد مستخدم مسجل دخوله.")); }
+                    });
+                });
+            }
+
+            if (currentUserId) {
+                setupDataAndLogic();
+                try { await fetch('/api/spin_wheel/state', { method: 'POST' }); }
+                catch (e) { console.error("Failed to trigger spin wheel state update:", e.message); }
+            } else {
+                handleAuthError(new Error("لا يمكن تحديد هوية المستخدم."));
+            }
+        } catch (e) {
+            handleAuthError(e);
         }
-    } catch (err) {
-        Swal.fire('خطأ!', err.message, 'error');
-        throw err;
     }
-};
 
-
-function initializeAdminPanel() {
-    console.log("Admin panel initialization started.");
-    Object.assign(ui, {
-        userForm: document.getElementById('userForm'), nameInput: document.getElementById('nameInput'),
-        pointsInput: document.getElementById('pointsInput'), originalNameInput: document.getElementById('originalNameInput'),
-        saveUserBtn: document.getElementById('saveUserBtn'), clearFormBtn: document.getElementById('clearFormBtn'),
-        formTitle: document.getElementById('form-title'), tableBody: document.getElementById('admin-table-body'),
-        addCandidateBtn: document.getElementById('add-candidate-btn'), pendingUsersTable: document.getElementById('pending-users-table-body'),
-        pendingCountBadge: document.getElementById('pending-count'),
-        approvedUsersTable: document.getElementById('approved-users-table-body'), announcementForm: document.getElementById('announcementForm'),
-        announcementsList: document.getElementById('announcements-list'), honorRollForm: document.getElementById('honorRollForm'),
-        honorRollList: document.getElementById('honorRollList'), spinWheelSettingsForm: document.getElementById('spin-wheel-settings-form'),
-        spinWheelEnabledToggle: document.getElementById('spin-wheel-enabled-toggle'), spinCooldownHours: document.getElementById('spin-cooldown-hours'),
-        spinMaxAttempts: document.getElementById('spin-max-attempts'), spinMaxAccumulation: document.getElementById('spin-max-accumulation'),
-        spinPurchaseLimit: document.getElementById('spin-purchase-limit'), prizesContainer: document.getElementById('prizes-container'),
-        addPrizeBtn: document.getElementById('add-prize-btn'), addProductForm: document.getElementById('add-product-form'),
-        productSpAmountInput: document.getElementById('product-sp-amount'), productCcPriceInput: document.getElementById('product-cc-price'),
-        shopProductsList: document.getElementById('shop-products-list'), addSpinProductForm: document.getElementById('add-spin-product-form'),
-        spinProductAttemptsInput: document.getElementById('spin-product-attempts'), spinProductSpPriceInput: document.getElementById('spin-product-sp-price'),
-        shopSpinProductsList: document.getElementById('shop-spin-products-list'),
-        resetAllSpinsBtn: document.getElementById('resetAllSpinsBtn'),
-        addPointsProductForm: document.getElementById('add-points-product-form'),
-        pointsProductType: document.getElementById('points-product-type'),
-        pointsProductAmount: document.getElementById('points-product-amount'),
-        pointsProductSpPrice: document.getElementById('points-product-sp-price'),
-        pointsProductDailyLimit: document.getElementById('points-product-daily-limit'),
-        shopPointsProductsList: document.getElementById('shop-points-products-list'),
-        activityLogList: document.getElementById('activityLogList'),
-        investmentLogList: document.getElementById('investment-log-list'),
-        activeUsersList: document.getElementById('active-users-list'),
-    });
-
-    try {
-        db = firebase.database();
-        const token = sessionStorage.getItem('firebaseToken');
-        if (!token) throw new Error("Authentication token not found.");
-        firebase.auth().signInWithCustomToken(token).then(() => {
-            console.log("Admin authenticated successfully.");
-            initializeDataListeners();
-            setupEventListeners();
-        }).catch(e => {
-            console.error("Firebase Auth Error:", e);
-            Swal.fire({ title: 'Authentication Error', text: e.message, icon: 'error' }).then(() => window.location.href = '/auth/login');
-        });
-    } catch (e) {
-        console.error("Initialization Error:", e);
-        Swal.fire('Critical Error', `Failed to initialize admin panel: ${e.message}`, 'error');
-    }
-}
-
-function initializeDataListeners() {
-    const handleFirebaseError = (error, path) => console.error(`Firebase read error at ${path}:`, error.code, error.message);
-    db.ref('users').on('value', s => { usersCache = s.val() || {}; renderUserTable(); }, e => handleFirebaseError(e, 'users'));
-    db.ref('candidates').on('value', s => { candidatesData = s.val() || {}; renderUserTable(); }, e => handleFirebaseError(e, 'candidates'));
-    db.ref('site_settings/announcements').on('value', s => renderAnnouncements(s.val()), e => handleFirebaseError(e, 'announcements'));
-    db.ref('site_settings/honor_roll').on('value', s => renderHonorRoll(s.val()), e => handleFirebaseError(e, 'honor_roll'));
-    db.ref('site_settings/spin_wheel_settings').on('value', s => loadSpinWheelSettings(s.val()), e => handleFirebaseError(e, 'spin_wheel_settings'));
-    db.ref('site_settings/shop_products').on('value', s => renderShopProducts(s.val()), e => handleFirebaseError(e, 'shop_products'));
-    db.ref('site_settings/shop_products_spins').on('value', s => renderShopSpinProducts(s.val()), e => handleFirebaseError(e, 'shop_products_spins'));
-    db.ref('site_settings/shop_products_points').on('value', s => renderShopPointsProducts(s.val()), e => handleFirebaseError(e, 'shop_products_points'));
-
-    initializeApprovalPanel();
-    initializeActivityPanels();
-    initializeApprovedUsersPanel();
-}
-
-const emptyStateMessages = {
-    activeUsers: '<li id="empty-active-users" class="list-group-item text-muted text-center">لا يوجد مستخدمون متصلون حالياً.</li>',
-    generalActivity: '<li class="list-group-item text-muted text-center">لا يوجد نشاط عام مسجل.</li>',
-    investmentLog: '<li class="list-group-item text-muted text-center">لا يوجد نشاط استثماري مسجل.</li>',
-};
-
-function renderActiveUser(uid, userData) {
-    if (typeof userData.online_since !== 'number') {
-        return '';
-    }
-    const since = new Date(userData.online_since).toLocaleString('ar-EG');
-    return `
-        <li class="list-group-item" id="active-user-${uid}">
-            <i class="bi bi-person-check-fill text-success me-2"></i>
-            <strong>${userData.name || 'مستخدم مجهول'}</strong>
-            <small class="text-muted d-block mt-1">متصل منذ: ${since}</small>
-        </li>`;
-}
-
-function initializeActivityPanels() {
-    const handleFirebaseError = (error, path) => console.error(`Firebase read error at ${path}:`, error.code, error.message);
-
-    db.ref('activity_log').orderByChild('timestamp').limitToLast(50).on('value', s => renderGeneralActivityLog(s.val()), e => handleFirebaseError(e, 'activity_log'));
-    db.ref('investment_log').orderByChild('timestamp').limitToLast(100).on('value', s => renderInvestmentLog(s.val()), e => handleFirebaseError(e, 'investment_log'));
-
-    const onlineVisitorsRef = db.ref('online_visitors');
-    onlineVisitorsRef.on('value', (snapshot) => {
-        if (!ui.activeUsersList) return;
-        const usersData = snapshot.val();
-        if (!usersData) {
-            ui.activeUsersList.innerHTML = emptyStateMessages.activeUsers;
-            return;
+    function handleAuthError(e) {
+        console.error("CRITICAL AUTHENTICATION ERROR:", e.message);
+        if (ui.loadingSpinner && ui.loadingSpinner.parentElement) {
+            const tableContainer = ui.loadingSpinner.parentElement;
+            tableContainer.innerHTML = `<td colspan="5" class="text-center py-5"><p class="text-danger p-3">فشل المصادقة مع الخادم.<br>قد تحتاج إلى <a href="/auth/logout">تسجيل الخروج والمحاولة مرة أخرى</a>.</p></td>`;
         }
-        const activeUsers = Object.entries(usersData)
-            .filter(([uid, data]) => typeof data.online_since === 'number')
-            .sort(([, a], [, b]) => b.online_since - a.online_since);
+    }
 
-        if (activeUsers.length === 0) {
-            ui.activeUsersList.innerHTML = emptyStateMessages.activeUsers;
-        } else {
-            ui.activeUsersList.innerHTML = activeUsers.map(([uid, data]) => renderActiveUser(uid, data)).join('');
+    function setupDataAndLogic() {
+        if (window.interactionsApp?.init) window.interactionsApp.init();
+        setupEventListeners();
+        const handleFirebaseError = (error, path) => console.error(`Firebase Read Error at ${path}:`, error.code, error.message);
+
+        db.ref('users').on('value', (snapshot) => {
+            if (ui.loadingSpinner && ui.loadingSpinner.parentElement) ui.loadingSpinner.parentElement.style.display = 'none';
+            allUsersCache = Object.entries(snapshot.val() || {}).map(([key, value]) => ({ ...value, name: key }));
+            if (window.interactionsApp?.updateUserCache) window.interactionsApp.updateUserCache(allUsersCache);
+            sortAndRenderUsers();
+        }, (e) => handleFirebaseError(e, 'users/initial_load'));
+
+        if (currentUserId) {
+            db.ref(`wallets/${currentUserId}`).on('value', (s) => renderWallet(s.val()), (e) => handleFirebaseError(e, `wallets/${currentUserId}`));
+            db.ref(`investments/${currentUserId}`).on('value', (s) => { userInvestments = s.val() || {}; renderUserTable(); }, (e) => handleFirebaseError(e, `investments/${currentUserId}`));
+            db.ref(`user_messages/${currentUserId}`).on('child_added', handleUserMessage, (e) => handleFirebaseError(e, `user_messages/${currentUserId}`));
+            db.ref(`user_spin_state/${currentUserId}`).on('value', (s) => { if (window.spinWheelApp?.updateUI) window.spinWheelApp.updateUI(s.val()); }, (e) => handleFirebaseError(e, `user_spin_state/${currentUserId}`));
+
+            // --- New Avatar Listeners ---
+            db.ref(`registered_users/${currentUserId}/current_avatar`).on('value', (s) => {
+                if (ui.userAvatarPreview) ui.userAvatarPreview.src = s.val() || DEFAULT_AVATAR_URI;
+            }, (e) => handleFirebaseError(e, 'current_avatar'));
+
+            db.ref(`user_avatars/${currentUserId}/owned`).on('value', renderOwnedAvatars, (e) => handleFirebaseError(e, 'owned_avatars'));
         }
-    }, e => handleFirebaseError(e, 'online_visitors'));
-}
 
+        db.ref('wallets').on('value', (s) => { allWallets = s.val() || {}; renderRichestInvestors(); }, (e) => handleFirebaseError(e, 'wallets'));
+        db.ref('site_settings/honor_roll').on('value', (s) => { honorRollCache = Object.values(s.val() || {}).map(i => i.name); renderHonorRollList(); renderUserTable(); }, (e) => handleFirebaseError(e, 'site_settings/honor_roll'));
+        db.ref('candidates').on('value', (s) => renderCandidatesList(Object.keys(s.val() || {})), (e) => handleFirebaseError(e, 'candidates'));
+        db.ref('site_settings/announcements').on('value', (s) => renderAnnouncements(Object.values(s.val() || {})), (e) => handleFirebaseError(e, 'site_settings/announcements'));
+        db.ref('site_settings/spin_wheel_settings').on('value', (s) => { if (window.spinWheelApp?.reInit) window.spinWheelApp.reInit(s.val() || {}); }, (e) => handleFirebaseError(e, 'site_settings/spin_wheel_settings'));
+    }
 
-function renderUserTable() {
-    if (!ui.tableBody) return;
-    const usersArray = Object.entries(usersCache).map(([key, value]) => ({ ...value, name: key })).sort((a, b) => (b.points || 0) - (a.points || 0));
-    ui.tableBody.innerHTML = usersArray.length === 0 ? '<tr><td colspan="5" class="text-center py-4">لا يوجد زواحف.</td></tr>'
-        : usersArray.map((user, index) => {
-            const displayName = user.name;
-            const isCandidate = candidatesData.hasOwnProperty(displayName);
-            return `<tr id="user-row-${displayName}" data-username="${displayName}" data-points="${user.points || 0}"><th class="align-middle rank">#${index + 1}</th><td class="align-middle fw-bold">${displayName}</td><td class="text-center align-middle">${formatNumber(user.points)}</td><td class="text-center align-middle"><i class="bi bi-heart-fill text-danger"></i> ${formatNumber(user.likes)}</td><td class="text-center align-middle"><button class="btn btn-info btn-sm" onclick="window.adminActions.editUser('${displayName}')"><i class="bi bi-pencil-fill"></i></button><button class="btn ${isCandidate ? 'btn-warning' : 'btn-outline-success'} btn-sm ms-2" onclick="window.adminActions.toggleCandidate('${displayName}', ${isCandidate})"><i class="bi ${isCandidate ? 'bi-person-x-fill' : 'bi-person-check-fill'}"></i></button><button class="btn btn-danger btn-sm ms-2" onclick="window.adminActions.confirmDelete('${displayName}')"><i class="bi bi-trash-fill"></i></button></td></tr>`;
+    function sortAndRenderUsers() {
+        allUsersCache.sort((a, b) => (b.points || 0) - (a.points || 0));
+        renderUserTable();
+        renderTop3();
+    }
+
+    function setupEventListeners() {
+        if (ui.tableBody) { ui.tableBody.addEventListener('click', e => { const btn = e.target.closest('button'); if (btn) { const username = btn.dataset.username; if (btn.classList.contains('like-btn')) handleLike(btn); else if (btn.classList.contains('chart-btn')) showUserHistoryChart(username); else if (btn.classList.contains('invest-btn')) showInvestmentModal(username); else if (btn.classList.contains('sell-btn')) confirmSell(username); else if (btn.classList.contains('info-btn')) showInvestmentInfo(btn); } }); }
+        if (ui.searchInput) ui.searchInput.addEventListener('input', renderUserTable);
+        if (ui.investmentForm) ui.investmentForm.addEventListener('submit', handleInvestment);
+        if (ui.userAvatarPreview) ui.userAvatarPreview.addEventListener('click', () => ui.avatarChooserModal.classList.add('show'));
+        document.querySelectorAll('.custom-modal').forEach(m => { m.addEventListener('click', e => { if (e.target === m || e.target.closest('.custom-close-btn')) m.classList.remove('show'); }); });
+    }
+
+    const formatNumber = (num, compact = true) => { const n = Number(String(num || '0').replace(/,/g, '')); if (isNaN(n)) return '0'; if (!compact || Math.abs(n) < 1e4) return new Intl.NumberFormat('en-US').format(Math.round(n)); let o = { notation: 'compact', compactDisplay: 'short' }; if (Math.abs(n) >= 1e4 && Math.abs(n) < 1e6) { o.minimumFractionDigits = 1; o.maximumFractionDigits = 1 } else if (Math.abs(n) >= 1e6) { o.minimumFractionDigits = 2; o.maximumFractionDigits = 2 } return new Intl.NumberFormat('en-US', o).format(n); };
+    const safeFormatDate = (timestampInSeconds, options = {}) => { if (!timestampInSeconds || typeof timestampInSeconds !== 'number' || timestampInSeconds <= 0) return "تاريخ غير صالح"; const date = new Date(timestampInSeconds * 1000); if (isNaN(date.getTime())) return "تاريخ غير صالح"; const defaultOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }; return date.toLocaleString('ar-EG', { ...defaultOptions, ...options }); };
+
+    function renderUserTable() {
+        if (!ui.tableBody) return;
+        const term = ui.searchInput.value.toLowerCase();
+        const users = allUsersCache.filter(u => u?.name?.toLowerCase().includes(term));
+        const html = users.map(user => {
+            const rank = allUsersCache.findIndex(u => u.name === user.name) + 1;
+            const honor = honorRollCache.includes(user.name) ? ` <span class="badge rounded-pill" style="background:var(--primary-glow);color:#fff;"><i class="bi bi-award-fill"></i></span>` : '';
+            const liked = (JSON.parse(localStorage.getItem('likedUsers')) || []).includes(user.name);
+            const invest = userInvestments[user.name];
+            const pointsNow = parseFloat(user.points) || 0;
+            const avatarHtml = `<img src="${user.avatar_url || DEFAULT_AVATAR_URI}" alt="${user.name}" class="crawler-avatar">`;
+            let actionHtml;
+            if (invest) {
+                const pointsThen = parseFloat(invest.points_at_investment) || 1;
+                const sp = parseFloat(invest.invested_sp) || 0;
+                const value = sp * (pointsNow / pointsThen);
+                const profit = value - sp;
+                const color = profit > 0.005 ? 'text-success' : profit < -0.005 ? 'text-danger' : 'text-muted';
+                actionHtml = `<div class="investment-details d-flex align-items-center justify-content-center" style="min-height:58px"><div class="text-center flex-grow-1"><div class="fw-bold">${value.toFixed(2)} SP</div><div class="small ${color}">${profit >= 0 ? '+' : ''}${profit.toFixed(2)} SP</div></div><div class="d-flex flex-column ms-2 gap-1"><button class="btn btn-sm btn-danger sell-btn" data-username="${user.name}" style="line-height:1" title="بيع الاستثمار"><i class="bi bi-cash-coin"></i></button><button class="btn btn-sm btn-info info-btn" data-crawler-name="${user.name}" data-invested-sp="${sp.toFixed(2)}" data-points-then="${formatNumber(pointsThen, false)}" data-points-now="${formatNumber(pointsNow, false)}" data-profit="${profit.toFixed(2)}" data-profit-color="${color}" style="line-height:1" title="عرض التفاصيل"><i class="bi bi-info-circle"></i></button></div></div>`;
+            } else { actionHtml = `<button class="btn btn-sm btn-success invest-btn w-100 d-flex flex-column justify-content-center" style="min-height:58px" data-username="${user.name}"><span><i class="bi bi-graph-up me-1"></i> استثمر</span></button>`; }
+            return `<tr id="user-row-${user.name}"><th class="align-middle">#${rank}</th><td class="align-middle fw-bold">${avatarHtml} ${user.name}${honor}</td><td class="text-center align-middle fs-5 fw-bold" title="النقاط: ${formatNumber(pointsNow, false)}">${formatNumber(pointsNow)}</td><td class="text-center align-middle"><div class="d-flex justify-content-center align-items-center gap-2"><button class="btn btn-sm like-btn ${liked ? 'liked' : 'btn-outline-danger'}" data-username="${user.name}"><span class="icon-heart"><i class="bi bi-heart-fill"></i></span><span class="like-count ms-1">${formatNumber(user.likes || 0, false)}</span></button><button class="btn btn-sm btn-outline-info chart-btn" data-username="${user.name}" title="عرض التقدم"><i class="bi bi-graph-up"></i></button></div></td><td class="text-center align-middle">${actionHtml}</td></tr>`;
         }).join('');
-}
-
-function renderShopProducts(productsData) {
-    if (!ui.shopProductsList) return;
-    const products = productsData ? Object.entries(productsData) : [];
-    if (products.length === 0) {
-        ui.shopProductsList.innerHTML = `<li class="list-group-item text-muted text-center">لا توجد حزم SP مضافة حالياً.</li>`;
-        return;
+        ui.tableBody.innerHTML = html || `<tr><td colspan="5" class="text-center py-4">${term ? 'لا يوجد زاحف يطابق البحث' : 'لا يوجد بيانات حالياً'}</td></tr>`;
     }
-    ui.shopProductsList.innerHTML = products.sort((a, b) => (a[1].cc_price || 0) - (b[1].cc_price || 0)).map(([id, product]) => `
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-            <span><strong>${formatNumber(product.sp_amount)} SP</strong> بسعر <span class="text-warning">${formatNumber(product.cc_price)} CC</span></span>
-            <button class="btn btn-sm btn-outline-danger" onclick="window.adminActions.deleteShopProduct('${id}')"><i class="bi bi-trash-fill"></i></button>
-        </li>`).join('');
-}
 
-function renderShopSpinProducts(productsData) {
-    if (!ui.shopSpinProductsList) return;
-    const products = productsData ? Object.entries(productsData) : [];
-    if (products.length === 0) {
-        ui.shopSpinProductsList.innerHTML = `<li class="list-group-item text-muted text-center">لا توجد حزم محاولات مضافة حالياً.</li>`;
-        return;
-    }
-    ui.shopSpinProductsList.innerHTML = products.sort((a, b) => (a[1].sp_price || 0) - (b[1].sp_price || 0)).map(([id, product]) => `
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-            <span><strong>${product.attempts_amount} محاولات</strong> بسعر <span class="text-success">${formatNumber(product.sp_price)} SP</span></span>
-            <button class="btn btn-sm btn-outline-danger" onclick="window.adminActions.deleteShopSpinProduct('${id}')"><i class="bi bi-trash-fill"></i></button>
-        </li>`).join('');
-}
-
-function renderShopPointsProducts(productsData) {
-    if (!ui.shopPointsProductsList) return;
-    const products = productsData ? Object.entries(productsData) : [];
-    if (products.length === 0) {
-        ui.shopPointsProductsList.innerHTML = `<li class="list-group-item text-muted text-center">لا توجد منتجات لتعديل الأسهم حالياً.</li>`;
-        return;
-    }
-    ui.shopPointsProductsList.innerHTML = products.sort((a, b) => (a[1].sp_price || 0) - (b[1].sp_price || 0)).map(([id, product]) => {
-        const typeText = product.type === 'raise' ? 'رفع أسهم' : 'إسقاط أسهم';
-        const typeClass = product.type === 'raise' ? 'text-success' : 'text-danger';
-        return `
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-                <strong class="${typeClass}">${typeText}</strong>:
-                <span>${formatNumber(product.points_amount)} نقطة,</span>
-                <span>بسعر <span class="text-success">${formatNumber(product.sp_price)} SP</span>,</span>
-                <span>الحد اليومي: ${product.daily_limit}</span>
-            </div>
-            <button class="btn btn-sm btn-outline-danger" onclick="window.adminActions.deleteShopPointsProduct('${id}')"><i class="bi bi-trash-fill"></i></button>
-        </li>`;
-    }).join('');
-}
-
-function initializeApprovalPanel() {
-    db.ref('registered_users').orderByChild('status').equalTo('pending').on('value', (snapshot) => {
-        if (!ui.pendingUsersTable) return;
-        const data = snapshot.val() || {};
-        const count = Object.keys(data).length;
-        ui.pendingCountBadge.textContent = count;
-        ui.pendingCountBadge.style.display = count > 0 ? 'inline' : 'none';
-        ui.pendingUsersTable.innerHTML = count === 0 ? '<tr><td colspan="3" class="text-center py-4">لا توجد طلبات تسجيل جديدة.</td></tr>' : Object.entries(data).map(([userId, userData]) => `<tr>
-                <td>${userData.name}</td>
-                <td>${userData.email}</td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-success" onclick="window.adminActions.manageUser('${userId}', 'approve', this)">قبول</button>
-                    <button class="btn btn-sm btn-danger ms-2" onclick="window.adminActions.manageUser('${userId}', 'reject', this)">رفض</button>
-                </td>
-            </tr>`).join('')
-    });
-}
-
-function initializeApprovedUsersPanel() {
-    db.ref('registered_users').orderByChild('status').equalTo('approved').on('value', (snapshot) => {
-        if (!ui.approvedUsersTable) return;
-        const approvedUsers = snapshot.val() || {};
-        const sortedUsers = Object.values(approvedUsers).sort((a, b) => (b.registered_at || 0) - (a.registered_at || 0));
-
-        if (sortedUsers.length === 0) {
-            ui.approvedUsersTable.innerHTML = '<tr><td colspan="5" class="text-center py-4">لا توجد حسابات مقبولة حالياً.</td></tr>';
+    // --- New Avatar Functions ---
+    async function renderOwnedAvatars(snapshot) {
+        const ownedData = snapshot.val();
+        if (!ui.ownedAvatarsContainer || !ownedData) {
+            if (ui.ownedAvatarsContainer) ui.ownedAvatarsContainer.innerHTML = '<p class="text-muted text-center w-100">أنت لا تمتلك أي أفاتارات بعد. قم بشراء واحدة من المتجر!</p>';
             return;
         }
 
-        ui.approvedUsersTable.innerHTML = sortedUsers.map(user => {
-            const regDate = new Date((user.registered_at || 0) * 1000).toLocaleDateString('ar-EG');
-            const roleBadge = user.role === 'admin' ? '<span class="badge bg-danger">أدمن</span>' : '<span class="badge bg-secondary">مستخدم</span>';
+        const ownedIds = Object.keys(ownedData);
+        const avatarPromises = ownedIds.map(id => db.ref(`site_settings/shop_avatars/${id}`).get());
+        const avatarSnapshots = await Promise.all(avatarPromises);
 
-            return `<tr>
-                <td>${user.name}</td>
-                <td>${user.email}</td>
-                <td class="text-center">${roleBadge}</td>
-                <td class="text-center">${regDate}</td>
-                <td class="text-center d-flex justify-content-center gap-2">
-                    <!-- *** התיקון כאן | THE FIX IS HERE *** -->
-                    <button class="btn btn-outline-success btn-sm" onclick="window.adminActions.editUserWallet('${user.uid}','${user.name}')" title="تعديل محفظة المستخدم">
-                        <i class="bi bi-wallet2-fill"></i>
-                    </button>
-                    <button class="btn btn-outline-primary btn-sm" onclick="window.adminActions.resetFreeSpinsForUser('${user.uid}','${user.name}')" title="منح المحاولات المجانية لهذا المستخدم">
-                        <i class="bi bi-gift-fill"></i>
-                    </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="window.adminActions.editPurchasedAttempts('${user.uid}','${user.name}')" title="تعديل المحاولات المشتراة">
-                        <i class="bi bi-gem"></i>
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="window.adminActions.confirmBanUser('${user.uid}','${user.name}')" title="حظر المستخدم">
-                        <i class="bi bi-slash-circle-fill"></i>
-                    </button>
-                </td>
-            </tr>`;
-        }).join('');
-    });
-}
-
-function renderGeneralActivityLog(data) {
-    if (!ui.activityLogList) return;
-    const sortedActivities = data ? Object.values(data).sort((a, b) => b.timestamp - a.timestamp) : [];
-
-    ui.activityLogList.innerHTML = sortedActivities.length === 0
-        ? emptyStateMessages.generalActivity
-        : sortedActivities.map(log => {
-            const logDate = new Date(log.timestamp * 1000).toLocaleString('ar-EG');
-            const logIcon = { 'like': 'bi-heart-fill text-danger', 'gift': 'bi-gift-fill text-warning', 'nomination': 'bi-person-up text-info', 'report': 'bi-exclamation-triangle-fill text-danger' }[log.type] || 'bi-info-circle-fill text-secondary';
-            let userActions = (log.user_id && log.user_name) ? `<div class="ms-auto ps-3 d-flex gap-2">
-                <button class="btn btn-outline-info btn-sm" onclick="window.adminActions.sendUserMessage('${log.user_id}','${log.user_name}')" title="إرسال رسالة"><i class="bi bi-chat-dots-fill"></i></button>
-                <button class="btn btn-outline-danger btn-sm" onclick="window.adminActions.confirmBanUser('${log.user_id}','${log.user_name}')" title="حظر المستخدم"><i class="bi bi-slash-circle-fill"></i></button>
-            </div>` : '';
-            return `<li class="list-group-item d-flex justify-content-between align-items-center">
-                <div><i class="bi ${logIcon} me-2"></i><span>${log.text}</span><small class="text-muted d-block mt-1">${logDate}</small></div>${userActions}
-            </li>`;
-        }).join('');
-}
-
-function renderInvestmentLog(data) {
-    if (!ui.investmentLogList) return;
-    const sortedLogs = data ? Object.values(data).sort((a, b) => b.timestamp - a.timestamp) : [];
-    ui.investmentLogList.innerHTML = sortedLogs.length === 0
-        ? emptyStateMessages.investmentLog
-        : sortedLogs.map(log => {
-            const date = new Date(log.timestamp * 1000).toLocaleString('ar-EG');
-            const isInvest = log.action === 'invest';
-            const icon = isInvest ? 'bi-graph-up text-success' : 'bi-graph-down text-danger';
-            const actionText = isInvest ? 'استثمر في' : 'باع من';
-            return `<li class="list-group-item">
-                <i class="bi ${icon} me-2"></i> 
-                <strong>${log.investor_name || 'مجهول'}</strong> ${actionText} <strong>${log.target_name || 'مجهول'}</strong>
-                بمبلغ <span class="fw-bold text-success">${formatNumber(log.sp_amount)} SP</span>.
-                <small class="text-muted d-block mt-1">${date}</small>
-            </li>`;
-        }).join('');
-}
-
-function renderAnnouncements(data) {
-    if (!ui.announcementsList) return;
-    ui.announcementsList.innerHTML = Object.entries(data || {}).length === 0
-        ? '<li class="list-group-item text-muted text-center">لا توجد إعلانات.</li>'
-        : Object.entries(data).map(([id, ann]) => `<li class="list-group-item d-flex justify-content-between"><span>${ann.text}</span> <button class="btn btn-sm btn-outline-danger" onclick="window.adminActions.deleteAnnouncement('${id}')"><i class="bi bi-trash-fill"></i></button></li>`).join('');
-}
-
-function renderHonorRoll(data) {
-    if (!ui.honorRollList) return;
-    ui.honorRollList.innerHTML = Object.entries(data || {}).length === 0
-        ? '<li class="list-group-item text-muted text-center">القائمة فارغة.</li>'
-        : Object.entries(data).map(([id, item]) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span> <button class="btn btn-sm btn-outline-danger" onclick="window.adminActions.deleteFromHonorRoll('${id}')"><i class="bi bi-trash-fill"></i></button></li>`).join('');
-}
-
-function addPrizeInput(prize = { value: '', weight: '' }) {
-    if (!ui.prizesContainer) return;
-    const div = document.createElement('div');
-    div.className = 'input-group prize-entry mb-2';
-    div.innerHTML = `<span class="input-group-text">الجائزة</span><input type="number" class="form-control prize-value" placeholder="قيمة النقاط" value="${prize.value}" required><span class="input-group-text">الوزن</span><input type="number" class="form-control prize-weight" placeholder="فرصة الربح" value="${prize.weight}" required><button type="button" class="btn btn-outline-danger" onclick="this.closest('.prize-entry').remove()"><i class="bi bi-trash"></i></button>`;
-    ui.prizesContainer.appendChild(div);
-}
-
-function loadSpinWheelSettings(settings) {
-    if (!ui.spinWheelEnabledToggle) return;
-    settings = settings || { enabled: false, cooldownHours: 24, maxAttempts: 1, maxAccumulation: 10, purchaseLimit: 20, prizes: [] };
-    ui.spinWheelEnabledToggle.checked = settings.enabled || false;
-    ui.spinCooldownHours.value = settings.cooldownHours || 24;
-    ui.spinMaxAttempts.value = settings.maxAttempts || 1;
-    ui.spinMaxAccumulation.value = settings.maxAccumulation || 10;
-    ui.spinPurchaseLimit.value = settings.purchaseLimit || 20;
-    ui.prizesContainer.innerHTML = '';
-    if (settings.prizes && settings.prizes.length > 0) {
-        settings.prizes.forEach(prize => addPrizeInput(prize));
-    } else {
-        addPrizeInput({ value: 100, weight: 50 });
-        addPrizeInput({ value: 500, weight: 25 });
-    }
-}
-
-function setupEventListeners() {
-    if (ui.userForm) ui.userForm.addEventListener('submit', handleUserFormSubmit);
-    if (ui.clearFormBtn) ui.clearFormBtn.addEventListener('click', resetUserForm);
-    if (ui.addCandidateBtn) ui.addCandidateBtn.addEventListener('click', () => window.adminActions.addCandidate());
-    if (ui.announcementForm) ui.announcementForm.addEventListener('submit', (e) => { e.preventDefault(); apiCall('/api/admin/announcements/add', { method: 'POST', body: new FormData(e.target) }, 'تم إضافة الإعلان بنجاح!'); e.target.reset(); });
-    if (ui.honorRollForm) ui.honorRollForm.addEventListener('submit', (e) => { e.preventDefault(); apiCall('/api/admin/honor_roll/add', { method: 'POST', body: new FormData(e.target) }, 'تمت الإضافة بنجاح!'); e.target.reset(); });
-    if (ui.addPrizeBtn) ui.addPrizeBtn.addEventListener('click', () => addPrizeInput());
-    if (ui.spinWheelSettingsForm) ui.spinWheelSettingsForm.addEventListener('submit', handleSpinWheelSettingsSubmit);
-    if (ui.addProductForm) ui.addProductForm.addEventListener('submit', handleAddProductSubmit);
-    if (ui.addSpinProductForm) ui.addSpinProductForm.addEventListener('submit', handleAddSpinProductSubmit);
-    if (ui.resetAllSpinsBtn) ui.resetAllSpinsBtn.addEventListener('click', window.adminActions.resetAllFreeSpins);
-    if (ui.addPointsProductForm) ui.addPointsProductForm.addEventListener('submit', handleAddPointsProductSubmit);
-}
-
-
-function resetUserForm() {
-    if (!ui.userForm) return;
-    ui.userForm.reset();
-    ui.originalNameInput.value = '';
-    ui.formTitle.innerText = 'إضافة/تعديل زاحف';
-    ui.saveUserBtn.innerText = 'إضافة';
-    ui.saveUserBtn.classList.replace('btn-warning', 'btn-primary');
-    ui.clearFormBtn.style.display = 'none';
-}
-
-async function handleUserFormSubmit(e) {
-    e.preventDefault();
-    const btn = ui.saveUserBtn;
-    const originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جارِ الحفظ...`;
-    try {
-        await apiCall('/api/admin/add_user', { method: 'POST', body: new FormData(ui.userForm) }, 'تم حفظ البيانات بنجاح.');
-        resetUserForm();
-    } catch (err) {
-        // Error is already shown by apiCall
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = ui.originalNameInput.value ? 'حفظ التعديل' : originalHTML;
-    }
-}
-
-function handleAddProductSubmit(e) {
-    e.preventDefault();
-    const spAmount = ui.productSpAmountInput.value;
-    const ccPrice = ui.productCcPriceInput.value;
-    if (!spAmount || !ccPrice || spAmount <= 0 || ccPrice <= 0) {
-        Swal.fire('خطأ', 'الرجاء إدخال قيم صحيحة للمنتج.', 'error');
-        return;
-    }
-    const newProductRef = db.ref('site_settings/shop_products').push();
-    newProductRef.set({ sp_amount: parseInt(spAmount), cc_price: parseInt(ccPrice) })
-        .then(() => {
-            Swal.fire('تم!', 'تمت إضافة حزمة SP بنجاح.', 'success');
-            ui.addProductForm.reset();
-        })
-        .catch(err => Swal.fire('خطأ!', `فشلت الإضافة: ${err.message}`, 'error'));
-}
-
-function handleAddSpinProductSubmit(e) {
-    e.preventDefault();
-    const attempts = ui.spinProductAttemptsInput.value;
-    const spPrice = ui.spinProductSpPriceInput.value;
-    if (!attempts || !spPrice || attempts <= 0 || spPrice <= 0) {
-        Swal.fire('خطأ', 'الرجاء إدخال قيم صحيحة للمنتج.', 'error');
-        return;
-    }
-    const newProductRef = db.ref('site_settings/shop_products_spins').push();
-    newProductRef.set({ attempts_amount: parseInt(attempts), sp_price: parseInt(spPrice) })
-        .then(() => {
-            Swal.fire('تم!', 'تمت إضافة حزمة المحاولات بنجاح.', 'success');
-            ui.addSpinProductForm.reset();
-        })
-        .catch(err => Swal.fire('خطأ!', `فشلت الإضافة: ${err.message}`, 'error'));
-}
-
-function handleAddPointsProductSubmit(e) {
-    e.preventDefault();
-    const payload = {
-        type: ui.pointsProductType.value,
-        points_amount: ui.pointsProductAmount.value,
-        sp_price: ui.pointsProductSpPrice.value,
-        daily_limit: ui.pointsProductDailyLimit.value,
-    };
-    if (Object.values(payload).some(v => !v || v <= 0)) {
-        Swal.fire('خطأ', 'الرجاء تعبئة جميع الحقول بقيم صحيحة وموجبة.', 'error');
-        return;
-    }
-    apiCall('/api/admin/shop/add_points_product', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }, 'تم إضافة منتج تعديل الأسهم بنجاح!').then(() => {
-        ui.addPointsProductForm.reset();
-    }).catch(err => console.error(err));
-}
-
-
-function handleSpinWheelSettingsSubmit(e) {
-    e.preventDefault();
-    const prizes = Array.from(ui.prizesContainer.querySelectorAll('.prize-entry')).map(entry => ({
-        value: entry.querySelector('.prize-value').value,
-        weight: entry.querySelector('.prize-weight').value
-    })).filter(p => p.value && p.weight);
-
-    const settings = {
-        enabled: ui.spinWheelEnabledToggle.checked,
-        cooldownHours: parseInt(ui.spinCooldownHours.value) || 24,
-        maxAttempts: parseInt(ui.spinMaxAttempts.value) || 1,
-        maxAccumulation: parseInt(ui.spinMaxAccumulation.value) || 10,
-        purchaseLimit: parseInt(ui.spinPurchaseLimit.value) || 20,
-        prizes: prizes
-    };
-
-    apiCall('/api/admin/settings/spin_wheel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-    }, 'تم حفظ إعدادات عجلة الحظ!');
-}
-
-window.adminActions = {
-    editUser: (name) => {
-        const user = usersCache[name];
-        if (!user) return;
-        ui.nameInput.value = name;
-        ui.pointsInput.value = user.points || 0;
-        ui.originalNameInput.value = name;
-        ui.formTitle.innerText = `تعديل: ${name}`;
-        ui.saveUserBtn.innerText = 'حفظ التعديل';
-        ui.saveUserBtn.classList.replace('btn-primary', 'btn-warning');
-        ui.clearFormBtn.style.display = 'inline-block';
-        ui.nameInput.focus();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    confirmDelete: (name) => {
-        Swal.fire({ title: `هل أنت متأكد من حذف ${name}؟`, text: "لا يمكن التراجع عن هذا الإجراء!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: 'نعم، احذفه!', cancelButtonText: 'إلغاء' }).then((result) => {
-            if (result.isConfirmed) apiCall(`/api/admin/delete_user/${name}`, { method: 'POST' }, 'تم حذف الزاحف بنجاح.');
+        let html = '';
+        avatarSnapshots.forEach((snap, index) => {
+            if (snap.exists()) {
+                const avatar = snap.val();
+                const avatarId = ownedIds[index];
+                html += `
+                    <div class="text-center">
+                        <img src="${avatar.image_url}" alt="${avatar.name}" class="user-avatar-preview" data-avatar-id="${avatarId}" style="width: 80px; height: 80px;" title="تعيين كصورة شخصية">
+                        <p class="small mt-1 mb-0">${avatar.name}</p>
+                    </div>
+                `;
+            }
         });
-    },
-    addCandidate: async () => {
-        const { value: name } = await Swal.fire({ title: 'ترشيح زاحف جديد', input: 'text', inputLabel: 'اسم الزاحف المراد ترشيحه', inputPlaceholder: 'أدخل الاسم هنا...', showCancelButton: true, confirmButtonText: 'ترشيح', cancelButtonText: 'إلغاء' });
-        if (name && name.trim()) apiCall(`/api/admin/candidate/add/${name.trim()}`, { method: 'POST' }, `تم ترشيح ${name.trim()} بنجاح`);
-    },
-    toggleCandidate: (name, isCandidate) => {
-        apiCall(`/api/admin/candidate/${isCandidate ? 'remove' : 'add'}/${name}`, { method: 'POST' });
-    },
-    manageUser: async (userId, action, btn) => {
-        btn.disabled = true;
-        await apiCall(`/api/admin/manage_user/${userId}/${action}`, { method: 'POST' }, `تم ${action === 'approve' ? 'قبول' : 'رفض'} المستخدم.`);
-    },
-    confirmBanUser: (userId, userName) => {
-        Swal.fire({ title: `هل أنت متأكد من حظر ${userName}؟`, icon: 'warning', showCancelButton: true, confirmButtonText: 'نعم، قم بالحظر!', cancelButtonText: 'إلغاء' }).then((result) => {
-            if (result.isConfirmed) apiCall('/api/admin/ban_user', { method: 'POST', body: new URLSearchParams({ user_id_to_ban: userId, user_name_to_ban: userName }) }, `تم حظر ${userName} بنجاح.`);
+
+        ui.ownedAvatarsContainer.innerHTML = html || '<p class="text-muted text-center w-100">أنت لا تمتلك أي أفاتارات بعد.</p>';
+        ui.ownedAvatarsContainer.querySelectorAll('.user-avatar-preview').forEach(img => {
+            img.addEventListener('click', handleSetAvatar);
         });
-    },
-    resetFreeSpinsForUser: (userId, userName) => {
+    }
+
+    async function handleSetAvatar(e) {
+        const avatarId = e.target.dataset.avatarId;
+        if (!avatarId) return;
+
         Swal.fire({
-            title: `منح محاولات مجانية لـ ${userName}؟`,
-            text: "سيتم إضافة المحاولات المجانية اليومية إلى رصيده وتحديث وقت التبريد.",
+            title: 'تغيير الأفاتار',
+            text: 'هل أنت متأكد أنك تريد تعيين هذا الأفاتار كصورتك الشخصية؟',
             icon: 'question',
             showCancelButton: true,
-            confirmButtonText: 'نعم, امنح المحاولات!',
+            confirmButtonText: 'نعم، قم بالتعيين',
             cancelButtonText: 'إلغاء'
-        }).then((result) => {
+        }).then(async result => {
             if (result.isConfirmed) {
-                apiCall('/api/admin/reset_all_free_spins', {
-                    method: 'POST',
-                    body: new URLSearchParams({ user_id: userId })
-                }, `تم منح المحاولات المجانية لـ ${userName}.`);
-            }
-        });
-    },
-    editPurchasedAttempts: async (userId, userName) => {
-        const userStateRef = db.ref(`user_spin_state/${userId}`);
-        const snapshot = await userStateRef.once('value');
-        const currentState = snapshot.val() || { purchasedAttempts: 0 };
-
-        const { value: newAttempts } = await Swal.fire({
-            title: `تعديل المحاولات المشتراة لـ ${userName}`,
-            input: 'number',
-            inputLabel: 'العدد الجديد للمحاولات المشتراة',
-            inputValue: currentState.purchasedAttempts,
-            showCancelButton: true,
-            confirmButtonText: 'تحديث',
-            cancelButtonText: 'إلغاء',
-            inputValidator: (value) => {
-                const num = Number(value);
-                if (isNaN(num) || num < 0 || !Number.isInteger(num)) {
-                    return 'الرجاء إدخال رقم صحيح وموجب!'
+                try {
+                    const data = await apiCall('/api/user/set_avatar', { method: 'POST', body: new URLSearchParams({ avatar_id: avatarId }) });
+                    Swal.fire('تم!', data.message, 'success');
+                    ui.avatarChooserModal.classList.remove('show');
+                } catch (err) {
+                    Swal.fire('فشل!', err.message, 'error');
                 }
-                return null;
             }
         });
+    }
 
-        if (newAttempts !== null && typeof newAttempts !== 'undefined') {
-            apiCall('/api/admin/update_purchased_attempts', {
-                method: 'POST',
-                body: new URLSearchParams({ user_id: userId, attempts: newAttempts })
-            }, `تم تحديث رصيد ${userName} من المحاولات المشتراة.`);
-        }
-    },
-    // *** התיקון כאן | THE FIX IS HERE ***
-    editUserWallet: async (userId, userName) => {
-        // أولاً، نحضر الرصيد الحالي للمستخدم
-        const walletRef = db.ref(`wallets/${userId}`);
-        const snapshot = await walletRef.once('value');
-        const currentWallet = snapshot.val() || { cc: 0, sp: 0 };
+    // ... (rest of the functions remain unchanged)
+    function showInvestmentInfo(btn) { if (!ui.investmentInfoModal) return; const { crawlerName, investedSp, pointsThen, pointsNow, profit, profitColor } = btn.dataset; ui.investmentInfoModal.querySelector('#infoModalCrawlerName').textContent = crawlerName; ui.investmentInfoModal.querySelector('#infoModalInvestedSP').textContent = `${investedSp} SP`; ui.investmentInfoModal.querySelector('#infoModalPointsThen').textContent = pointsThen; ui.investmentInfoModal.querySelector('#infoModalPointsNow').textContent = pointsNow; const p = ui.investmentInfoModal.querySelector('#infoModalProfitLoss'); p.textContent = `${parseFloat(profit) >= 0 ? '+' : ''}${profit} SP`; p.className = `fw-bold ${profitColor}`; ui.investmentInfoModal.classList.add('show'); }
+    function renderWallet(wallet) { wallet = wallet || { cc: 0, sp: 0 }; if (ui.userCcBalance) ui.userCcBalance.textContent = formatNumber(wallet.cc, false); if (ui.userSpBalance) ui.userSpBalance.textContent = formatNumber(wallet.sp, false); }
+    function renderRichestInvestors() { if (!ui.richestInvestorsList || !allWallets) return; db.ref('registered_users').once('value', s => { const usersMap = s.val() || {}; const adminUIDs = new Set(Object.keys(usersMap).filter(id => usersMap[id].role === 'admin')); const richList = Object.entries(allWallets).filter(([uid]) => !adminUIDs.has(uid) && usersMap[uid]).sort(([, a], [, b]) => (b.sp || 0) - (a.sp || 0)).slice(0, 10); ui.richestInvestorsList.innerHTML = richList.length === 0 ? '<li class="list-group-item text-muted text-center">لا يوجد مستثمرون بعد.</li>' : richList.map(([uid, w], i) => `<li class="list-group-item d-flex justify-content-between"><span>${['🥇', '🥈', '🥉'][i] || `<b>#${i + 1}</b>`} ${usersMap[uid].name}</span><span class="badge rounded-pill bg-success">${(w.sp || 0).toFixed(2)} SP</span></li>`).join(''); }); }
+    function renderTop3() { if (!ui.hallOfFame) return; const top3 = allUsersCache.slice(0, 3); ui.hallOfFame.innerHTML = top3.length > 0 ? top3.map((u, i) => `<li class="list-group-item d-flex justify-content-between"><span>${['🥇', '🥈', '🥉'][i]} ${u.name}</span><span class="badge rounded-pill" style="background-color:var(--primary-glow)">${formatNumber(u.points)}</span></li>`).join('') : '<li class="list-group-item text-muted text-center">القائمة فارغة.</li>'; }
+    function renderHonorRollList() { if (!ui.honorRollList) return; ui.honorRollList.innerHTML = honorRollCache.length ? honorRollCache.map(n => `<li class="list-group-item fw-bold text-center"><i class="bi bi-star-fill text-warning me-2"></i>${n}</li>`).join('') : '<li class="list-group-item text-muted text-center">القائمة فارغة.</li>'; }
+    function renderCandidatesList(candidates) { if (!ui.candidatesList) return; ui.candidatesList.innerHTML = candidates.length ? candidates.map(n => `<li class="list-group-item"><i class="bi bi-person-check-fill me-2"></i>${n}</li>`).join('') : '<li class="list-group-item text-muted text-center">لا يوجد مرشحون.</li>'; }
+    function renderAnnouncements(announcements) { if (!ui.announcementsTicker || !ui.announcementsContainer) return; if (announcements.length > 0) { ui.announcementsContainer.style.display = 'flex'; requestAnimationFrame(() => ui.announcementsContainer.classList.add('visible')); ui.announcementsTicker.innerHTML = announcements.map(n => `<div class="ticker-item">${n.text}</div>`).join(''); ui.announcementsTicker.style.animationDuration = `${Math.max(announcements.length * 8, 20)}s`; } else { ui.announcementsContainer.classList.remove('visible'); setTimeout(() => { ui.announcementsContainer.style.display = 'none' }, 500); } }
+    async function apiCall(endpoint, options = {}) { const response = await fetch(endpoint, options); const data = await response.json(); if (!response.ok) throw new Error(data.message || 'خطأ في الخادم'); return data; }
+    function showInvestmentModal(crawlerName) { if (!ui.investmentModal) return; ui.investCrawlerName.textContent = crawlerName; ui.investCrawlerNameHidden.value = crawlerName; ui.investmentModal.classList.add('show'); ui.spAmountInput.focus(); }
+    async function handleInvestment(e) { e.preventDefault(); const form = e.target, btn = form.querySelector('button[type="submit"]'), originalHTML = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { const data = await apiCall('/api/invest', { method: 'POST', body: new FormData(form) }); Swal.fire('تم الاستثمار!', data.message, 'success'); ui.investmentModal.classList.remove('show'); form.reset(); } catch (err) { Swal.fire('فشل!', err.message, 'error'); } finally { btn.disabled = false; btn.innerHTML = originalHTML; } }
+    function confirmSell(crawlerName) { Swal.fire({ title: `هل أنت متأكد من بيع استثمارك في ${crawlerName}؟`, text: "سيتم إضافة قيمة الاستثمار الحالية إلى رصيدك من SP.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: 'نعم, قم بالبيع!', cancelButtonText: 'إلغاء' }).then(async (result) => { if (result.isConfirmed) { try { const data = await apiCall('/api/sell', { method: 'POST', body: new URLSearchParams({ 'crawler_name': crawlerName }) }); Swal.fire('تم البيع!', data.message, 'success'); } catch (e) { Swal.fire('فشل!', e.message, 'error'); } } }); }
+    function handleLike(btn) { if (btn.disabled) return; const username = btn.dataset.username, likedUsers = new Set(JSON.parse(localStorage.getItem('likedUsers')) || []), countSpan = btn.querySelector('.like-count'), currentLikes = parseInt(String(countSpan.textContent || '0').replace(/[^0-9.-]+/g, "")), isLiked = likedUsers.has(username), action = isLiked ? 'unlike' : 'like'; btn.disabled = true; if (action === 'like') { likedUsers.add(username); btn.classList.add('liked'); btn.classList.remove('btn-outline-danger'); countSpan.textContent = formatNumber(currentLikes + 1, false); for (let i = 0; i < 7; i++) { const burst = document.createElement('span'); burst.className = 'heart-burst'; burst.style.left = `${Math.random() * 100}%`; burst.style.top = `${Math.random() * 100}%`; burst.style.animationDelay = `${Math.random() * 0.3}s`; btn.appendChild(burst); setTimeout(() => burst.remove(), 800); } } else { likedUsers.delete(username); btn.classList.remove('liked'); btn.classList.add('btn-outline-danger'); countSpan.textContent = formatNumber(Math.max(0, currentLikes - 1), false); } localStorage.setItem('likedUsers', JSON.stringify([...likedUsers])); apiCall(`/api/like/${username}?action=${action}`, { method: 'POST' }).catch(e => console.error("Like error:", e)).finally(() => btn.disabled = false); }
+    async function showUserHistoryChart(username) {
+        if (!ui.userChartModal) return;
+        try {
+            const history = await apiCall(`/api/user_history/${username}`);
+            if (!history || history.length < 2) return Swal.fire({ icon: 'info', title: 'لا توجد بيانات كافية', text: 'لا يوجد سجل نقاط كافٍ لعرض الرسم البياني.' });
+            ui.chartModalLabel.innerText = `تقدم الزاحف: ${username}`;
+            if (userChartInstance) userChartInstance.destroy();
+            const ctx = ui.userPointsChartCanvas.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(0, 242, 255, 0.4)'); gradient.addColorStop(1, 'rgba(159, 122, 234, 0.1)');
+            userChartInstance = new Chart(ctx, { type: 'line', data: { labels: history.map(d => safeFormatDate(d.timestamp, { day: '2-digit', month: 'short' })), datasets: [{ label: 'النقاط', data: history.map(d => d.points), fill: true, backgroundColor: gradient, borderColor: '#00f2ff', tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: 'var(--text-color)' }, grid: { color: 'rgba(255,255,255,.1)' } }, x: { ticks: { color: 'var(--text-color)' }, grid: { display: false } } }, plugins: { legend: { display: false } } } });
+            ui.userChartModal.classList.add('show');
+        } catch (e) { Swal.fire('خطأ', 'لم نتمكن من جلب سجل نقاط هذا الزاحف.', 'error'); }
+    }
+    function handleUserMessage(snapshot) { const getProcessedIds = () => new Set(JSON.parse(sessionStorage.getItem('processedMessageIds') || '[]')), setProcessedIds = ids => sessionStorage.setItem('processedMessageIds', JSON.stringify([...ids])), processedIds = getProcessedIds(), messageId = snapshot.key; if (snapshot.val()?.text && !processedIds.has(messageId)) { processedIds.add(messageId), setProcessedIds(processedIds), Swal.fire({ title: 'رسالة من الإدارة!', text: snapshot.val().text, icon: 'info', confirmButtonText: 'تم الاطلاع' }).then(() => snapshot.ref.remove()) } }
 
-        // ثانياً، نعرض نافذة منبثقة مع الحقول مملوءة بالقيم الحالية
-        const { value: formValues } = await Swal.fire({
-            title: `تعديل محفظة ${userName}`,
-            html: `
-                <div class="mb-2">
-                    <label for="swal-cc" class="form-label">رصيد زاحف كوين (CC)</label>
-                    <input id="swal-cc" type="number" class="swal2-input" value="${Math.round(currentWallet.cc || 0)}">
-                </div>
-                <div>
-                    <label for="swal-sp" class="form-label">رصيد نقاط الدعم (SP)</label>
-                    <input id="swal-sp" type="number" class="swal2-input" value="${(currentWallet.sp || 0).toFixed(2)}">
-                </div>`,
-            focusConfirm: false,
-            showCancelButton: true,
-            confirmButtonText: 'حفظ التعديلات',
-            cancelButtonText: 'إلغاء',
-            preConfirm: () => {
-                const cc = document.getElementById('swal-cc').value;
-                const sp = document.getElementById('swal-sp').value;
-                if (!cc || !sp || isNaN(cc) || isNaN(sp)) {
-                    Swal.showValidationMessage(`الرجاء إدخال قيم رقمية صحيحة`);
-                    return false;
-                }
-                return { cc: Number(cc), sp: Number(sp) };
-            }
-        });
-
-        // ثالثاً، إذا قام الأدمن بالتأكيد، نرسل الطلب إلى الخادم
-        if (formValues) {
-            apiCall('/api/admin/update_wallet', {
-                method: 'POST',
-                body: new URLSearchParams({
-                    user_id: userId,
-                    user_name: userName, // نرسل الاسم أيضاً لغرض تسجيل النشاط
-                    cc: formValues.cc,
-                    sp: formValues.sp
-                })
-            }, `تم تحديث محفظة ${userName} بنجاح.`);
-        }
-    },
-    resetAllFreeSpins: () => {
-        Swal.fire({
-            title: 'هل أنت متأكد؟',
-            text: "سيتم منح المحاولات المجانية لجميع المستخدمين الآن وإعادة ضبط المؤقت الخاص بهم. لا يمكن التراجع عن هذا الإجراء.",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
-            confirmButtonText: 'نعم، قم بإعادة التعيين!',
-            cancelButtonText: 'إلغاء'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                apiCall('/api/admin/reset_all_free_spins', { method: 'POST' }, 'تم إرسال طلب إعادة التعيين بنجاح.');
-            }
-        });
-    },
-    deleteShopProduct: (productId) => {
-        Swal.fire({ title: 'هل أنت متأكد؟', text: "سيتم حذف حزمة SP هذه من المتجر نهائياً!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم، احذفه!' }).then((result) => {
-            if (result.isConfirmed) {
-                db.ref(`site_settings/shop_products/${productId}`).remove()
-                    .then(() => Swal.fire('تم الحذف!', 'تم حذف المنتج بنجاح.', 'success'))
-                    .catch(err => Swal.fire('خطأ!', `فشل الحذف: ${err.message}`, 'error'));
-            }
-        });
-    },
-    deleteShopSpinProduct: (productId) => {
-        Swal.fire({ title: 'هل أنت متأكد؟', text: "سيتم حذف حزمة المحاولات هذه من المتجر نهائياً!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم، احذفه!' }).then((result) => {
-            if (result.isConfirmed) {
-                db.ref(`site_settings/shop_products_spins/${productId}`).remove()
-                    .then(() => Swal.fire('تم الحذف!', 'تم حذف المنتج بنجاح.', 'success'))
-                    .catch(err => Swal.fire('خطأ!', `فشل الحذف: ${err.message}`, 'error'));
-            }
-        });
-    },
-    deleteShopPointsProduct: (productId) => {
-        Swal.fire({ title: 'هل أنت متأكد؟', text: "سيتم حذف منتج تعديل الأسهم هذا من المتجر نهائياً!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم، احذفه!' }).then((result) => {
-            if (result.isConfirmed) {
-                apiCall(`/api/admin/shop/delete_points_product/${productId}`, { method: 'POST' }, 'تم حذف المنتج بنجاح.');
-            }
-        });
-    },
-    sendUserMessage: async (userId, userName) => {
-        const { value: message } = await Swal.fire({ title: `إرسال رسالة إلى ${userName}`, input: 'textarea', inputPlaceholder: 'اكتب رسالتك هنا...', showCancelButton: true, confirmButtonText: 'إرسال', cancelButtonText: 'إلغاء' });
-        if (message && message.trim()) apiCall('/api/admin/user_message/send', { method: 'POST', body: new URLSearchParams({ user_id: userId, user_name: userName, message: message }) }, `تم إرسال الرسالة إلى ${userName} بنجاح.`);
-    },
-    deleteAnnouncement: (id) => { apiCall(`/api/admin/announcements/delete/${id}`, { method: 'POST' }); },
-    deleteFromHonorRoll: (id) => { apiCall(`/api/admin/honor_roll/delete/${id}`, { method: 'POST' }); },
-};
-// --- END OF FILE static/js/admin.js ---
+    initializeApp();
+}
+// --- END OF FILE static/js/user_view.js ---

@@ -1,10 +1,9 @@
-﻿# --- START OF FILE project/views.py ---
+﻿# --- START OF FILE project/views.py (WITH CORRECTED IMPORT) ---
 from flask import (
     Blueprint, render_template, redirect, url_for, session
 )
-# *** التعديل: استيراد الوحدات الفرعية المطلوبة فقط ***
-from firebase_admin import db
-from .auth_routes import login_required, admin_required
+# *** التصحيح هنا: يتم استيراد الدوال من utils.py وليس auth_routes.py ***
+from .utils import login_required, admin_required
 
 bp = Blueprint('views', __name__)
 
@@ -27,14 +26,7 @@ def dashboard_page():
     """
     صفحة لوحة التحكم العامة للمستخدم (لم تعد تستخدم مباشرة ولكن من الجيد إبقاؤها).
     """
-    ref_registered_users = db.reference('registered_users/')
-    
-    user_info = ref_registered_users.child(session['user_id']).get()
-    if not user_info:
-        session.clear()
-        return redirect(url_for('auth.login_page'))
-    
-    return render_template('dashboard.html', user=user_info)
+    return render_template('dashboard.html')
 
 
 @bp.route('/admin')

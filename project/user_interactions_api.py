@@ -1,434 +1,332 @@
-﻿# --- START OF FILE project/user_interactions_api.py ---
-
+﻿
 import time
 import re
 import sys
-import os
 from datetime import datetime
 from flask import (
-    Blueprint, request, jsonify, session, url_for
+    Blueprint, request, jsonify, session
 )
-from firebase_admin import db, auth
-from google.auth.exceptions import RefreshError
-# *** התיקון כאן | THE FIX IS HERE ***
-# استيراد pyrebase لتسجيل الدخول
-from .auth_routes import login_required, check_user_status, pyrebase_auth
+from firebase_admin import db
+from .utils import login_required
 
 bp = Blueprint('interactions', __name__, url_prefix='/api')
 
-# *** התיקון כאן | THE FIX IS HERE ***
-# إعادة بناء المسار بالكامل ليكون قوياً وموثوقاً
-@bp.route('/verify_token', methods=['POST'])
-def verify_token():
-    id_token = request.json.get('id_token')
-    if not id_token:
-        return jsonify(success=False, message="Token not provided"), 400
-
-    # الخطوة 1: التحقق من صحة التوكن باستخدام Pyrebase (لا يعتمد على ساعة الخادم)
-    try:
-        # إذا نجح هذا الاستدعاء، فهذا يعني أن المستخدم قام بتسجيل الدخول بنجاح في المتصفح
-        user_info = pyrebase_auth.get_account_info(id_token)['users'][0]
-        uid = user_info['localId']
-    except Exception as e:
-        # هذا يعني أن التوكن الذي أرسله المتصفح غير صالح
-        print(f"Client-side Token Invalid: {e}", file=sys.stderr)
-        return jsonify(success=False, message="فشل التحقق من هوية المستخدم. يرجى المحاولة مرة أخرى."), 401
-
-    # الخطوة 2: الآن فقط، نحاول الاتصال بقاعدة البيانات باستخدام حساب الخدمة
-    try:
-        status, db_user_data = check_user_status(uid)
-
-        if status == 'db_error':
-            return jsonify(success=False, message="حدث خطأ أثناء الوصول لبيانات المستخدم."), 500
-        if status == 'banned':
-            return jsonify(success=False, status='banned', message="هذا الحساب محظور."), 403
-        
-        if status == 'approved':
-            session.clear()
-            session['user_id'] = uid
-            session['name'] = db_user_data.get('name', 'مستخدم')
-            session['email'] = db_user_data.get('email')
-            session['role'] = db_user_data.get('role', 'user')
-            session['logged_in'] = True
-            return jsonify(success=True, redirect_url=url_for('views.home'))
-            
-        elif status in ['pending', 'rejected']:
-             return jsonify(success=False, status='pending', message="حسابك غير فعال أو قيد المراجعة."), 403
-
-        # مستخدم جديد عبر جوجل (status == 'not_found')
-        if user_info.get('providerUserInfo', [{}])[0].get('providerId') == 'google.com':
-            ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
-            user_email = user_info.get('email')
-            is_admin = user_email and user_email.lower() == ADMIN_EMAIL.lower()
-            
-            new_user_data = {
-                'uid': uid, 'name': user_info.get('displayName', 'مستخدم جوجل'), 'email': user_email,
-                'status': 'approved' if is_admin else 'pending',
-                'registered_at': int(time.time()), 'role': 'admin' if is_admin else 'user',
-                'provider': 'google.com'
-            }
-            db.reference(f'registered_users/{uid}').set(new_user_data)
-            
-            if is_admin:
-                auth.update_user(uid, disabled=False)
-                session.clear()
-                session['user_id'] = uid
-                session['name'] = new_user_data['name']
-                session['email'] = new_user_data['email']
-                session['role'] = 'admin'
-                session['logged_in'] = True
-                return jsonify(success=True, redirect_url=url_for('views.home'))
-            else:
-                return jsonify(success=False, status='pending', message="تم استلام طلب تسجيلك عبر جوجل. حسابك الآن قيد المراجعة من قبل الإدارة.")
-        
-        return jsonify(success=False, message="المستخدم غير موجود."), 404
-
-    except RefreshError as e:
-        # هذا الخطأ يحدث فقط إذا فشلت مصادقة الخادم (مشكلة الساعة)
-        print(f"Server Authentication Error (likely clock sync issue): {e}", file=sys.stderr)
-        message = "حدث خطأ في مصادقة الخادم. يرجى التأكد من أن ساعة جهاز الخادم مضبوطة بشكل صحيح."
-        return jsonify(success=False, message=message), 500
-    except Exception as e:
-        # أي خطأ آخر غير متوقع
-        print(f"Token Verification - Unhandled Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ غير متوقع في الخادم."), 500
-
-
-BANNED_WORDS = ["منيك", "شرموطة", "بتنتاك", "بنيك", "كس اختك", "كسختك", "امك", "اختك"]
+BANNED_WORDS_PATTERN = re.compile(
+    r'\b(' + '|'.join(re.escape(word) for word in [
+        "منيك", "شرموطة", "بتنتاك", "بنيك", "كس اختك", "كسختك", "امك", "اختك"
+    ]) + r')\b', re.IGNORECASE
+)
 
 def is_abusive(text):
-    if not text: return False
-    pattern = r'\b(' + '|'.join(re.escape(word) for word in BANNED_WORDS) + r')\b'
-    return bool(re.search(pattern, text, re.IGNORECASE))
+    return bool(BANNED_WORDS_PATTERN.search(text)) if text else False
+
+# --- SHOP INTERACTIONS ---
+
+@bp.route('/shop/buy_product', methods=['POST'])
+@login_required
+def buy_shop_product():
+    user_id = session.get('user_id')
+    product_id = request.form.get('product_id')
+    if not product_id: return jsonify(success=False, message="معرف المنتج مفقود."), 400
+    product = db.reference(f'site_settings/shop_products/{product_id}').get()
+    if not product: return jsonify(success=False, message="المنتج غير موجود أو تم حذفه."), 404
+    cc_price = product.get('cc_price', 0)
+    sp_amount = product.get('sp_amount', 0)
+    if not isinstance(cc_price, int) or not isinstance(sp_amount, int) or cc_price <= 0 or sp_amount <= 0:
+        return jsonify(success=False, message="بيانات المنتج غير صالحة."), 500
+    user_wallet_ref = db.reference(f'wallets/{user_id}')
+    try:
+        def transact_purchase(current_wallet_data):
+            wallet = current_wallet_data or {'cc': 0, 'sp': 0}
+            if wallet.get('cc', 0) < cc_price:
+                raise ValueError("رصيد CC غير كافٍ لإتمام عملية الشراء.")
+            wallet['cc'] -= cc_price
+            wallet['sp'] = wallet.get('sp', 0) + sp_amount
+            return wallet
+        user_wallet_ref.transaction(transact_purchase)
+        return jsonify(success=True, message=f"تم بنجاح شراء {sp_amount:,} SP!")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        print(f"!!! Product Purchase Error for user {user_id}: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
 
 @bp.route('/shop/buy_spin_attempt', methods=['POST'])
 @login_required
 def buy_spin_attempt():
-    ref_site_settings = db.reference('site_settings/')
-    ref_wallets = db.reference('wallets/')
-    ref_user_spin_state = db.reference('user_spin_state/')
-    user_id = session['user_id']
-    product_id = request.form.get('product_id')
-    if not product_id:
-        return jsonify(success=False, message="معرف المنتج مفقود."), 400
-    
-    product = ref_site_settings.child(f'shop_products_spins/{product_id}').get()
-    if not product:
-        return jsonify(success=False, message="المنتج غير موجود أو تم حذفه."), 404
-
-    sp_price = product.get('sp_price', 0)
-    attempts_to_add = product.get('attempts_amount', 0)
-
-    if sp_price <= 0 or attempts_to_add <= 0:
+    user_id = session.get('user_id'); product_id = request.form.get('product_id')
+    if not product_id: return jsonify(success=False, message="معرف المنتج مفقود."), 400
+    product = db.reference(f'site_settings/shop_products_spins/{product_id}').get()
+    if not product: return jsonify(success=False, message="المنتج غير موجود أو تم حذفه."), 404
+    sp_price = product.get('sp_price', 0); attempts_to_add = product.get('attempts_amount', 0)
+    if not isinstance(sp_price, int) or not isinstance(attempts_to_add, int) or sp_price <= 0 or attempts_to_add <= 0:
         return jsonify(success=False, message="بيانات المنتج غير صالحة."), 500
-
+    spin_settings = db.reference('site_settings/spin_wheel_settings').get() or {}
+    purchase_limit = spin_settings.get('purchaseLimit', 20)
     try:
-        spin_settings = ref_site_settings.child('spin_wheel_settings').get() or {}
-        purchase_limit = spin_settings.get('purchaseLimit', 20)
-
-        wallet_sp = ref_wallets.child(f"{user_id}/sp").get() or 0
-        if wallet_sp < sp_price:
+        wallet_ref = db.reference(f'wallets/{user_id}'); user_spin_state_ref = db.reference(f'user_spin_state/{user_id}')
+        current_wallet_sp = (wallet_ref.child('sp').get() or 0)
+        if current_wallet_sp < sp_price:
             return jsonify(success=False, message="رصيد SP غير كافٍ لإتمام عملية الشراء."), 400
-
-        current_purchased_attempts = ref_user_spin_state.child(f"{user_id}/purchasedAttempts").get() or 0
-        
+        current_purchased_attempts = (user_spin_state_ref.child('purchasedAttempts').get() or 0)
         if current_purchased_attempts + attempts_to_add > purchase_limit:
             return jsonify(success=False, message=f"لا يمكنك شراء المزيد. الحد الأقصى للمحاولات المشتراة هو {purchase_limit} محاولة."), 403
-
-        updates = {
-            f"wallets/{user_id}/sp": wallet_sp - sp_price,
-            f"user_spin_state/{user_id}/purchasedAttempts": current_purchased_attempts + attempts_to_add
-        }
-        
-        db.reference('/').update(updates)
-        
+        wallet_ref.child('sp').set(current_wallet_sp - sp_price)
+        user_spin_state_ref.child('purchasedAttempts').transaction(lambda current: (current or 0) + attempts_to_add)
         return jsonify(success=True, message=f"تم بنجاح شراء {attempts_to_add} محاولة دوران إضافية!")
     except Exception as e:
-        print(f"!!! Atomic Spin Purchase Error: {e}", file=sys.stderr)
+        print(f"!!! Atomic Spin Purchase Error for user {user_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
 
 @bp.route('/shop/buy_points_product', methods=['POST'])
 @login_required
 def buy_points_product():
-    ref_site_settings = db.reference('site_settings/')
-    ref_wallets = db.reference('wallets/')
-    ref_users = db.reference('users/')
-    ref_user_daily_limits = db.reference('user_daily_limits/')
-    ref_points_history = db.reference('points_history/')
-    ref_activity_log = db.reference('activity_log/')
-    user_id = session.get('user_id')
-    user_name = session.get('name')
-    product_id = request.form.get('product_id')
-    target_crawler_name = request.form.get('target_crawler')
-
-    if not all([product_id, target_crawler_name]):
-        return jsonify(success=False, message="البيانات المطلوبة غير مكتملة."), 400
-
+    user_id, user_name = session['user_id'], session.get('name', 'مستخدم')
+    product_id = request.form.get('product_id'); target_crawler_name = request.form.get('target_crawler')
+    if not all([product_id, target_crawler_name]): return jsonify(success=False, message="البيانات المطلوبة غير مكتملة."), 400
     try:
-        product = ref_site_settings.child(f'shop_products_points/{product_id}').get()
-        user_wallet = ref_wallets.child(user_id).get() or {}
-        target_crawler = ref_users.child(target_crawler_name).get()
-        
+        product = db.reference(f'site_settings/shop_products_points/{product_id}').get()
+        target_crawler_ref = db.reference(f'users/{target_crawler_name}')
         if not product: return jsonify(success=False, message="المنتج المحدد غير موجود."), 404
-        if not target_crawler: return jsonify(success=False, message="الزاحف المستهدف غير موجود."), 404
-        
-        sp_price = product.get('sp_price', 0)
-        if user_wallet.get('sp', 0) < sp_price:
-            return jsonify(success=False, message="رصيد SP لديك غير كافٍ."), 400
-
-        daily_limit = product.get('daily_limit', 1)
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        limit_data = ref_user_daily_limits.child(f"{user_id}/{product_id}").get() or {}
-        
-        current_count = 0
-        if limit_data.get('date') == today_str:
-            current_count = limit_data.get('count', 0)
-        
-        if current_count >= daily_limit:
-            return jsonify(success=False, message=f"لقد استهلكت الحد اليومي لهذا المنتج ({daily_limit} مرة)."), 403
-            
-        points_change = product.get('points_amount', 0)
-        product_type = product.get('type')
-        
-        action_text = "تأثير على الأسهم"
-        log_type = 'item_effect_neutral'
-
-        if product_type == 'drop':
-            points_change = -points_change
-            action_text = "إسقاط أسهم"
-            log_type = 'item_effect_drop'
-        elif product_type == 'raise':
-            action_text = "رفع أسهم"
-            log_type = 'item_effect_raise'
-        
-        new_sp_balance = user_wallet.get('sp', 0) - sp_price
-        new_points = target_crawler.get('points', 0) + points_change
-        
-        updates = {
-            f"wallets/{user_id}/sp": new_sp_balance,
-            f"users/{target_crawler_name}/points": new_points,
-            f"user_daily_limits/{user_id}/{product_id}/count": current_count + 1,
-            f"user_daily_limits/{user_id}/{product_id}/date": today_str
-        }
-        
-        db.reference('/').update(updates)
-        
-        ref_points_history.child(target_crawler_name).push({
-            'points': new_points, 'timestamp': int(time.time()), 'reason': f"Item purchase by {user_name} for {action_text}"
-        })
-        
-        ref_activity_log.push({
-            'type': log_type,
-            'text': f"'{user_name}' استخدم منتج '{action_text}' على '{target_crawler_name}' بقيمة {abs(points_change):,} نقطة.",
-            'timestamp': int(time.time()),
-            'user_id': user_id, 'user_name': user_name
-        })
-        
+        if not target_crawler_ref.get(): return jsonify(success=False, message="الزاحف المستهدف غير موجود."), 404
+        sp_price = product.get('sp_price', 0); daily_limit = product.get('daily_limit', 1)
+        today_str = datetime.now().strftime('%Y-%m-%d'); limit_ref = db.reference(f'user_daily_limits/{user_id}/{product_id}')
+        limit_data = limit_ref.get() or {}; current_count = limit_data.get('count', 0) if limit_data.get('date') == today_str else 0
+        if current_count >= daily_limit: return jsonify(success=False, message=f"لقد استهلكت الحد اليومي لهذا المنتج ({daily_limit} مرة)."), 403
+        wallet_ref = db.reference(f'wallets/{user_id}');
+        current_sp = (wallet_ref.get() or {}).get('sp', 0)
+        if current_sp < sp_price: return jsonify(success=False, message="رصيد SP لديك غير كافٍ."), 400
+        points_change = product.get('points_amount', 0) * (-1 if product.get('type') == 'drop' else 1)
+        wallet_ref.child('sp').set(current_sp - sp_price)
+        target_crawler_ref.child('points').transaction(lambda p: (p or 0) + points_change)
+        limit_ref.set({'count': current_count + 1, 'date': today_str})
+        log_type = 'item_effect_raise' if product.get('type') == 'raise' else 'item_effect_drop'
+        db.reference('activity_log').push({'type': log_type, 'text': f"'{user_name}' أثر على '{target_crawler_name}' بـ{abs(points_change):,} نقطة.",'timestamp': int(time.time()),'user_id': user_id, 'user_name': user_name})
         return jsonify(success=True, message="تمت العملية بنجاح!")
-        
     except Exception as e:
-        print(f"!!! Buy Points Product Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ في الخادم أثناء تنفيذ العملية."), 500
+        print(f"!!! Buy Points Product Error for user {user_id}: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم."), 500
 
+# --- USER INTERACTIONS ---
 
 @bp.route('/like/<username>', methods=['POST'])
 @login_required 
 def like_user(username):
-    ref_users = db.reference('users/')
-    ref_activity_log = db.reference('activity_log/')
-    action = request.args.get('action', 'like')
-    user_id = session['user_id']
-    user_name = session['name']
-    if action == 'unlike':
-        ref_users.child(f'{username}/likes').transaction(lambda current: (current or 1) - 1)
-    else:
-        ref_users.child(f'{username}/likes').transaction(lambda current: (current or 0) + 1)
-        ref_activity_log.push({
-            'type': 'like', 'text': f"'{user_name}' أعجب بـ '{username}'", 
-            'timestamp': int(time.time()), 'user_id': user_id, 'user_name': user_name
-        })
+    amount = 1 if request.args.get('action', 'like') == 'like' else -1
+    db.reference(f'users/{username}/likes').transaction(lambda current: (current or 0) + amount)
+    if amount > 0:
+        db.reference('activity_log').push({'type': 'like', 'text': f"'{session.get('name')}' أعجب بـ '{username}'", 'timestamp': int(time.time()), 'user_id': session.get('user_id'), 'user_name': session.get('name')})
     return jsonify(success=True)
 
 @bp.route('/nominate', methods=['POST'])
 @login_required
 def nominate_user():
-    ref_activity_log = db.reference('activity_log/')
-    ref_candidates = db.reference('candidates/')
     name = request.form.get('name', '').strip()
-    user_id = session['user_id']
-    user_name = session['name']
     if not name: return jsonify(success=False, message="الاسم مطلوب للترشيح."), 400
     if is_abusive(name): return jsonify(success=False, message="الرجاء استخدام كلمات لائقة."), 403
-    text = f"'{user_name}' رشح '{name}' للانضمام"
-    ref_activity_log.push({
-        'type': 'nomination', 'text': text, 'timestamp': int(time.time()), 
-        'user_id': user_id, 'user_name': user_name
+    db.reference('activity_log').push({
+        'type': 'nomination',
+        'text': f"طلب ترشيح من '{session.get('name')}' لإضافة: '{name}'",
+        'timestamp': int(time.time()),
+        'user_id': session.get('user_id'),
+        'user_name': session.get('name')
     })
-    ref_candidates.child(name).set(True)
-    return jsonify(success=True, message="تم إرسال طلب الترشيح بنجاح!")
+    return jsonify(success=True, message="تم إرسال طلب الترشيح بنجاح للمراجعة!")
 
 @bp.route('/report', methods=['POST'])
 @login_required
 def report_user():
-    ref_activity_log = db.reference('activity_log/')
-    reason, reported_user = request.form.get('reason', '').strip(), request.form.get('reported_user', '').strip()
-    user_id, user_name = session['user_id'], session['name']
-    if not reason or not reported_user: return jsonify(success=False, message="يجب اختيار زاحف وذكر السبب."), 400
+    reason = request.form.get('reason', '').strip(); reported_user = request.form.get('reported_user', '').strip()
+    if not all([reason, reported_user]): return jsonify(success=False, message="يجب اختيار زاحف وذكر السبب."), 400
     if is_abusive(reason) or is_abusive(reported_user): return jsonify(success=False, message="الرجاء استخدام كلمات لائقة."), 403
-    text = f"بلاغ من '{user_name}' ضد '{reported_user}': {reason}"
-    ref_activity_log.push({
-        'type': 'report', 'text': text, 'timestamp': int(time.time()),
-        'user_id': user_id, 'user_name': user_name
-    })
+    db.reference('activity_log').push({'type': 'report', 'text': f"بلاغ من '{session.get('name')}' ضد '{reported_user}': {reason}", 'timestamp': int(time.time()), 'user_id': session.get('user_id'), 'user_name': session.get('name')})
     return jsonify(success=True, message=f"تم إرسال بلاغك بخصوص {reported_user}. شكراً لك.")
 
 @bp.route('/user_history/<username>')
 @login_required
 def get_user_history(username):
-    ref_points_history = db.reference('points_history/')
-    ref_users = db.reference('users/')
-    history_data = ref_points_history.child(username).get() or {}
-    history_list = list(history_data.values())
+    history = db.reference(f'points_history/{username}').get() or {}
+    history_list = list(history.values())
     if not history_list:
-        user_data = ref_users.child(username).get() or {}
-        current_points = user_data.get('points', 0)
-        current_time = int(time.time())
-        return jsonify([{'timestamp': current_time - 86400, 'points': current_points}, {'timestamp': current_time, 'points': current_points}])
+        points = (db.reference(f'users/{username}').get() or {}).get('points', 0)
+        now = int(time.time())
+        return jsonify([{'timestamp': now - 86400, 'points': points}, {'timestamp': now, 'points': points}])
     if len(history_list) == 1:
-        first_point = history_list[0]
-        history_list.insert(0, {'points': first_point['points'], 'timestamp': first_point['timestamp'] - 86400})
+        history_list.insert(0, {'points': history_list[0]['points'], 'timestamp': history_list[0]['timestamp'] - 86400})
     return jsonify(sorted(history_list, key=lambda x: x.get('timestamp', 0)))
 
-@bp.route('/check_my_ban_status')
-@login_required
-def check_my_ban_status():
-    ref_banned_users = db.reference('banned_users/')
-    user_id = session.get('user_id')
-    if not user_id: return jsonify({'is_banned': False})
-    banned_status = ref_banned_users.child(user_id).get()
-    return jsonify({'is_banned': banned_status is not None})
-
-@bp.route('/shop/buy_product', methods=['POST'])
-@login_required
-def buy_shop_product():
-    ref_site_settings = db.reference('site_settings/')
-    ref_wallets = db.reference('wallets/')
-    user_id = session.get('user_id')
-    product_id = request.form.get('product_id')
-    if not product_id: return jsonify(success=False, message="معرف المنتج مفقود."), 400
-    product = ref_site_settings.child(f'shop_products/{product_id}').get()
-    if not product: return jsonify(success=False, message="المنتج غير موجود أو تم حذفه."), 404
-    cc_price = product.get('cc_price', 0)
-    sp_amount = product.get('sp_amount', 0)
-    if cc_price <= 0 or sp_amount <= 0: return jsonify(success=False, message="بيانات المنتج غير صالحة."), 500
-    user_wallet_ref = ref_wallets.child(user_id)
-    def transact_purchase(current_wallet_data):
-        if current_wallet_data is None: current_wallet_data = {'cc': 0, 'sp': 0}
-        current_cc = current_wallet_data.get('cc', 0)
-        if current_cc < cc_price: raise ValueError("رصيد CC غير كافٍ لإتمام عملية الشراء.")
-        current_wallet_data['cc'] = current_cc - cc_price
-        current_wallet_data['sp'] = current_wallet_data.get('sp', 0) + sp_amount
-        return current_wallet_data
-    try:
-        user_wallet_ref.transaction(transact_purchase)
-        return jsonify(success=True, message=f"تم بنجاح شراء {sp_amount:,} SP!")
-    except ValueError as e: return jsonify(success=False, message=str(e)), 400
-    except Exception as e:
-        print(f"!!! Product Purchase Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
+# --- INVESTMENTS ---
 
 @bp.route('/invest', methods=['POST'])
 @login_required
 def invest_in_crawler():
-    ref_users = db.reference('users/')
-    ref_wallets = db.reference('wallets/')
-    ref_investments = db.reference('investments/')
-    ref_investment_log = db.reference('investment_log/')
-    user_id, user_name = session['user_id'], session['name']
+    user_id, user_name = session.get('user_id'), session.get('name')
     crawler_name = request.form.get('crawler_name')
-    try: sp_to_invest = int(request.form.get('sp_amount'))
+    try: sp_to_invest = float(request.form.get('sp_amount'))
     except (ValueError, TypeError): return jsonify(success=False, message="كمية SP غير صالحة."), 400
     if sp_to_invest <= 0: return jsonify(success=False, message="يجب استثمار كمية موجبة."), 400
-
-    try:
-        crawler_data = ref_users.child(crawler_name).get()
-        if not crawler_data: return jsonify(success=False, message="هذا الزاحف غير موجود."), 404
-        
-        wallet_data = ref_wallets.child(user_id).get() or {'sp': 0}
-        current_sp = wallet_data.get('sp', 0)
-        if current_sp < sp_to_invest: return jsonify(success=False, message="رصيد SP غير كافٍ للاستثمار."), 400
-
-        new_sp_balance = current_sp - sp_to_invest
-        investment_data = ref_investments.child(user_id).child(crawler_name).get()
-        points_at_investment = crawler_data.get('points', 0)
-        
-        new_investment_record = {}
-        if investment_data: 
-            total_sp_invested = investment_data.get('invested_sp', 0) + sp_to_invest
-            old_total_value = investment_data.get('invested_sp', 0) * investment_data.get('points_at_investment', 0)
-            new_total_value_to_add = sp_to_invest * points_at_investment
-            
-            new_average_points_at_investment = (old_total_value + new_total_value_to_add) / total_sp_invested if total_sp_invested > 0 else points_at_investment
-
-            new_investment_record = investment_data
-            new_investment_record['invested_sp'] = total_sp_invested
-            new_investment_record['points_at_investment'] = round(new_average_points_at_investment)
-            new_investment_record['last_updated_timestamp'] = int(time.time())
-        else:
-            new_investment_record = { 'invested_sp': sp_to_invest, 'points_at_investment': points_at_investment, 'timestamp': int(time.time()) }
-            
-        updates = { f"wallets/{user_id}/sp": new_sp_balance, f"investments/{user_id}/{crawler_name}": new_investment_record }
-        db.reference('/').update(updates)
-        
-        ref_investment_log.push({
-            'investor_id': user_id, 'investor_name': user_name, 'target_name': crawler_name,
-            'action': 'invest', 'sp_amount': sp_to_invest, 'timestamp': int(time.time())
-        })
-
-        return jsonify(success=True, message=f"تم استثمار {sp_to_invest:,} SP بنجاح في {crawler_name}!")
-    except Exception as e:
-        print(f"!!! Atomic Investment Update Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ فادح أثناء حفظ الاستثمار."), 500
+    crawler_data = db.reference(f'users/{crawler_name}').get()
+    if not crawler_data: return jsonify(success=False, message="هذا الزاحف غير موجود."), 404
+    wallet_ref = db.reference(f'wallets/{user_id}'); investment_ref = db.reference(f'investments/{user_id}/{crawler_name}')
+    current_sp = (wallet_ref.get() or {}).get('sp', 0)
+    if current_sp < sp_to_invest: return jsonify(success=False, message="رصيد SP غير كافٍ للاستثمار."), 400
+    new_sp_balance = current_sp - sp_to_invest
+    wallet_ref.child('sp').set(new_sp_balance)
+    investment_data = investment_ref.get(); points_at_investment = crawler_data.get('points', 0)
+    if investment_data: 
+        total_sp = investment_data.get('invested_sp', 0) + sp_to_invest
+        old_val = investment_data.get('invested_sp', 0) * investment_data.get('points_at_investment', 0)
+        new_val = sp_to_invest * points_at_investment
+        avg_points = (old_val + new_val) / total_sp if total_sp > 0 else points_at_investment
+        investment_ref.update({'invested_sp': total_sp, 'points_at_investment': round(avg_points), 'last_updated_timestamp': int(time.time())})
+    else:
+        investment_ref.set({'invested_sp': sp_to_invest, 'points_at_investment': points_at_investment, 'timestamp': int(time.time())})
+    db.reference('investment_log').push({'investor_id': user_id, 'investor_name': user_name, 'target_name': crawler_name, 'action': 'invest', 'sp_amount': sp_to_invest, 'timestamp': int(time.time())})
+    return jsonify(success=True, message=f"تم استثمار {sp_to_invest:,.2f} SP بنجاح في {crawler_name}!")
 
 @bp.route('/sell', methods=['POST'])
 @login_required
 def sell_investment():
-    ref_users = db.reference('users/')
-    ref_wallets = db.reference('wallets/')
-    ref_investments = db.reference('investments/')
-    ref_investment_log = db.reference('investment_log/')
-    user_id, user_name = session['user_id'], session['name']
+    user_id, user_name = session.get('user_id'), session.get('name')
     crawler_name = request.form.get('crawler_name')
     if not crawler_name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
-
-    investment_ref = ref_investments.child(user_id).child(crawler_name)
+    investment_ref = db.reference(f'investments/{user_id}/{crawler_name}')
     investment_data = investment_ref.get()
     if not investment_data: return jsonify(success=False, message="ليس لديك استثمار في هذا الزاحف."), 404
-
-    crawler_data = ref_users.child(crawler_name).get()
-    
+    crawler_data = db.reference(f'users/{crawler_name}').get()
     invested_sp = float(investment_data.get('invested_sp', 0))
-    sp_to_return = invested_sp
-
-    if crawler_data:
-        current_points = float(crawler_data.get('points', 0))
-        points_at_investment = float(investment_data.get('points_at_investment', 1)) or 1
-        
-        if points_at_investment != 0:
-             sp_to_return = invested_sp * (current_points / points_at_investment)
-
-    user_wallet_ref = ref_wallets.child(user_id)
+    points_at_inv = float(investment_data.get('points_at_investment', 1)) or 1
+    current_points = float(crawler_data.get('points', 0)) if crawler_data else points_at_inv
+    sp_to_return = invested_sp * (current_points / points_at_inv)
     try:
-        user_wallet_ref.child('sp').transaction(lambda current_sp: (current_sp or 0) + sp_to_return)
+        db.reference(f'wallets/{user_id}/sp').transaction(lambda current_sp: (current_sp or 0) + sp_to_return)
         investment_ref.delete()
-
-        ref_investment_log.push({
-            'investor_id': user_id, 'investor_name': user_name, 'target_name': crawler_name,
-            'action': 'sell', 'sp_amount': sp_to_return, 'timestamp': int(time.time())
-        })
-
+        db.reference('investment_log').push({'investor_id': user_id, 'investor_name': user_name, 'target_name': crawler_name, 'action': 'sell', 'sp_amount': sp_to_return, 'timestamp': int(time.time())})
         return jsonify(success=True, message=f"تم بيع الاستثمار بنجاح! لقد حصلت على {sp_to_return:.2f} SP.")
     except Exception as e:
         print(f"!!! Sell Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء البيع."), 500
-# --- END OF FILE project/user_interactions_api.py ---
+
+# --- AVATAR INTERACTIONS ---
+
+@bp.route('/shop/buy_avatar', methods=['POST'])
+@login_required
+def buy_avatar():
+    user_id = session.get('user_id')
+    avatar_id = request.form.get('avatar_id')
+    if not avatar_id:
+        return jsonify(success=False, message="معرّف الأفاتار مفقود."), 400
+    avatar_ref = db.reference(f'site_settings/shop_avatars/{avatar_id}')
+    avatar_data = avatar_ref.get()
+    if not avatar_data:
+        return jsonify(success=False, message="الأفاتار المحدد غير موجود أو تم حذفه."), 404
+    user_avatar_ref = db.reference(f'user_avatars/{user_id}/owned/{avatar_id}')
+    if user_avatar_ref.get():
+        return jsonify(success=False, message="أنت تمتلك هذا الأفاتار بالفعل."), 400
+    price_sp = avatar_data.get('price_sp_personal', 0)
+    wallet_ref = db.reference(f'wallets/{user_id}')
+    try:
+        def transact_avatar_purchase(current_sp):
+            if (current_sp or 0) < price_sp:
+                raise ValueError("رصيد SP غير كافٍ لإتمام عملية الشراء.")
+            return current_sp - price_sp
+        wallet_ref.child('sp').transaction(transact_avatar_purchase)
+        user_avatar_ref.set({'purchased_at': int(time.time())})
+        db.reference('activity_log').push({
+            'type': 'purchase',
+            'text': f"'{session.get('name')}' اشترى أفاتار '{avatar_data.get('name')}'.",
+            'timestamp': int(time.time()),
+            'user_id': user_id,
+            'user_name': session.get('name')
+        })
+        return jsonify(success=True, message=f"تم شراء أفاتار '{avatar_data.get('name')}' بنجاح!")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        print(f"!!! Avatar Purchase Error for user {user_id}: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
+
+@bp.route('/user/set_avatar', methods=['POST'])
+@login_required
+def set_user_avatar():
+    user_id = session.get('user_id')
+    user_name = session.get('name')
+    avatar_id = request.form.get('avatar_id')
+
+    if not avatar_id:
+        return jsonify(success=False, message="معرّف الأفاتار مفقود."), 400
+
+    if not db.reference(f'user_avatars/{user_id}/owned/{avatar_id}').get():
+        return jsonify(success=False, message="أنت لا تمتلك هذا الأفاتار."), 403
+    
+    avatar_image_url = db.reference(f'site_settings/shop_avatars/{avatar_id}/image_url').get()
+    if not avatar_image_url:
+        return jsonify(success=False, message="لم يتم العثور على صورة الأفاتار."), 404
+
+    try:
+        db.reference(f'registered_users/{user_id}').update({'current_avatar': avatar_image_url})
+        db.reference(f'users/{user_name}').update({'avatar_url': avatar_image_url})
+
+        return jsonify(success=True, message="تم تغيير الأفاتار بنجاح!")
+    except Exception as e:
+        print(f"!!! Set Avatar Error for user {user_id}: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم."), 500
+
+# <<< التعديل النهائي هنا: إضافة الديكور الناقص >>>
+@bp.route('/gift_request', methods=['POST'])
+@login_required
+def submit_gift_request():
+    try:
+        gifter_id = session.get('user_id')
+        gifter_name = session.get('name')
+        avatar_id = request.form.get('avatar_id')
+        target_name = request.form.get('target_crawler')
+
+        if not all([gifter_id, gifter_name, avatar_id, target_name]):
+            return jsonify(success=False, message="بيانات الطلب غير مكتملة."), 400
+
+        if gifter_name.lower() == target_name.lower():
+            return jsonify(success=False, message="لا يمكنك إهداء نفسك."), 400
+        
+        avatar_data = db.reference(f'site_settings/shop_avatars/{avatar_id}').get()
+        if not avatar_data: 
+            return jsonify(success=False, message="الأفاتار المحدد غير موجود."), 404
+
+        target_user_query = db.reference('registered_users').order_by_child('name').equal_to(target_name).get()
+        
+        if not target_user_query:
+            return jsonify(success=False, message=f"لا يمكن العثور على مستخدم مسجل بالاسم '{target_name}'. لا يمكن إهداء الزواحف غير المسجلين."), 404
+
+        target_user_id = list(target_user_query.keys())[0]
+
+        if not target_user_id:
+             return jsonify(success=False, message="فشل تحديد هوية المستخدم المستهدف."), 500
+
+        if db.reference(f'user_avatars/{target_user_id}/owned/{avatar_id}').get():
+            return jsonify(success=False, message=f"'{target_name}' يمتلك هذا الأفاتار بالفعل."), 400
+
+        price_sp_gift = avatar_data.get('price_sp_gift', 0)
+        gifter_wallet_sp = (db.reference(f'wallets/{gifter_id}/sp').get() or 0)
+
+        if gifter_wallet_sp < price_sp_gift:
+            return jsonify(success=False, message=f"رصيدك من SP غير كافٍ. تحتاج إلى {price_sp_gift} SP."), 400
+        
+        new_request_ref = db.reference('gift_requests').push()
+        new_request_ref.set({
+            'gifter_id': gifter_id,
+            'gifter_name': gifter_name,
+            'target_user_id': target_user_id,
+            'target_user_name': target_name,
+            'avatar_id': avatar_id,
+            'avatar_name': avatar_data.get('name'),
+            'avatar_image_url': avatar_data.get('image_url'),
+            'price_sp': price_sp_gift,
+            'timestamp': int(time.time()),
+            'status': 'pending'
+        })
+        
+        return jsonify(success=True, message="تم إرسال طلب الإهداء بنجاح! ستتم مراجعته من قبل الإدارة.")
+
+    except Exception as e:
+        print(f"!!! CRITICAL: Submit Gift Request Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ كارثي في الخادم أثناء تقديم الطلب."), 500

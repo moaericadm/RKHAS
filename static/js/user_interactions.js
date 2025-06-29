@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        if (ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', showCrawlCheckModal); // Changed to a new function
+        if (ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', showCrawlCheckModal);
         if (ui.nominateBtn) ui.nominateBtn.addEventListener('click', handleNomination);
         if (ui.reportBtn) ui.reportBtn.addEventListener('click', handleReport);
     }

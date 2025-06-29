@@ -1,3 +1,5 @@
+
+
 # --- START OF FILE project/__init__.py ---
 
 import os
@@ -21,7 +23,11 @@ try:
             raise ValueError(f"ملف مفتاح الخدمة '{SERVICE_ACCOUNT_FILE}' غير موجود أو المسار خاطئ.")
             
         cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
-        firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
+        
+        # <<< التعديل هنا: تمت إزالة storageBucket لأننا سنستخدم Google Drive >>>
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': FIREBASE_DATABASE_URL
+        })
         print(">> Firebase Admin Initialized Successfully!")
 
 except Exception as e:
@@ -48,13 +54,17 @@ def create_app():
     from . import user_interactions_api
     from . import spin_wheel_api
     
-    app.register_blueprint(auth_routes.bp)
+    # <<<  هذا هو الحل المطلوب >>>
+    # أضفنا url_prefix='/auth' لجعل جميع مسارات المصادقة تبدأ بـ /auth
+    app.register_blueprint(auth_routes.bp, url_prefix='/auth') 
+    # <<< نهاية الحل >>>
+    
     app.register_blueprint(views.bp)
     app.register_blueprint(admin_api.bp)
     app.register_blueprint(user_interactions_api.bp)
     app.register_blueprint(spin_wheel_api.bp)
 
-    # ***  התיקון כאן | THE FIX IS HERE  ***
+    # ***  هذا هو الحل لمشكلة النافذة المنبثقة لجوجل  ***
     # --- إضافة ترويسة الأمان للسماح بالنوافذ المنبثقة من Google ---
     @app.after_request
     def apply_coop_header(response):
@@ -86,12 +96,15 @@ def create_app():
             context_data['current_user_id'] = session['user_id']
             context_data['current_user_name'] = session.get('name')
             try:
-                token_bytes = auth.create_custom_token(session['user_id'])
-                context_data['firebase_token'] = token_bytes.decode('utf-8')
+                # التأكد من أن UID ليس فارغاً قبل إنشاء التوكن
+                if session['user_id']:
+                    token_bytes = auth.create_custom_token(session['user_id'])
+                    context_data['firebase_token'] = token_bytes.decode('utf-8')
             except Exception as e:
                 print(f"!!! CRITICAL: Failed to create custom token for user '{session['user_id']}'. Error: {e}", file=sys.stderr)
         
         return context_data
 
     return app
+
 # --- END OF FILE project/__init__.py ---
