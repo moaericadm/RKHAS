@@ -1,4 +1,5 @@
-﻿<!-- START OF FILE templates/shop.html -->
+﻿
+﻿<!-- START OF FILE templates/shop.html (WITH AVATARS SECTION) -->
 {% extends "base.html" %}
 {% block title %}المتجر{% endblock %}
 {% block header_title %}دكانة الزواحف{% endblock %}
@@ -19,6 +20,9 @@
 
     .product-icon {
         width: 80px;
+        height: 80px;
+        margin-left: auto;
+        margin-right: auto;
         margin-bottom: 1rem;
     }
 
@@ -36,20 +40,24 @@
 
     .product-points-icon {
         font-size: 5rem;
+        margin-left: auto;
+        margin-right: auto;
         margin-bottom: 1rem;
     }
 
-    .product-price-cc {
+    .product-price-cc, .product-price-sp {
         font-size: 1.2rem;
         font-weight: bold;
+    }
+
+    .product-price-cc {
         color: var(--bs-warning);
     }
 
     .product-price-sp {
-        font-size: 1.2rem;
-        font-weight: bold;
         color: var(--bs-success);
     }
+
 
     .balance-display {
         font-size: 1.5rem;
@@ -61,6 +69,36 @@
         height: 24px;
         vertical-align: middle;
         margin-right: 8px;
+    }
+
+    /* <<< التعديلات هنا >>> */
+    .avatar-product-icon {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin: 0 auto 1rem auto;
+        border: 3px solid var(--primary-glow);
+        box-shadow: 0 0 15px var(--primary-glow);
+        filter: blur(8px); /* تأثير الضبابية سيكون دائماً مطبقاً */
+        transition: filter 0.3s ease-in-out;
+    }
+    /* <<< نهاية التعديلات (تم حذف hover) >>> */
+
+    .avatar-name {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+
+    .price-label {
+        font-size: 0.8rem;
+        color: var(--text-muted-color);
+    }
+
+    .price-value {
+        font-weight: 700;
+        color: var(--bs-success);
     }
 </style>
 {% endblock %}
@@ -78,7 +116,7 @@
                 <div>
                     <h6 class="text-muted mb-1">
                         <img src="data:image/png;base64,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" class="icon-img" alt="SP Icon">
-                        رصيد  الزحف الداعم
+                        رصيد نقاط الدعم
                     </h6>
                     <div id="wallet-sp-balance" class="balance-display text-success">--</div>
                 </div>
@@ -89,48 +127,51 @@
 
 <div class="row justify-content-center">
     <div class="col-lg-10">
-        <!-- *** الإضافة الجديدة هنا *** -->
-        <h3 class="text-center mb-2">شراء تأثير مباشر على الأسهم</h3>
-        <p class="text-center text-muted mb-4">استخدم "نقاط الزحف الداعم" للتأثير مباشرة على نقاط الزواحف في السوق.</p>
-        <div id="points-products-container" class="row g-4">
+        <!-- Avatar Products -->
+        <h3 class="text-center mb-2">شراء أفاتار</h3>
+        <p class="text-center text-muted mb-4">ميّز حسابك أو أهدِ صديقك صورة رمزية فريدة باستخدام نقاط الدعم (SP).</p>
+        <div id="avatar-products-container" class="row g-4">
             <div class="col-12 text-center py-5">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">جاري الزحف...</span>
-                </div>
+                <div class="spinner-border text-info" role="status"><span class="visually-hidden">...</span></div>
             </div>
         </div>
         <hr class="my-5" style="border-color: var(--card-border);">
 
-        <h3 class="text-center mb-2">شراء نقاط الزحف الداعم (SP)</h3>
+        <!-- Points Products -->
+        <h3 class="text-center mb-2">شراء تأثير مباشر على الأسهم</h3>
+        <p class="text-center text-muted mb-4">استخدم "نقاط الدعم" للتأثير مباشرة على نقاط الزواحف في السوق.</p>
+        <div id="points-products-container" class="row g-4">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"><span class="visually-hidden">...</span></div>
+            </div>
+        </div>
+        <hr class="my-5" style="border-color: var(--card-border);">
+
+        <!-- SP Products -->
+        <h3 class="text-center mb-2">شراء نقاط الدعم (SP)</h3>
         <p class="text-center text-muted mb-4">استخدم "زاحف كوين" لتعزيز رصيدك من نقاط الدعم والاستثمار.</p>
         <div id="products-container" class="row g-4">
             <div class="col-12 text-center py-5">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">جاري الزحف...</span>
-                </div>
+                <div class="spinner-border text-primary" role="status"><span class="visually-hidden">...</span></div>
             </div>
         </div>
 
         <hr class="my-5" style="border-color: var(--card-border);">
 
+        <!-- Spin Products -->
         <h3 class="text-center mb-2">شراء محاولات زحفية لعجلة الحظ</h3>
-        <p class="text-center text-muted mb-4">استخدم "نقاط الزحف الداعم" للحصول على فرص إضافية للفوز بالمزيد من "زاحف كوين".</p>
+        <p class="text-center text-muted mb-4">استخدم "نقاط الدعم" للحصول على فرص إضافية للفوز بالمزيد من "زاحف كوين".</p>
         <div id="spin-products-container" class="row g-4">
             <div class="col-12 text-center py-5">
-                <div class="spinner-border text-info" role="status">
-                    <span class="visually-hidden">جاري الزحف...</span>
-                </div>
+                <div class="spinner-border text-info" role="status"><span class="visually-hidden">...</span></div>
             </div>
         </div>
-
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<!-- *** الإصلاح: العودة إلى روابط CDN الموثوقة *** -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
-<script src="{{ url_for('static', filename='js/Winwheel.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/shop.js') }}"></script>
 {% endblock %}
+<!-- END OF FILE templates/shop.html (WITH AVATARS SECTION) -->

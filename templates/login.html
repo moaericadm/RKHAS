@@ -1,4 +1,4 @@
-<!-- START OF FILE templates/login.html -->
+<!-- START OF FILE templates/login.html (WITH EMAIL/PASS LOGIN RE-ENABLED) -->
 {% extends "base.html" %} {% block title %}تسجيل الدخول{% endblock %} {% block
 header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% endblock %}
 
@@ -7,77 +7,40 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
     .announcements-wrapper {
         opacity: 0;
         transform: translateY(20px);
-        animation: fadeInSlideUp 0.8s ease-out forwards;
+        animation: fadeInSlideUp .8s ease-out forwards
     }
 
     @keyframes fadeInSlideUp {
         to {
             opacity: 1;
-            transform: translateY(0);
+            transform: translateY(0)
         }
     }
 
     #announcementsCarousel {
-        background: linear-gradient(135deg, rgba(159, 122, 234, 0.2), rgba(0, 242, 255, 0.1));
-        border-radius: 0.75rem;
+        background: linear-gradient(135deg,rgba(159,122,234,.2),rgba(0,242,255,.1));
+        border-radius: .75rem;
         border: 1px solid var(--card-border);
-        box-shadow: 0 0 25px rgba(159, 122, 234, 0.1);
-        backdrop-filter: blur(10px);
+        box-shadow: 0 0 25px rgba(159,122,234,.1);
+        backdrop-filter: blur(10px)
     }
 
     html:not(.dark-mode) #announcementsCarousel {
-        background: linear-gradient(135deg, #6b46c1, #2b6cb0);
+        background: linear-gradient(135deg,#6b46c1,#2b6cb0)
     }
 
     #announcementsCarousel .carousel-inner {
         padding: 2.5rem 4rem;
         text-align: center;
         color: #fff;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        text-shadow: 0 1px 3px rgba(0,0,0,.3)
     }
-
-    html:not(.dark-mode) #announcementsCarousel .carousel-inner {
-        color: #fff;
-    }
-
-    #announcementsCarousel .carousel-item {
-        transition: opacity 0.8s ease-in-out;
-        opacity: 0;
-        position: absolute;
-        width: 100%;
-        display: block;
-    }
-
-        #announcementsCarousel .carousel-item.active {
-            opacity: 1;
-            position: relative;
-        }
 
     .announcement-icon {
         font-size: 2rem;
         color: var(--secondary-glow);
-        margin-bottom: 0.75rem;
-        text-shadow: 0 0 15px var(--secondary-glow);
-    }
-
-    html:not(.dark-mode) .announcement-icon {
-        color: #fff;
-        text-shadow: none;
-    }
-
-    #announcementsCarousel .carousel-control-prev, #announcementsCarousel .carousel-control-next {
-        width: 5%;
-        background: rgba(0,0,0,0.1);
-    }
-
-    #announcementsCarousel .carousel-control-prev {
-        border-top-right-radius: 0.75rem;
-        border-bottom-right-radius: 0.75rem;
-    }
-
-    #announcementsCarousel .carousel-control-next {
-        border-top-left-radius: 0.75rem;
-        border-bottom-left-radius: 0.75rem;
+        margin-bottom: .75rem;
+        text-shadow: 0 0 15px var(--secondary-glow)
     }
 
     .divider-text {
@@ -85,7 +48,7 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
         text-align: center;
         margin-top: 15px;
         margin-bottom: 15px;
-        color: var(--text-muted-color);
+        color: var(--text-muted-color)
     }
 
         .divider-text span {
@@ -93,7 +56,7 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
             font-size: 12px;
             position: relative;
             z-index: 2;
-            background-color: var(--card-bg);
+            background-color: var(--card-bg)
         }
 
         .divider-text:after {
@@ -104,30 +67,30 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
             background-color: var(--card-border);
             left: 0;
             top: 50%;
-            z-index: 1;
+            z-index: 1
         }
 
     .btn-google {
         background-color: #fff;
         color: #757575;
         border: 1px solid #dcdcdc;
-        box-shadow: 0 2px 2px 0 rgba(0,0,0,.14), 0 3px 1px -2px rgba(0,0,0,.2), 0 1px 5px 0 rgba(0,0,0,.12);
+        box-shadow: 0 2px 2px 0 rgba(0,0,0,.14),0 3px 1px -2px rgba(0,0,0,.2),0 1px 5px 0 rgba(0,0,0,.12)
     }
 
         .btn-google:hover {
             background-color: #f5f5f5;
-            color: #2d3748;
+            color: #2d3748
         }
 
         .btn-google img {
             width: 20px;
-            margin-right: 10px;
+            margin-right: 10px
         }
 </style>
 {% endblock %}
 
 {% block content %}
-<div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;">
+<div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; justify-content: center; align-items: center; visibility: hidden; opacity: 0; transition: visibility 0s, opacity 0.3s linear;">
     <div class="spinner-border text-light" style="width: 3rem; height: 3rem;"></div>
 </div>
 
@@ -136,17 +99,9 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
     <div class="col-lg-10 col-xl-8">
         <div id="announcementsCarousel" class="carousel slide" data-bs-ride="carousel">
             <div class="carousel-inner">
-                {% for ann in announcements %}
-                <div class="carousel-item {% if loop.first %}active{% endif %}">
-                    <div class="announcement-icon"><i class="bi bi-megaphone-fill"></i></div>
-                    <p class="fs-5 fw-bold mb-0">{{ ann.text }}</p>
-                </div>
-                {% endfor %}
+                {% for ann in announcements %}<div class="carousel-item {% if loop.first %}active{% endif %}"><div class="announcement-icon"><i class="bi bi-megaphone-fill"></i></div><p class="fs-5 fw-bold mb-0">{{ ann.text }}</p></div>{% endfor %}
             </div>
-            {% if announcements|length > 1 %}
-            <button class="carousel-control-prev" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="prev"><span class="carousel-control-prev-icon" aria-hidden="true"></span><span class="visually-hidden">Previous</span></button>
-            <button class="carousel-control-next" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="next"><span class="carousel-control-next-icon" aria-hidden="true"></span><span class="visually-hidden">Next</span></button>
-            {% endif %}
+            {% if announcements|length > 1 %}<button class="carousel-control-prev" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="prev"><span class="carousel-control-prev-icon"></span></button><button class="carousel-control-next" type="button" data-bs-target="#announcementsCarousel" data-bs-slide="next"><span class="carousel-control-next-icon"></span></button>{% endif %}
         </div>
     </div>
 </div>
@@ -158,37 +113,16 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
             <div class="card-body">
                 <h5 class="card-title text-center mb-4 fs-4">تسجيل الدخول</h5>
                 <form id="loginForm">
-                    <div class="form-floating mb-3">
-                        <input type="email" class="form-control" id="email" name="email" placeholder="البريد الإلكتروني" required />
-                        <label for="email">البريد الإلكتروني</label>
-                    </div>
-                    <div class="form-floating mb-3">
-                        <input type="password" class="form-control" id="password" name="password" placeholder="كلمة المرور" required />
-                        <label for="password">كلمة المرور</label>
-                    </div>
-
-                    <div class="text-start mt-2">
-                        <a href="{{ url_for('auth.forgot_password_page') }}">هل نسيت كلمة المرور؟</a>
-                    </div>
-
-                    <div class="d-grid gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-box-arrow-in-right me-2"></i> دخول</button>
-                        <a href="{{ url_for('auth.register_page') }}" class="btn btn-outline-success btn-lg"><i class="bi bi-person-plus-fill me-2"></i> إنشاء حساب جديد</a>
-                    </div>
+                    <div class="form-floating mb-3"><input type="email" class="form-control" id="email" name="email" placeholder="البريد الإلكتروني" required /><label for="email">البريد الإلكتروني</label></div>
+                    <div class="form-floating mb-3"><input type="password" class="form-control" id="password" name="password" placeholder="كلمة المرور" required /><label for="password">كلمة المرور</label></div>
+                    <div class="text-start mt-2"><a href="{{ url_for('auth.forgot_password_page') }}">هل نسيت كلمة المرور؟</a></div>
+                    <div class="d-grid gap-2 mt-4"><button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-box-arrow-in-right me-2"></i> دخول</button><a href="{{ url_for('auth.register_page') }}" class="btn btn-outline-success btn-lg"><i class="bi bi-person-plus-fill me-2"></i> إنشاء حساب جديد</a></div>
                 </form>
                 <p class="divider-text mt-4"><span>أو</span></p>
-                <div class="d-grid">
-                    <button id="google-login-btn" class="btn btn-google btn-lg">
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon">
-                        <span>تسجيل الدخول باستخدام Google</span>
-                    </button>
-                </div>
+                <div class="d-grid"><button id="google-login-btn" class="btn btn-google btn-lg"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon"><span>تسجيل الدخول باستخدام Google</span></button></div>
             </div>
         </div>
     </div>
-</div>
-<div class="row justify-content-center mt-5">
-    <div class="col-lg-8"><div class="card bg-transparent border-0 text-center"><div class="card-body"><hr style="border-color: var(--card-border); opacity: 0.5;"><p class="text-muted mt-4 fs-6 lh-lg">هذا النظام مخصص لمتابعة وتحديث نقاط الزواحف في كلية ال IT بشكل دوري و نظم معينة و حقائق تم جمعها من قبل اشخاص و شهود قائمة على ادله و براهين.<br>يمكنم مشاركة الاسماء و سيتم رفعها مع وجود ادلة و براهين  و سيتم حسابها بمعادلة معينة.<br>الرجاء اخذ الموقع  بمزح و دون شخصنة و دون الاساءة باي الحالات  عشان ما افضح عرض رخيص او زاحف<br />نأمل أن يعجبكم النظام و يكون مفيدًا وسهل الاستخدام.</p></div></div></div>
 </div>
 {% endblock %}
 
@@ -197,91 +131,56 @@ header_title %}نظام إدارة نقاط الزواحف الرسمي (IT){% e
 <script>
   document.addEventListener('firebase-ready', () => {
     const auth = firebase.auth();
-    const loadingOverlay = document.getElementById('loading-overlay');
 
-    // *** התיקון כאן | THE FIX IS HERE ***
-    // دالة موحدة للتحقق من التوكن وإنشاء الجلسة في الخادم
-    async function verifyTokenOnServer(idToken) {
-        try {
-            // تصحيح المسار ليشير إلى blueprint الصحيح
-            const response = await fetch("{{ url_for('interactions.verify_token') }}", {
-                method: "POST",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id_token: idToken })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                window.location.href = data.redirect_url;
-            } else {
-                loadingOverlay.style.display = 'none';
-                let messageHtml = data.message;
-                if (data.status === 'pending') {
-                    messageHtml += '<br><small>سيتم إعلامك عند قبول طلبك.</small>';
-                }
-                Swal.fire({
-                    icon: data.status === 'pending' ? "info" : "error",
-                    title: data.status === 'pending' ? "حسابك قيد المراجعة" : "خطأ في الدخول",
-                    html: messageHtml
-                });
-            }
-        } catch (error) {
-            loadingOverlay.style.display = 'none';
-            console.error("Server verification failed:", error);
-            Swal.fire('خطأ!', 'فشل الاتصال بالخادم بعد المصادقة.', 'error');
+    async function handleBackendResponse(response) {
+        const data = await response.json();
+        if (data.success) {
+            window.location.href = data.redirect_url;
+        } else {
+            const icon = data.status === 'pending' ? 'info' : 'error';
+            const title = data.status === 'pending' ? 'حسابك قيد المراجعة' : 'خطأ في الدخول';
+            Swal.fire({ icon, title, text: data.message });
         }
     }
 
-    // --- معالج تسجيل الدخول العادي (بريد وكلمة سر) ---
+    // <<< --- هذا هو التصحيح --- >>>
+    // تم تفعيل نموذج تسجيل الدخول الآن ليرسل البيانات إلى الخادم
     document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const btn = e.submitter;
-        const originalHTML = btn.innerHTML;
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
-
+        const btn = e.target.querySelector('button[type="submit"]');
+        const originalHtml = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-        loadingOverlay.style.display = 'flex';
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> جارِ الدخول...`;
 
         try {
-            const userCredential = await auth.signInWithEmailAndPassword(email, password);
-            const idToken = await userCredential.user.getIdToken(true);
-            await verifyTokenOnServer(idToken);
-        } catch (error) {
-            loadingOverlay.style.display = 'none';
+            const response = await fetch("{{ url_for('auth.login_page') }}", {
+                method: "POST",
+                body: new FormData(e.target)
+            });
+            await handleBackendResponse(response);
+        } catch (err) {
+            Swal.fire({ icon: "error", title: "خطأ!", text: "فشل الاتصال بالخادم." });
+        } finally {
             btn.disabled = false;
-            btn.innerHTML = originalHTML;
-            console.error("Email/Pass Login Error:", error.code, error.message);
-            Swal.fire({ icon: "error", title: "خطأ في الدخول", text: "بيانات الدخول غير صحيحة. يرجى التأكد والمحاولة مرة أخرى." });
+            btn.innerHTML = originalHtml;
         }
     });
+    // <<< --- نهاية التصحيح --- >>>
 
-    // --- معالج تسجيل الدخول عبر جوجل ---
+
     document.getElementById("google-login-btn")?.addEventListener("click", () => {
         const provider = new firebase.auth.GoogleAuthProvider();
-        loadingOverlay.style.display = 'flex';
-
         auth.signInWithPopup(provider)
-            .then(async (result) => {
-                if (result.user) {
-                    const idToken = await result.user.getIdToken(true);
-                    await verifyTokenOnServer(idToken);
-                } else {
-                    throw new Error("لم يتم الحصول على معلومات المستخدم من Google.");
+            .then(result => result.user.getIdToken(true))
+            .then(idToken => fetch("{{ url_for('auth.google_login') }}", {
+                method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id_token: idToken })
+            }))
+            .then(handleBackendResponse)
+            .catch(error => {
+                if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+                    Swal.fire({ icon: 'error', title: 'فشل تسجيل الدخول', text: "حدث خطأ أثناء المصادقة مع Google." });
                 }
-            })
-            .catch((error) => {
-                loadingOverlay.style.display = 'none';
-                console.error("Google Popup Error:", error.code, error.message);
-                if (error.code !== 'auth/popup-closed-by-user') {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'فشل تسجيل الدخول',
-                        text: "حدث خطأ أثناء المصادقة مع Google."
-                    });
-                }
+                console.error("Google Popup Error:", error.code);
             });
     });
   });

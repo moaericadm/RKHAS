@@ -1,4 +1,4 @@
-<!-- START OF FILE templates/base.html -->
+<!-- START OF FILE templates/base.html (FINAL & PRODUCTION READY - WITH PRESENCE SYSTEM) -->
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -7,46 +7,46 @@
     <title>{% block title %}الزواحف{% endblock %} - نظام نقاط IT</title>
     <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
 
+    <!-- Stylesheets -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
-
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Main Styles -->
     <style>
         :root {
             --bg-color: #0b021d;
             --primary-glow: #9f7aea;
             --secondary-glow: #00f2ff;
             --accent-glow: #ff00f3;
-            --card-bg: rgba(26, 18, 54, 0.8);
-            --card-border: rgba(159, 122, 234, 0.2);
+            --card-bg: rgba(26,18,54,.8);
+            --card-border: rgba(159,122,234,.2);
             --text-color: #f0f2f5;
             --text-muted-color: #a0aec0;
             --header-color: var(--primary-glow);
             --bs-body-bg: var(--bg-color);
-            --bs-body-color: var(--text-color);
+            --bs-body-color: var(--text-color)
         }
 
         html:not(.dark-mode) {
             --bg-color: #f5f7fa;
             --primary-glow: #6b46c1;
             --secondary-glow: #2b6cb0;
-            --card-bg: rgba(255, 255, 255, 0.9);
+            --card-bg: rgba(255,255,255,.9);
             --card-border: #e2e8f0;
             --text-color: #2d3748;
             --text-muted-color: #718096;
-            --header-color: var(--primary-glow);
+            --header-color: var(--primary-glow)
         }
 
         body {
-            font-family: "Almarai", Tahoma, sans-serif;
+            font-family: "Almarai",Tahoma,sans-serif;
             background-color: var(--bg-color);
-            color: var(--text-color);
+            color: var(--text-color)
         }
 
         .text-muted {
-            color: var(--text-muted-color) !important;
+            color: var(--text-muted-color) !important
         }
 
         #particles-js {
@@ -55,212 +55,119 @@
             height: 100%;
             top: 0;
             left: 0;
-            z-index: -1;
+            z-index: -1
         }
 
         .card {
             background: var(--card-bg);
-            border-radius: 0.75rem;
+            border-radius: .75rem;
             backdrop-filter: blur(14px);
             border: 1px solid var(--card-border);
-            box-shadow: 0 0 30px rgba(159, 122, 234, 0.15);
+            box-shadow: 0 0 30px rgba(159,122,234,.15)
         }
 
         html:not(.dark-mode) .card {
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            box-shadow: 0 5px 15px rgba(0,0,0,.08)
         }
 
         .card-header {
-            background: linear-gradient(90deg, rgba(159, 122, 234, 0.1), transparent);
+            background: linear-gradient(90deg,rgba(159,122,234,.1),transparent);
             border-bottom: 1px solid var(--card-border);
             color: var(--header-color);
-            font-weight: bold;
-            text-shadow: 0 0 10px var(--header-color);
-        }
-
-        .card-body, .card-body p {
-            color: var(--text-color);
+            font-weight: 700;
+            text-shadow: 0 0 10px var(--header-color)
         }
 
         .btn-primary {
-            background: linear-gradient(45deg, var(--secondary-glow), var(--primary-glow));
+            background: linear-gradient(45deg,var(--secondary-glow),var(--primary-glow));
             border: none;
-            font-weight: bold;
+            font-weight: 700;
             color: #fff;
             box-shadow: 0 4px 15px -5px var(--primary-glow);
-            transition: all 0.3s ease;
+            transition: all .3s ease
         }
 
             .btn-primary:hover {
                 transform: translateY(-2px);
-                box-shadow: 0 6px 20px -5px var(--primary-glow);
+                box-shadow: 0 6px 20px -5px var(--primary-glow)
             }
 
-        .form-control, .form-label, .form-text {
-            color: var(--text-color);
-        }
-
-        html:not(.dark-mode) .form-label, html:not(.dark-mode) .form-text {
-            color: var(--text-color);
-        }
-
-        .form-control {
-            background-color: rgba(11, 2, 29, 0.5);
+        .form-control, .form-floating > .form-control {
+            background-color: rgba(11,2,29,.5);
             border: 1px solid var(--card-border);
+            color: var(--text-color)
         }
 
-        html:not(.dark-mode) .form-control {
+        .form-floating > label {
+            color: var(--text-muted-color);
+        }
+
+        html:not(.dark-mode) .form-control, html:not(.dark-mode) .form-floating > .form-control {
             background-color: #fff;
             border-color: #d0d7de;
+            color: var(--text-color);
         }
 
-        .form-control:focus {
-            background-color: #0b021d;
-            box-shadow: 0 0 10px var(--primary-glow);
-            border-color: var(--primary-glow);
-        }
-
-        html:not(.dark-mode) .form-control:focus {
-            box-shadow: 0 0 0 0.25rem rgba(107, 70, 193, 0.25);
-            border-color: var(--primary-glow);
+        html:not(.dark-mode) .form-label, html:not(.dark-mode) .form-text, html:not(.dark-mode) .form-floating > label {
+            color: var(--text-color)
         }
 
         .swal2-popup {
             background: var(--card-bg) !important;
             color: var(--text-color) !important;
-            border: 1px solid var(--card-border) !important;
+            border: 1px solid var(--card-border) !important
         }
 
         .swal2-title, .swal2-html-container {
-            color: var(--text-color) !important;
+            color: var(--text-color) !important
         }
 
-        .swal2-input, .swal2-select, .swal2-textarea {
-            background: #0b021d !important;
+        .swal2-input, .swal2-textarea, .swal2-select {
+            background-color: rgba(11, 2, 29, 0.7) !important;
+            border: 1px solid var(--card-border) !important;
             color: var(--text-color) !important;
-            border: 1px solid var(--primary-glow) !important;
-        }
-
-        html:not(.dark-mode) .swal2-input, html:not(.dark-mode) .swal2-select, html:not(.dark-mode) .swal2-textarea {
-            background: #fff !important;
-            color: var(--text-color) !important;
-            border-color: #d0d7de !important;
         }
 
         .list-group-item {
             background-color: transparent !important;
             border-color: var(--card-border) !important;
-            color: var(--text-color) !important;
+            color: var(--text-color) !important
         }
 
         .table, .table td, .table th {
             color: var(--text-color);
-            vertical-align: middle;
+            vertical-align: middle
         }
 
         .table-hover > tbody > tr:hover > * {
             color: var(--text-color);
-            background-color: rgba(159, 122, 234, 0.1);
+            background-color: rgba(159,122,234,.1)
         }
-
-        .nav-tabs .nav-link {
-            color: var(--text-muted-color);
-            border: 1px solid transparent;
-            border-bottom-color: var(--card-border);
-        }
-
-            .nav-tabs .nav-link:hover, .nav-tabs .nav-link:focus {
-                color: var(--text-color);
-                border-color: var(--card-border);
-                isolation: isolate;
-            }
-
-            .nav-tabs .nav-link.active {
-                color: var(--primary-glow);
-                background-color: var(--card-bg);
-                border-color: var(--card-border) var(--card-border) transparent;
-            }
-
-        html:not(.dark-mode) .nav-tabs .nav-link.active {
-            border-color: #dee2e6 #dee2e6 #fff;
-        }
-
-        .nav-pills .nav-link {
-            color: var(--text-muted-color);
-        }
-
-            .nav-pills .nav-link.active {
-                background-color: var(--primary-glow);
-            }
 
         a {
             color: var(--secondary-glow);
-            text-decoration: none;
+            text-decoration: none
         }
 
             a:hover {
-                color: var(--primary-glow);
+                color: var(--primary-glow)
             }
 
             .btn a, a.btn {
                 color: inherit !important;
-                text-decoration: none !important;
+                text-decoration: none !important
             }
-
-        .btn-outline-secondary {
-            color: var(--text-muted-color);
-            border-color: var(--text-muted-color);
-        }
-
-            .btn-outline-secondary:hover {
-                color: #fff;
-                background-color: var(--text-muted-color);
-                border-color: var(--text-muted-color);
-            }
-
-        .container {
-            z-index: 10;
-            position: relative;
-        }
 
         .main-header {
             display: flex;
             flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
-            gap: 1rem;
-        }
-
-        @keyframes flash-up-animation {
-            from {
-                background-color: rgba(40, 167, 69, 0.4);
-            }
-
-            to {
-                background-color: transparent;
-            }
-        }
-
-        .flash-up {
-            animation: flash-up-animation 2s ease-out;
-        }
-
-        @keyframes flash-down-animation {
-            from {
-                background-color: rgba(220, 53, 69, 0.4);
-            }
-
-            to {
-                background-color: transparent;
-            }
-        }
-
-        .flash-down {
-            animation: flash-down-animation 2s ease-out;
+            gap: 1rem
         }
     </style>
     {% block styles %}{% endblock %}
-    <script>(function () { const theme = localStorage.getItem("theme") || "dark"; document.documentElement.classList.toggle("dark-mode", theme === "dark"); })();</script>
+    <script>(function () { const e = localStorage.getItem("theme") || "dark"; document.documentElement.classList.toggle("dark-mode", e === "dark") })();</script>
 </head>
 <body>
     <div id="particles-js"></div>
@@ -276,148 +183,86 @@
                 {% if session.role == 'admin' %}
                 <a href="{{ url_for('views.admin_panel') }}" class="btn btn-sm btn-outline-light"><i class="bi bi-shield-lock-fill me-1"></i> لوحة التحكم</a>
                 {% endif %}
-                <a id="logout-btn" href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-danger"><i class="bi bi-box-arrow-right"></i></a>
+                <a id="logout-btn" href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-danger" title="تسجيل الخروج"><i class="bi bi-box-arrow-right"></i></a>
                 {% endif %}
-                <button class="btn btn-outline-secondary btn-sm" id="theme-toggle" title="تبديل المظهر">
-                    <i class="bi bi-moon-stars-fill" id="moon-icon" style="display: none;"></i>
-                    <i class="bi bi-sun-fill" id="sun-icon" style="display: none;"></i>
-                </button>
+                <button class="btn btn-outline-secondary btn-sm" id="theme-toggle" title="تبديل المظهر"><i class="bi bi-moon-stars-fill" id="moon-icon" style="display: none;"></i><i class="bi bi-sun-fill" id="sun-icon" style="display: none;"></i></button>
             </div>
         </header>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
 
+        {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endfor %}{% endif %}{% endwith %}
         {% block content %}{% endblock %}
     </div>
 
+    <!-- Core & Vendor Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
-
+    <!-- Main Application Scripts -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         try {
-          const firebaseConfigStr = '{{ firebase_config | tojson | safe }}';
-          if (!firebaseConfigStr || firebaseConfigStr === '"{}"' || firebaseConfigStr === '{}') throw new Error("إعدادات Firebase غير موجودة في الخادم.");
+          const firebaseConfig = {{ firebase_config | tojson | safe }};
+          if (!firebaseConfig.apiKey) throw new Error("مفتاح API الخاص بـ Firebase مفقود.");
+          if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+          document.dispatchEvent(new Event('firebase-ready'));
+        } catch(e) { console.error("Critical Firebase Init Error:", e.message); }
 
-          window.firebaseConfig = JSON.parse(firebaseConfigStr);
-          if (!window.firebaseConfig.apiKey) throw new Error("مفتاح API الخاص بـ Firebase (apiKey) مفقود في الإعدادات.");
+        const freshToken = '{{ firebase_token | default("", true) | safe }}';
+        if (freshToken) sessionStorage.setItem('firebaseToken', freshToken);
 
-          if (!firebase.apps.length) {
-              firebase.initializeApp(window.firebaseConfig);
-              console.log("Firebase App Initialized Successfully.");
-              document.dispatchEvent(new Event('firebase-ready'));
-          } else {
-              document.dispatchEvent(new Event('firebase-ready'));
-          }
-        } catch(e) {
-          console.error("Critical Firebase Config Error:", e.message);
-          const errorContainer = document.querySelector('.container') || document.body;
-          if (errorContainer) {
-              const alertHtml = `<div class="alert alert-danger m-3"><strong>فشل حاسم في تحميل إعدادات التطبيق:</strong> ${e.message}<br>لا يمكن للتطبيق العمل بدون هذه الإعدادات. يرجى مراجعة مسؤول النظام.</div>`;
-              const mainContent = document.querySelector('.tab-content, .row');
-              if (mainContent) {
-                  mainContent.innerHTML = alertHtml;
-              } else {
-                  errorContainer.innerHTML = alertHtml;
-              }
-          }
+        const themeToggle = document.getElementById("theme-toggle");
+        if (themeToggle) {
+            const rootHtml = document.documentElement, moonIcon = document.getElementById('moon-icon'), sunIcon = document.getElementById('sun-icon');
+            const updateIcons = () => { const isDark = rootHtml.classList.contains('dark-mode'); moonIcon.style.display = isDark ? 'inline-block' : 'none'; sunIcon.style.display = isDark ? 'none' : 'inline-block'; };
+            themeToggle.addEventListener("click", () => { rootHtml.classList.toggle("dark-mode"); localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light"); updateIcons(); });
+            updateIcons();
         }
+
+        const setupParticles = () => { if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) { const isDark = document.documentElement.classList.contains('dark-mode'); particlesJS("particles-js", { particles: { number: { value: 60 }, color: { value: isDark ? "#9f7aea" : "#2b6cb0" }, opacity: { value: 0.5, random: true }, size: { value: 3, random: true }, line_linked: { enable: true, distance: 150, color: isDark ? "#00f2ff" : "#a0aec0", opacity: 0.2 }, move: { enable: true, speed: 1.5 } } }); } };
+        setTimeout(setupParticles, 500);
+
+        const logoutBtn = document.getElementById('logout-btn');
+        if(logoutBtn){logoutBtn.addEventListener('click',e=>{e.preventDefault();if(typeof firebase!=='undefined'&&firebase.auth){firebase.auth().signOut().finally(()=>{window.location.href=logoutBtn.href})}else{window.location.href=logoutBtn.href}})}
       });
     </script>
 
+    <!-- <<< --- THIS IS THE FINAL PRESENCE MANAGEMENT SCRIPT --- >>> -->
     <script>
-        document.addEventListener('firebase-ready', () => {
-            const freshToken = '{{ firebase_token | default("", true) | safe }}';
-            if (freshToken) {
-                firebase.auth().signInWithCustomToken(freshToken)
-                    .then((userCredential) => {
-                        console.log('Firebase client authenticated successfully.');
-                        document.dispatchEvent(new Event('firebase-auth-ready'));
-                    })
-                    .catch((error) => {
-                        console.error('Firebase Auth Error:', error.code, error.message);
-                        // *** התיקון כאן | THE FIX IS HERE ***
-                        // إعادة التوجيه إلى مسار الخروج لمسح جلسة الخادم وكسر حلقة إعادة التوجيه
-                        window.location.href = "{{ url_for('auth.logout') }}";
-                    });
-            } else {
-                 console.log('No user token found. Waiting for server-side redirect.');
-            }
-        });
+    document.addEventListener('firebase-ready', () => {
+        {% if session.logged_in and session.user_id %}
+            const db = firebase.database();
+            const myUid = "{{ session.user_id }}";
 
-        document.addEventListener('firebase-auth-ready', () => {
-            const currentUserId = {{ current_user_id | tojson | safe }};
-            const currentUserName = {{ current_user_name | tojson | safe }};
-            const currentUserRole = {{ session.role | default(none) | tojson | safe }};
+            // A reference to the special '.info/connected' path in Realtime Database.
+            // This is a boolean value which is true when the client is connected.
+            const connectedRef = db.ref('.info/connected');
+            const onlineRef = db.ref(`online_visitors/${myUid}`);
 
-            if (currentUserId && currentUserName && currentUserRole !== 'admin') {
-                const db = firebase.database();
-                const userStatusRef = db.ref('/online_visitors/' + currentUserId);
+            connectedRef.on('value', (snap) => {
+                if (snap.val() === true) {
+                    console.log("Presence System: Connected.");
 
-                db.ref('.info/connected').on('value', (snapshot) => {
-                    if (snapshot.val() === true) {
-                        userStatusRef.set({ name: currentUserName, online_since: firebase.database.ServerValue.TIMESTAMP });
-                        userStatusRef.onDisconnect().remove();
-                    }
-                });
-            }
-        });
-    </script>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const themeToggle = document.getElementById("theme-toggle"), rootHtml = document.documentElement;
-            const moonIcon = document.getElementById('moon-icon'), sunIcon = document.getElementById('sun-icon');
-
-            const updateIcons = () => { if (!moonIcon || !sunIcon) return; const isDark = rootHtml.classList.contains('dark-mode'); moonIcon.style.display = isDark ? 'inline-block' : 'none'; sunIcon.style.display = isDark ? 'none' : 'inline-block'; };
-            const setupParticles = () => { if (typeof particlesJS === 'undefined' || !document.getElementById('particles-js')) return; const isDark = rootHtml.classList.contains('dark-mode'); if (window.pJSDom && window.pJSDom[0]) { window.pJSDom[0].pJS.fn.vendors.destroypJS(); } particlesJS("particles-js", { particles: { number: { value: 60, density: { enable: true, value_area: 800 } }, color: { value: isDark ? "#9f7aea" : "#2b6cb0" }, shape: { type: "circle" }, opacity: { value: 0.5, random: true }, size: { value: 3, random: true }, line_linked: { enable: true, distance: 150, color: isDark ? "#00f2ff" : "#a0aec0", opacity: 0.2, width: 1 }, move: { enable: true, speed: 1.5, direction: "none", out_mode: "out" } }, interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "repel" }, onclick: { enable: false } } } }); };
-
-            if (themeToggle) {
-                themeToggle.addEventListener("click", () => {
-                    rootHtml.classList.toggle("dark-mode");
-                    localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light");
-                    updateIcons();
-                    setupParticles();
-                });
-            }
-            updateIcons();
-            setupParticles();
-
-            const logoutBtn = document.getElementById('logout-btn');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    if (typeof firebase !== 'undefined' && firebase.auth) {
-                        firebase.auth().signOut()
-                            .then(() => {
-                                console.log('Client-side Firebase sign-out successful.');
-                                window.location.href = logoutBtn.href;
-                            })
-                            .catch((error) => {
-                                console.error('Client-side Firebase sign-out failed:', error);
-                                window.location.href = logoutBtn.href;
+                    // When the client's connection is lost, remove their record from the online list.
+                    // This is the most crucial part.
+                    onlineRef.onDisconnect().remove()
+                        .then(() => {
+                            // After setting the onDisconnect handler, now we can set our online status.
+                            // The `onDisconnect` will be waiting on the server to trigger if we disconnect.
+                            onlineRef.set({
+                                name: "{{ session.name | e }}",
+                                online_since: firebase.database.ServerValue.TIMESTAMP
                             });
-                    } else {
-                        console.warn('Firebase auth is not available, redirecting directly.');
-                        window.location.href = logoutBtn.href;
-                    }
-                });
-            }
-        });
+                        });
+                }
+            });
+        {% endif %}
+    });
     </script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>
-<!-- END OF FILE templates/base.html -->
+<!-- END OF FILE templates/base.html (FINAL & PRODUCTION READY - WITH PRESENCE SYSTEM) -->
