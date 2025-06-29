@@ -1,5 +1,4 @@
-﻿
-import time
+﻿import time
 import sys
 import os
 import io
@@ -11,8 +10,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-
-bp = Blueprint('admin_api', __name__, url_prefix='/api/admin')
+bp = Blueprint('admin_api', __name__)
 
 def _get_drive_service():
     SERVICE_ACCOUNT_FILE = os.getenv('FIREBASE_SERVICE_ACCOUNT')
@@ -62,7 +60,10 @@ def add_user():
             'avatar_url': avatar_url
         })
         
+        if 'stock_multiplier' not in user_data:
+            user_data['stock_multiplier'] = 1.0
         if 'likes' not in user_data: user_data['likes'] = 0
+
         ref_users.child(name).set(user_data)
         
         db.reference(f'points_history/{name}').push({'points': points, 'timestamp': int(time.time())})
@@ -74,7 +75,6 @@ def add_user():
         print(f"!!! Add/Edit User Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
 
-# <<< التعديل الجذري والنهائي هنا: إعادة المنطق الصحيح للدالة >>>
 @bp.route('/market/update_trends', methods=['POST'])
 @admin_required
 def update_market_trends():
@@ -85,51 +85,34 @@ def update_market_trends():
             return jsonify(success=False, message="لا يوجد زواحف لتحديثهم."), 404
 
         updates = {}
-        history_updates = {}
         updated_crawlers_count = 0
         now = int(time.time())
 
-        # المرور على كل الزواحف
         for name, data in all_users.items():
             if isinstance(data, dict):
                 trend = data.get('stock_trend', 0.0)
-                # فقط إذا كان هناك اتجاه محدد
+                
                 if trend != 0:
-                    current_points = int(data.get('points', 0))
-                    # 1. تطبيق النسبة على نقاط الزاحف نفسه (السلوك الصحيح)
-                    new_points = round(current_points * (1 + (trend / 100.0)))
+                    current_multiplier = float(data.get('stock_multiplier', 1.0))
+                    new_multiplier = current_multiplier + (trend / 100.0)
                     
-                    if new_points < 0: 
-                        new_points = 0
-                    
-                    # 2. إضافة تحديث النقاط وتحديث السجل
-                    if new_points != current_points:
-                        updates[f'users/{name}/points'] = new_points
-                        history_updates[f'points_history/{name}'] = {'points': new_points, 'timestamp': now}
-                        updated_crawlers_count += 1
+                    updates[f'users/{name}/stock_multiplier'] = max(0, new_multiplier)
+                    updated_crawlers_count += 1
 
-                # 3. تصفير اتجاه السهم بعد تطبيقه
                 if data.get('stock_trend') is not None and data.get('stock_trend') != 0:
                     updates[f'users/{name}/stock_trend'] = 0
         
-        # 4. تنفيذ جميع التحديثات دفعة واحدة
         if updates:
             db.reference().update(updates)
-
-        # 5. إضافة السجلات الجديدة في حلقة منفصلة لضمان التوافق
-        if history_updates:
-            for path, record in history_updates.items():
-                db.reference(path).push(record)
-
-        log_text = f"الأدمن '{session.get('name')}' قام بتحديث السوق. تم تعديل نقاط {updated_crawlers_count} زاحف."
+        
+        log_text = f"الأدمن '{session.get('name')}' قام بتحديث السوق. تم تعديل مُضاعِف أسهم {updated_crawlers_count} زاحف."
         db.reference('activity_log').push({'type': 'admin_edit', 'text': log_text, 'timestamp': now})
         
-        return jsonify(success=True, message=f"تم تحديث السوق بنجاح. تم تعديل نقاط {updated_crawlers_count} زاحف.")
+        return jsonify(success=True, message=f"تم تحديث السوق بنجاح. تم تعديل مُضاعِف أسهم {updated_crawlers_count} زاحف.")
 
     except Exception as e:
         print(f"!!! Market Update Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ أثناء تحديث السوق."), 500
-
 
 @bp.route('/delete_user/<username>', methods=['POST'])
 @admin_required
@@ -140,7 +123,6 @@ def delete_user(username):
         db.reference(f'points_history/{username}').delete()
     return jsonify(success=True)
 
-# ... (باقي الملف يبقى كما هو دون تغيير)
 @bp.route('/candidate/add', methods=['POST'])
 @admin_required
 def add_candidate():
@@ -189,7 +171,7 @@ def manage_user(user_id, action):
 @admin_required
 def approve_candidate():
     name = request.form.get('name', '').strip()
-    if name: db.reference(f'users/{name}').set({'name': name, 'points': 0, 'likes': 0, 'stock_trend': 0}); db.reference(f'candidates/{name}').delete()
+    if name: db.reference(f'users/{name}').set({'name': name, 'points': 0, 'likes': 0, 'stock_trend': 0, 'stock_multiplier': 1.0}); db.reference(f'candidates/{name}').delete()
     return jsonify(success=True)
 
 @bp.route('/candidate/reject', methods=['POST'])
@@ -268,6 +250,38 @@ def save_spin_wheel_settings():
         return jsonify(success=True)
     except (ValueError, TypeError): return jsonify(success=False, message="بيانات غير صالحة."), 400
 
+# <<< بداية التعديل >>>
+@bp.route('/settings/contest', methods=['POST'])
+@admin_required
+def save_contest_settings():
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="لم يتم استلام أي بيانات."), 400
+    
+    try:
+        is_enabled = bool(data.get('is_enabled'))
+        winner_points = int(data.get('winner_points_reward'))
+        voter_sp = int(data.get('voter_sp_reward'))
+
+        if winner_points < 0 or voter_sp < 0:
+            raise ValueError("لا يمكن أن تكون الجوائز سالبة.")
+
+        settings = {
+            'is_enabled': is_enabled,
+            'winner_points_reward': winner_points,
+            'voter_sp_reward': voter_sp
+        }
+
+        db.reference('site_settings/contest_settings').set(settings)
+        return jsonify(success=True, message="تم حفظ إعدادات المنافسة بنجاح!")
+
+    except (ValueError, TypeError) as e:
+        return jsonify(success=False, message=f"بيانات غير صالحة. {e}"), 400
+    except Exception as e:
+        print(f"!!! Save Contest Settings Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
+# <<< نهاية التعديل >>>
+
 @bp.route('/shop/add_product', methods=['POST'])
 @admin_required
 def add_product():
@@ -318,9 +332,6 @@ def reset_all_free_spins():
     for uid in users_approved: updates[f'user_spin_state/{uid}/freeAttempts'] = atts; updates[f'user_spin_state/{uid}/lastFreeUpdateTimestamp'] = now
     if updates: db.reference('/').update(updates)
     return jsonify(success=True)
-
-
-# --- Avatar Management API ---
 
 @bp.route('/shop/add_avatar', methods=['POST'])
 @admin_required
@@ -420,43 +431,72 @@ def handle_gift_request(request_id, action):
         request_ref.update({'status': 'rejected', 'processed_by': session.get('name')})
         return jsonify(success=True, message="تم رفض الطلب بنجاح.")
     
-    # Logic for approval
     try:
         gifter_id = gift_request.get('gifter_id')
-        target_user_id = gift_request.get('target_user_id')
+        target_name = gift_request.get('target_user_name') 
         avatar_id = gift_request.get('avatar_id')
+        avatar_url = gift_request.get('avatar_image_url')
         price_sp = gift_request.get('price_sp', 0)
 
-        if not all([gifter_id, target_user_id, avatar_id]):
-            raise ValueError("بيانات الطلب غير مكتملة.")
+        if not all([gifter_id, target_name, avatar_id, avatar_url]):
+            raise ValueError("بيانات طلب الإهداء غير مكتملة.")
 
         gifter_wallet_ref = db.reference(f'wallets/{gifter_id}/sp')
         
-        def deduct_sp_transaction(current_sp):
-            current_sp = current_sp or 0
-            if current_sp < price_sp:
-                return 
-            return current_sp - price_sp
-        
-        result = gifter_wallet_ref.transaction(deduct_sp_transaction)
+        result = gifter_wallet_ref.transaction(lambda current_sp: (current_sp or 0) - price_sp if (current_sp or 0) >= price_sp else None)
 
         if result is None:
              request_ref.update({'status': 'failed', 'reason': 'رصيد غير كافٍ', 'processed_by': session.get('name')})
              return jsonify(success=False, message="فشلت الموافقة: رصيد المُهدي غير كافٍ."), 400
 
-        db.reference(f'user_avatars/{target_user_id}/owned/{avatar_id}').set({
-            'purchased_at': int(time.time()),
-            'gifted_by': gift_request.get('gifter_name')
-        })
+        db.reference(f'users/{target_name}').update({ 'avatar_url': avatar_url })
+        
+        registered_user_query = db.reference('registered_users').order_by_child('name').equal_to(target_name).get()
+        if registered_user_query:
+            target_user_id = list(registered_user_query.keys())[0]
+            db.reference(f'registered_users/{target_user_id}').update({'current_avatar': avatar_url})
 
         request_ref.update({'status': 'approved', 'processed_by': session.get('name')})
         
-        log_text = f"الأدمن '{session.get('name')}' وافق على طلب إهداء أفاتار '{gift_request.get('avatar_name')}' من '{gift_request.get('gifter_name')}' إلى '{gift_request.get('target_user_name')}'."
+        log_text = f"الأدمن '{session.get('name')}' وافق على طلب إهداء أفاتار '{gift_request.get('avatar_name')}' إلى الزاحف '{target_name}'."
         db.reference('activity_log').push({'type': 'gift', 'text': log_text, 'timestamp': int(time.time())})
 
-        return jsonify(success=True, message="تمت الموافقة على الطلب بنجاح.")
+        return jsonify(success=True, message="تمت الموافقة على الطلب وتعيين الأفاتار للزاحف بنجاح.")
 
     except Exception as e:
         request_ref.update({'status': 'failed', 'reason': str(e), 'processed_by': session.get('name')})
         print(f"!!! Handle Gift Request Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء معالجة الطلب."), 500
+
+@bp.route('/settings/investment', methods=['POST'])
+@admin_required
+def save_investment_settings():
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="No data received."), 400
+    
+    try:
+        max_investments = data.get('max_investments')
+        lock_hours = data.get('investment_lock_hours')
+        
+        if max_investments is None or lock_hours is None:
+             raise ValueError("max_investments and investment_lock_hours are required")
+        
+        # Ensure values are non-negative integers
+        max_investments_val = int(max_investments)
+        lock_hours_val = int(lock_hours)
+        
+        if max_investments_val < 0 or lock_hours_val < 0:
+            raise ValueError("Values cannot be negative.")
+
+        db.reference('site_settings/investment_settings').set({
+            'max_investments': max_investments_val,
+            'investment_lock_hours': lock_hours_val
+        })
+        return jsonify(success=True)
+
+    except (ValueError, TypeError) as e:
+        return jsonify(success=False, message=f"بيانات غير صالحة: {e}"), 400
+    except Exception as e:
+        print(f"!!! Save Investment Settings Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500

@@ -19,7 +19,7 @@
             --primary-glow: #9f7aea;
             --secondary-glow: #00f2ff;
             --accent-glow: #ff00f3;
-            --card-bg: rgba(26,18,54,.8);
+            --card-bg: rgba(26,18,54,.65);
             --card-border: rgba(159,122,234,.2);
             --text-color: #f0f2f5;
             --text-muted-color: #a0aec0;
@@ -32,7 +32,7 @@
             --bg-color: #f5f7fa;
             --primary-glow: #6b46c1;
             --secondary-glow: #2b6cb0;
-            --card-bg: rgba(255,255,255,.9);
+            --card-bg: rgba(255,255,255,.75);
             --card-border: #e2e8f0;
             --text-color: #2d3748;
             --text-muted-color: #718096;
@@ -61,7 +61,8 @@
         .card {
             background: var(--card-bg);
             border-radius: .75rem;
-            backdrop-filter: blur(14px);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
             border: 1px solid var(--card-border);
             box-shadow: 0 0 30px rgba(159,122,234,.15)
         }
@@ -217,11 +218,53 @@
         if (themeToggle) {
             const rootHtml = document.documentElement, moonIcon = document.getElementById('moon-icon'), sunIcon = document.getElementById('sun-icon');
             const updateIcons = () => { const isDark = rootHtml.classList.contains('dark-mode'); moonIcon.style.display = isDark ? 'inline-block' : 'none'; sunIcon.style.display = isDark ? 'none' : 'inline-block'; };
-            themeToggle.addEventListener("click", () => { rootHtml.classList.toggle("dark-mode"); localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light"); updateIcons(); });
+            themeToggle.addEventListener("click", () => { rootHtml.classList.toggle("dark-mode"); localStorage.setItem("theme", rootHtml.classList.contains("dark-mode") ? "dark" : "light"); setupParticles(); updateIcons(); });
             updateIcons();
         }
 
-        const setupParticles = () => { if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) { const isDark = document.documentElement.classList.contains('dark-mode'); particlesJS("particles-js", { particles: { number: { value: 60 }, color: { value: isDark ? "#9f7aea" : "#2b6cb0" }, opacity: { value: 0.5, random: true }, size: { value: 3, random: true }, line_linked: { enable: true, distance: 150, color: isDark ? "#00f2ff" : "#a0aec0", opacity: 0.2 }, move: { enable: true, speed: 1.5 } } }); } };
+        const setupParticles = () => {
+            if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) {
+                const isDark = document.documentElement.classList.contains('dark-mode');
+                // <<< --- بداية التعديل: العودة إلى الإصدار الصحيح والمطلوب --- >>>
+                particlesJS("particles-js", {
+                    "particles": {
+                        "number": { "value": 60, "density": { "enable": true, "value_area": 550 } },
+                        "color": { "value": isDark ? "#9f7aea" : "#6b46c1" }, // اللون الأساسي للجزيئات (بنفسجي)
+                        "shape": { "type": "circle" },
+                        "opacity": { "value": 0.4, "random": true },
+                        "size": { "value": 3, "random": true },
+                        "line_linked": {
+                            "enable": true,
+                            "distance": 250,
+                            "color": "#1E3A8A", // لون الخطوط الافتراضي (سيتم تجاهله تقريبًا بسبب الشفافية)
+                            "opacity": 0.3,    // شفافية خافتة جداً للخطوط العادية
+                            "width": 1.5
+                        },
+                        "move": { "enable": true, "speed": 1.5, "direction": "none", "out_mode": "out" }
+                    },
+                    "interactivity": {
+                        "detect_on": "window",
+                        "events": {
+                            "onhover": { "enable": true, "mode": "grab" },
+                            "onclick": { "enable": true, "mode": "push" },
+                            "resize": true
+                        },
+                        "modes": {
+                            "grab": {
+                                "distance": 200,
+                                "line_linked": {
+                                    "opacity": 1, // شفافية قوية للخطوط عند التفاعل
+                                    "color": isDark ? "#00f2ff" : "#2b6cb0" // اللون الأزرق المضيء للخطوط التفاعلية
+                                }
+                            },
+                            "push": { "particles_nb": 4 }
+                        }
+                    },
+                    "retina_detect": true
+                });
+                // <<< --- نهاية التعديل --- >>>
+            }
+        };
         setTimeout(setupParticles, 500);
 
         const logoutBtn = document.getElementById('logout-btn');
@@ -229,28 +272,18 @@
       });
     </script>
 
-    <!-- <<< --- THIS IS THE FINAL PRESENCE MANAGEMENT SCRIPT --- >>> -->
     <script>
     document.addEventListener('firebase-ready', () => {
         {% if session.logged_in and session.user_id %}
             const db = firebase.database();
             const myUid = "{{ session.user_id }}";
-
-            // A reference to the special '.info/connected' path in Realtime Database.
-            // This is a boolean value which is true when the client is connected.
             const connectedRef = db.ref('.info/connected');
             const onlineRef = db.ref(`online_visitors/${myUid}`);
-
             connectedRef.on('value', (snap) => {
                 if (snap.val() === true) {
                     console.log("Presence System: Connected.");
-
-                    // When the client's connection is lost, remove their record from the online list.
-                    // This is the most crucial part.
                     onlineRef.onDisconnect().remove()
                         .then(() => {
-                            // After setting the onDisconnect handler, now we can set our online status.
-                            // The `onDisconnect` will be waiting on the server to trigger if we disconnect.
                             onlineRef.set({
                                 name: "{{ session.name | e }}",
                                 online_since: firebase.database.ServerValue.TIMESTAMP
@@ -265,4 +298,3 @@
     {% block scripts %}{% endblock %}
 </body>
 </html>
-<!-- END OF FILE templates/base.html (FINAL & PRODUCTION READY - WITH PRESENCE SYSTEM) -->

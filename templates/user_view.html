@@ -1,4 +1,4 @@
-<!-- START OF FILE templates/user_view.html (WITH AVATAR DISPLAY) -->
+<!-- START OF FILE templates/user_view.html (WITH INVESTMENT DEMAND COLUMN) -->
 {% extends "base.html" %}
 {% block title %}زواحف افاق ال(IT){% endblock %}
 {% block header_title %}نظام حساب و استثمار نقاط زواحف فرع ال (IT){% endblock %}
@@ -288,6 +288,28 @@
         box-shadow: none;
     }
 
+    @keyframes wheel-glow {
+        0% {
+            box-shadow: 0 0 25px -5px var(--primary-glow), 0 0 45px -15px var(--secondary-glow);
+        }
+
+        50% {
+            box-shadow: 0 0 40px -5px var(--primary-glow), 0 0 60px -15px var(--secondary-glow);
+        }
+
+        100% {
+            box-shadow: 0 0 25px -5px var(--primary-glow), 0 0 45px -15px var(--secondary-glow);
+        }
+    }
+
+    .wheel-wrapper-glow {
+        background: transparent !important;
+        border-radius: 50%;
+        border: none !important;
+        animation: wheel-glow 5s ease-in-out infinite;
+    }
+
+
     #spin-canvas {
         display: block;
         margin: 0 auto;
@@ -295,7 +317,6 @@
         height: auto;
     }
 
-    /* --- Avatar Styles --- */
     .crawler-avatar {
         width: 32px;
         height: 32px;
@@ -318,6 +339,10 @@
         .user-avatar-preview:hover {
             transform: scale(1.1);
         }
+
+    .investment-actions-col {
+        min-width: 200px;
+    }
 </style>
 {% endblock %}
 
@@ -340,9 +365,18 @@
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-hover align-middle mb-0">
-                    <thead><tr><th>#</th><th>اسم الزاحف</th><th class="text-center">النقاط</th><th class="text-center">تفاعل</th><th class="text-center">الاستثمار</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>اسم الزاحف</th>
+                            <th class="text-center">النقاط</th>
+                            <th class="text-center">تفاعل</th>
+                            <th class="text-center" id="investment-demand-header" style="display: none;">الإقبال</th>
+                            <th class="text-center investment-actions-col">الاستثمار</th>
+                        </tr>
+                    </thead>
                     <tbody id="user-table-body">
-                        <tr><td colspan="5" class="text-center py-5"><div id="loading-spinner"><div class="spinner-border text-danger"></div><p class="mt-2">جاري الزحف...</p></div></td></tr>
+                        <tr><td colspan="6" class="text-center py-5"><div id="loading-spinner"><div class="spinner-border text-danger"></div><p class="mt-2">جاري الزحف...</p></div></td></tr>
                     </tbody>
                 </table>
             </div>

@@ -4,3 +4,4 @@ firebase-admin
 python-dotenv
 Pyrebase4
 requests
+Flask-APScheduler

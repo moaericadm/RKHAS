@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 from dotenv import load_dotenv
 import firebase_admin
@@ -8,7 +8,7 @@ def migrate_data():
     """
     This script runs once to fix the data structure in Firebase.
     It iterates through all users and ensures each user object has a 'name' property
-    that matches its key.
+    that matches its key, and a 'stock_multiplier' property.
     """
     # --- Load Environment and Initialize Firebase ---
     print("Loading environment variables...")
@@ -45,11 +45,20 @@ def migrate_data():
     fixed_count = 0
     
     for name_key, user_data in all_users.items():
-        # Check if user_data is a valid dictionary and if 'name' property is missing or mismatched
-        if isinstance(user_data, dict) and user_data.get('name') != name_key:
-            print(f"Fixing user: '{name_key}'. Setting 'name' property to match key.")
-            # Prepare an update for this user
+        if not isinstance(user_data, dict):
+            continue
+
+        # Check 1: Ensure 'name' property exists and matches key
+        if user_data.get('name') != name_key:
+            print(f"Fixing user: '{name_key}'. Setting 'name' property.")
             updates[f'{name_key}/name'] = name_key
+            fixed_count += 1
+        
+        # <<< الإضافة الجديدة: التأكد من وجود مضاعف السهم >>>
+        # Check 2: Ensure 'stock_multiplier' property exists
+        if 'stock_multiplier' not in user_data:
+            print(f"Fixing user: '{name_key}'. Adding 'stock_multiplier' property with default value 1.0.")
+            updates[f'{name_key}/stock_multiplier'] = 1.0
             fixed_count += 1
 
     if not updates:
@@ -58,9 +67,9 @@ def migrate_data():
 
     # Apply all updates in one go
     try:
-        print(f"\nFound {fixed_count} users to update. Applying changes...")
+        print(f"\nFound {fixed_count} updates to apply. Applying changes...")
         users_ref.update(updates)
-        print(">> Migration successful! All users now have a 'name' property matching their key.")
+        print(">> Migration successful! All users now have consistent data.")
     except Exception as e:
         print(f"!!! ERROR: Failed to apply updates to Firebase: {e}", file=sys.stderr)
 

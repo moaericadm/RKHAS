@@ -1,4 +1,4 @@
-﻿// --- START OF FILE static/js/user_interactions.js ---
+﻿
 document.addEventListener('DOMContentLoaded', () => {
     const userTableBody = document.getElementById('user-table-body');
     if (!userTableBody) return;
@@ -32,24 +32,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupEventListeners() {
-        document.querySelectorAll('.custom-modal .custom-close-btn:not(#spinWheelModal .custom-close-btn)').forEach(btn => {
+        // <<< بداية التعديل: استثناء نافذة العجلة من الإغلاق التلقائي >>>
+        document.querySelectorAll('.custom-modal:not(#spinWheelModal)').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                // هذا الكود سيعمل على كل النوافذ ما عدا نافذة العجلة
                 const modal = e.target.closest('.custom-modal');
-                if (modal) modal.classList.remove('show');
+                if (modal && (e.target === modal || e.target.classList.contains('custom-close-btn'))) {
+                    modal.classList.remove('show');
+                }
             });
         });
-        window.addEventListener('click', (e) => {
-            if (e.target.classList.contains('custom-modal') && e.target.id !== 'spinWheelModal') {
-                e.target.classList.remove('show');
-            }
-        });
+        // <<< نهاية التعديل >>>
 
         if (ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', showCrawlCheckModal);
         if (ui.nominateBtn) ui.nominateBtn.addEventListener('click', handleNomination);
         if (ui.reportBtn) ui.reportBtn.addEventListener('click', handleReport);
     }
 
-    // *** التعديل الجذري هنا: فصل عرض النافذة عن حساب النتيجة ***
     async function showCrawlCheckModal() {
         const name = ui.crawlNameInput.value.trim();
         if (!name) {
@@ -97,28 +96,25 @@ document.addEventListener('DOMContentLoaded', () => {
         let percentage, title, text, color;
 
         if (existingUser) {
-            // Logic for existing crawlers remains the same
             const maxPoints = Math.max(...allUsersCache.map(u => u.points || 0), 1);
             percentage = Math.min(Math.round(((existingUser.points || 0) / maxPoints) * 100), 100);
             title = `نتيجة الزاحف الأصلي: ${existingUser.name}`;
             text = `زاحف معتمد بنسبة 🦎 ${percentage}%. ولدَ زاحفاً و سيبقى زاحف محتل هذه اللوحة!`;
             color = '#8e44ad';
         } else {
-            // Logic for new names, incorporating the new questions
             let hash = 0;
             for (let i = 0; i < name.length; i++) {
                 hash = name.charCodeAt(i) + ((hash << 5) - hash);
                 hash = hash & hash;
             }
-            let basePercentage = (Math.abs(hash) % 70) + 1; // Base percentage from name (max 70)
+            let basePercentage = (Math.abs(hash) % 70) + 1;
 
-            // Modify based on answers
             if (extraData.university === 'yes') basePercentage += 15;
             if (extraData.crawledBefore === 'yes') basePercentage += 20;
             if (extraData.crawledBefore === 'maybe') basePercentage += 10;
             if (parseInt(extraData.age) < 18 || parseInt(extraData.age) > 25) basePercentage -= 5;
 
-            percentage = Math.min(Math.max(basePercentage, 5), 100); // Ensure percentage is between 5 and 100
+            percentage = Math.min(Math.max(basePercentage, 5), 100);
 
             title = `نتيجة فحص الزحف لـِ "${name}"`;
             if (percentage < 30) {
@@ -223,4 +219,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     exportInteractionFunctions();
 });
-// --- END OF FILE static/js/user_interactions.js ---

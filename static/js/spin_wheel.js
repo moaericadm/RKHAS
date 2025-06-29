@@ -18,8 +18,19 @@ document.addEventListener('firebase-ready', () => {
     };
 
     let wheel, settings, userState, timerInterval;
+    // <<< بداية الإضافة: متغير لتتبع حالة الدوران >>>
+    let isSpinning = false;
+    // <<< نهاية الإضافة >>>
 
-    // A single, centralized initialization function
+    const THEME_COLORS = ['#9f7aea', '#00f2ff', '#ff00f3', '#4fd1c5', '#ed64a6', '#63b3ed', '#f6ad55', '#718096'];
+    let colorIndex = 0;
+
+    function getNextColor() {
+        const color = THEME_COLORS[colorIndex];
+        colorIndex = (colorIndex + 1) % THEME_COLORS.length;
+        return color;
+    }
+
     function reInit(newSettings) {
         if (!newSettings || !newSettings.prizes || newSettings.prizes.length === 0) {
             console.warn("Spin wheel settings are missing or invalid. Wheel disabled.");
@@ -31,8 +42,9 @@ document.addEventListener('firebase-ready', () => {
         settings = newSettings;
         if (ui.spinWheelCard) ui.spinWheelCard.style.display = settings.enabled ? 'block' : 'none';
 
+        colorIndex = 0;
         const segments = settings.prizes.map(p => ({
-            'fillStyle': getRandomColor(),
+            'fillStyle': getNextColor(),
             'text': p.value.toString(),
             'value': p.value,
             'weight': Number(p.weight) || 1
@@ -44,12 +56,10 @@ document.addEventListener('firebase-ready', () => {
             return;
         }
 
-        // --- NEW SIZING ALGORITHM TO PREVENT TINY SEGMENTS ---
         const MIN_DEGREES_PER_SEGMENT = 15;
         const totalMinimumDegrees = numSegments * MIN_DEGREES_PER_SEGMENT;
 
         if (totalMinimumDegrees >= 360) {
-            // If minimums take up the whole wheel, just make all segments equal.
             const equalSize = 360 / numSegments;
             segments.forEach(seg => seg.size = equalSize);
         } else {
@@ -62,31 +72,29 @@ document.addEventListener('firebase-ready', () => {
                     seg.size = MIN_DEGREES_PER_SEGMENT + weightedPortion;
                 });
             } else {
-                // Fallback if all weights are 0, make them equal.
                 const equalSize = 360 / numSegments;
                 segments.forEach(seg => seg.size = equalSize);
             }
         }
-        // --- END OF NEW SIZING ALGORITHM ---
 
         if (wheel) {
-            // If wheel exists, just update its properties
             wheel.numSegments = segments.length;
             wheel.segments = segments;
             wheel.updateSegmentSizes();
             wheel.draw(true);
         } else {
-            // Create the wheel for the first time
             wheel = new Winwheel({
                 'canvasId': 'spin-canvas',
                 'numSegments': segments.length,
                 'segments': segments,
-                'textFontSize': 24,
+                'textFontSize': 22,
                 'textFontFamily': 'Almarai, sans-serif',
                 'textFontWeight': 'bold',
                 'textFillStyle': '#ffffff',
                 'textMargin': 15,
-                'innerRadius': 30,
+                'innerRadius': 35,
+                'lineWidth': 4,
+                'strokeStyle': '#1a1236',
                 'animation': {
                     'type': 'spinToStop',
                     'duration': 8,
@@ -98,13 +106,10 @@ document.addEventListener('firebase-ready', () => {
         }
     }
 
-    // A single, centralized function to update all UI elements
     function updateUI(newState) {
-        if (!settings) return; // Don't do anything if settings aren't loaded
+        if (!settings) return;
 
         userState = newState || { freeAttempts: 0, purchasedAttempts: 0, lastFreeUpdateTimestamp: 0 };
-
-        // Handle Free Spins UI
         if (ui.freeAttemptsText) ui.freeAttemptsText.textContent = `لديك ${userState.freeAttempts || 0} محاولات مجانية.`;
 
         const cooldownSeconds = (settings.cooldownHours || 24) * 3600;
@@ -113,7 +118,7 @@ document.addEventListener('firebase-ready', () => {
 
         if ((userState.freeAttempts || 0) > 0) {
             if (ui.spinTimerContainer) ui.spinTimerContainer.style.display = 'none';
-            if (ui.spinBtn) ui.spinBtn.disabled = false;
+            if (ui.spinBtn) ui.spinBtn.disabled = isSpinning; // لا تقم بتمكين الزر إذا كانت العجلة تدور
         } else {
             if (ui.spinBtn) ui.spinBtn.disabled = true;
             if (timeRemaining > 0) {
@@ -121,15 +126,13 @@ document.addEventListener('firebase-ready', () => {
                 startTimer(timeRemaining);
             } else {
                 if (ui.spinTimerContainer) ui.spinTimerContainer.style.display = 'none';
-                // User might need a page refresh or API call to get new spins
             }
         }
 
-        // Handle Purchased Spins UI
         const purchasedCount = userState.purchasedAttempts || 0;
         if (ui.purchasedSpinsCard) ui.purchasedSpinsCard.style.display = purchasedCount > 0 ? 'block' : 'none';
         if (ui.purchasedAttemptsText) ui.purchasedAttemptsText.textContent = `لديك ${purchasedCount} محاولات مشتراة.`;
-        if (ui.usePurchasedBtn) ui.usePurchasedBtn.disabled = purchasedCount < 1;
+        if (ui.usePurchasedBtn) ui.usePurchasedBtn.disabled = (purchasedCount < 1) || isSpinning;
     }
 
     function startTimer(duration) {
@@ -139,8 +142,6 @@ document.addEventListener('firebase-ready', () => {
             if (--timer < 0) {
                 clearInterval(timerInterval);
                 if (ui.spinTimerContainer) ui.spinTimerContainer.style.display = 'none';
-                if (ui.spinBtn) ui.spinBtn.disabled = false;
-                // Maybe trigger a state check API call here
             } else {
                 const h = Math.floor(timer / 3600).toString().padStart(2, '0');
                 const m = Math.floor((timer % 3600) / 60).toString().padStart(2, '0');
@@ -150,15 +151,32 @@ document.addEventListener('firebase-ready', () => {
         }, 1000);
     }
 
-    // <<< --- التعديل الجذري هنا --- >>>
-    async function performSpin(attemptType, button) {
-        if (!wheel || button.disabled) return;
+    function resetWheel() {
+        if (!wheel) return;
+        wheel.stopAnimation(false);
+        wheel.rotationAngle = 0;
+        wheel.draw();
+        // <<< بداية التعديل: تصفير حالة الدوران وتحديث واجهة الأزرار >>>
+        isSpinning = false;
+        updateUI(userState);
+        // <<< نهاية التعديل >>>
+    }
 
+    async function performSpin(attemptType, button) {
+        if (!wheel || button.disabled || isSpinning) return;
+
+        // <<< بداية التعديل: تحديث حالة الدوران وتعطيل الأزرار >>>
+        isSpinning = true;
+        ui.spinBtn.disabled = true;
+        ui.usePurchasedBtn.disabled = true;
+        // <<< نهاية التعديل >>>
+
+        resetWheel(); // نترك هذه لضمان تصفير الزاوية قبل البدء
         button.disabled = true;
+
         const apiEndpoint = `/api/spin_wheel/initiate_spin/${attemptType}`;
 
         try {
-            // Step 1: Call server to get the winning prize and segment
             const response = await fetch(apiEndpoint, { method: 'POST' });
             const data = await response.json();
 
@@ -166,15 +184,10 @@ document.addEventListener('firebase-ready', () => {
                 throw new Error(data.message || 'فشل في بدء الدوران من الخادم.');
             }
 
-            // Step 2: Server has confirmed the prize. Now we animate.
             const { prize, winningSegmentIndex } = data;
-
-            // Store the confirmed prize to be shown in the final popup.
             wheel.spinResultPrize = prize;
 
-            // Calculate a random angle *within* the server-specified winning segment.
             const stopAt = wheel.getRandomForSegment(winningSegmentIndex);
-
             wheel.animation.stopAngle = stopAt;
             if (ui.spinWheelModal) ui.spinWheelModal.classList.add('show');
 
@@ -182,14 +195,11 @@ document.addEventListener('firebase-ready', () => {
 
         } catch (error) {
             Swal.fire({ icon: 'error', title: 'فشل!', text: error.message });
-            button.disabled = false; // Re-enable button on failure
+            resetWheel(); // إعادة تصفير في حالة الفشل
         }
     }
 
     async function handleSpinFinished(indicatedSegment) {
-        // The prize has already been determined and awarded by the server.
-        // This function is now just for showing the result and cleaning up.
-
         const prizeWon = wheel.spinResultPrize;
 
         await Swal.fire({
@@ -200,36 +210,34 @@ document.addEventListener('firebase-ready', () => {
         });
 
         if (ui.spinWheelModal) ui.spinWheelModal.classList.remove('show');
-        resetButtons();
-        wheel.stopAnimation(false);
-        wheel.rotationAngle = 0;
-        wheel.draw();
-
-        // Clear the stored prize after showing it
+        resetWheel();
         delete wheel.spinResultPrize;
-    }
-    // <<< --- نهاية التعديل الجذري --- >>>
-
-    function resetButtons() {
-        // This function will be called by updateUI now, which is triggered by the database listener
-        // But we can call it manually after a spin for immediate feedback.
-        if (!userState) return;
-        if (ui.spinBtn) ui.spinBtn.disabled = (userState.freeAttempts || 0) < 1;
-        if (ui.usePurchasedBtn) ui.usePurchasedBtn.disabled = (userState.purchasedAttempts || 0) < 1;
-    }
-
-    function getRandomColor() {
-        const letters = '0123456789ABCDEF';
-        let color = '#';
-        for (let i = 0; i < 6; i++) {
-            color += letters[Math.floor(Math.random() * 16)];
-        }
-        return color;
     }
 
     ui.spinBtn?.addEventListener('click', () => performSpin('free', ui.spinBtn));
     ui.usePurchasedBtn?.addEventListener('click', () => performSpin('purchased', ui.usePurchasedBtn));
 
-    // Expose functions to be called from user_view.js
+    // <<< بداية الإضافة: معالج أحداث مخصص لنافذة العجلة >>>
+    if (ui.spinWheelModal) {
+        ui.spinWheelModal.addEventListener('click', (e) => {
+            // الإغلاق عند الضغط على زر X
+            if (e.target.classList.contains('custom-close-btn')) {
+                if (isSpinning) {
+                    resetWheel(); // أوقف الدوران وصفّر الحالة
+                }
+                ui.spinWheelModal.classList.remove('show');
+                return;
+            }
+            // الإغلاق عند الضغط على الخلفية (فقط إذا كانت العجلة لا تدور)
+            if (e.target === ui.spinWheelModal) {
+                if (!isSpinning) {
+                    ui.spinWheelModal.classList.remove('show');
+                }
+            }
+        });
+    }
+    // <<< نهاية الإضافة >>>
+
+
     window.spinWheelApp = { reInit, updateUI };
 });

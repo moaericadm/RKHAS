@@ -13,8 +13,6 @@ from firebase_admin import auth, db
 from .utils import check_user_status, login_required
 
 # --- تهيئة Pyrebase للمصادقة ---
-# يتم استخدام هذه المكتبة خصيصاً للتفاعل مع خدمات مصادقة Firebase (مثل تسجيل الدخول بكلمة المرور)
-# التي لا يوفرها Admin SDK مباشرة.
 try:
     firebase_config = {
         "apiKey": os.getenv("FIREBASE_API_KEY"),
@@ -32,7 +30,7 @@ except Exception as e:
     print(f"!!! CRITICAL: Pyrebase initialization failed: {e}", file=sys.stderr)
     pyrebase_auth = None
 
-
+# <<< --- هذا هو التصحيح: إزالة البادئة من تعريف المخطط --- >>>
 bp = Blueprint('auth', __name__)
 
 @bp.route('/login', methods=('GET', 'POST'))
@@ -44,17 +42,13 @@ def login_page():
         email = request.form.get('email')
         password = request.form.get('password')
 
-        # <<< --- هذا هو التصحيح --- >>>
-        # سنستخدم الآن pyrebase للتحقق من كلمة المرور
         if not pyrebase_auth:
             return jsonify(success=False, message="خدمة المصادقة غير مهيأة بشكل صحيح."), 503
 
         try:
-            # محاولة تسجيل الدخول باستخدام البريد وكلمة المرور
             user_session = pyrebase_auth.sign_in_with_email_and_password(email, password)
             uid = user_session['localId']
 
-            # إذا نجح تسجيل الدخول، نكمل باقي الخطوات كالمعتاد
             status, user_data = check_user_status(uid)
 
             if status == 'banned':
@@ -71,7 +65,6 @@ def login_page():
             session['email'] = email
             session['role'] = user_data.get('role', 'user')
             
-            # تحديث حالة الاتصال
             db.reference(f'online_visitors/{uid}').set({
                 'name': session['name'],
                 'online_since': int(time.time()),
@@ -81,10 +74,8 @@ def login_page():
             return jsonify(success=True, redirect_url=url_for('views.home'))
         
         except Exception as e:
-            # التعامل مع أخطاء تسجيل الدخول (مثل كلمة مرور خاطئة)
             print(f"Login attempt failed for {email}: {e}", file=sys.stderr)
             return jsonify(success=False, message="بيانات الدخول غير صحيحة. يرجى التأكد من البريد الإلكتروني وكلمة المرور.")
-        # <<< --- نهاية التصحيح --- >>>
     
     # GET Request
     announcements_raw = db.reference('site_settings/announcements').get()
@@ -92,7 +83,7 @@ def login_page():
     return render_template('login.html', announcements=announcements)
 
 
-# ... (باقي الملف يبقى كما هو)
+# ... (باقي الدوال تبقى كما هي)
 @bp.route('/register', methods=('GET', 'POST'))
 def register_page():
     if request.method == 'POST':
