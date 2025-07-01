@@ -662,6 +662,16 @@ function initializeUserView() {
     function handleUserMessage(snapshot) { const getProcessedIds = () => new Set(JSON.parse(sessionStorage.getItem('processedMessageIds') || '[]')); const setProcessedIds = ids => sessionStorage.setItem('processedMessageIds', JSON.stringify([...ids])); const processedIds = getProcessedIds(), messageId = snapshot.key; if (snapshot.val()?.text && !processedIds.has(messageId)) { processedIds.add(messageId); setProcessedIds(processedIds); Swal.fire({ title: 'رسالة من الإدارة!', text: snapshot.val().text, icon: 'info', confirmButtonText: 'تم الاطلاع' }).then(() => snapshot.ref.remove()); } }
 
     async function handleAvatarOrNudgeClick(element) {
+        // <<< بداية التعديل >>>
+        if (element.id === 'user-avatar-preview') {
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(ui.avatarChooserModal);
+            if (modalInstance) {
+                modalInstance.show();
+            }
+            return; // Stop further execution
+        }
+        // <<< نهاية التعديل >>>
+
         const targetName = element.dataset.targetName;
         const targetType = element.dataset.targetType;
         const avatarUrl = element.src || DEFAULT_AVATAR_URI;
@@ -673,12 +683,10 @@ function initializeUserView() {
             return;
         }
 
-        // *** بداية التعديل: تعديل منطق التفاعل ***
         const isOnline = targetUid && onlineUserIds.has(targetUid);
         const canInteract = (targetType === 'crawler') || (isOnline && targetType === 'user');
 
         if (canInteract) {
-            // *** نهاية التعديل ***
             const ownedNudgesSnap = await db.ref(`user_nudges/${currentUserId}/owned`).get();
             let nudgeSelectionHtml = '';
 
@@ -851,7 +859,6 @@ function initializeUserView() {
         });
     }
 
-    // *** بداية التعديل: تعديل شامل للدالة ***
     function displayNudge(nudge, isPublic) {
         const senderAvatar = nudge.sender_avatar || DEFAULT_AVATAR_URI;
         const senderName = nudge.sender_name || 'مستخدم';
@@ -861,7 +868,6 @@ function initializeUserView() {
             const targetRow = document.getElementById(nudge.target_element_id);
             if (!targetRow) return;
 
-            // استهداف الخلية الصحيحة باستخدام الـ class
             const targetCell = targetRow.querySelector('.crawler-name-cell');
             if (!targetCell) return;
 
@@ -911,7 +917,6 @@ function initializeUserView() {
             }).showToast();
         }
     }
-    // *** نهاية التعديل ***
 
     initializeApp();
 }
