@@ -250,7 +250,6 @@ def save_spin_wheel_settings():
         return jsonify(success=True)
     except (ValueError, TypeError): return jsonify(success=False, message="بيانات غير صالحة."), 400
 
-# <<< بداية التعديل >>>
 @bp.route('/settings/contest', methods=['POST'])
 @admin_required
 def save_contest_settings():
@@ -280,7 +279,6 @@ def save_contest_settings():
     except Exception as e:
         print(f"!!! Save Contest Settings Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
-# <<< نهاية التعديل >>>
 
 @bp.route('/shop/add_product', methods=['POST'])
 @admin_required
@@ -500,3 +498,51 @@ def save_investment_settings():
     except Exception as e:
         print(f"!!! Save Investment Settings Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
+
+# --- START: NEW EDIT ENDPOINTS ---
+@bp.route('/shop/edit_product/<pid>', methods=['POST'])
+@admin_required
+def edit_product(pid):
+    if not pid: return jsonify(success=False, message="معرف المنتج مفقود."), 400
+    try:
+        sp = int(request.form.get('sp_amount')); cc = int(request.form.get('cc_price'))
+        if sp <= 0 or cc <= 0: raise ValueError
+        db.reference(f'site_settings/shop_products/{pid}').update({'sp_amount': sp, 'cc_price': cc});
+        return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="الكميات والأسعار يجب أن تكون أرقاماً موجبة."), 400
+
+@bp.route('/shop/edit_spin_product/<pid>', methods=['POST'])
+@admin_required
+def edit_spin_product(pid):
+    if not pid: return jsonify(success=False, message="معرف المنتج مفقود."), 400
+    try:
+        att = int(request.form.get('attempts_amount')); sp = int(request.form.get('sp_price'))
+        if att <= 0 or sp <= 0: raise ValueError
+        db.reference(f'site_settings/shop_products_spins/{pid}').update({'attempts_amount': att, 'sp_price': sp});
+        return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="الكميات والأسعار يجب أن تكون أرقاماً موجبة."), 400
+
+@bp.route('/shop/edit_points_product/<pid>', methods=['POST'])
+@admin_required
+def edit_points_product(pid):
+    if not pid: return jsonify(success=False, message="معرف المنتج مفقود."), 400
+    try:
+        updates = {"points_amount": int(request.form.get('points_amount')), "sp_price": int(request.form.get('sp_price')), "daily_limit": int(request.form.get('daily_limit'))}
+        if updates["points_amount"] <= 0 or updates["sp_price"] <= 0 or updates["daily_limit"] <= 0: raise ValueError
+        db.reference(f'site_settings/shop_products_points/{pid}').update(updates);
+        return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="بيانات المنتج غير صالحة."), 400
+
+@bp.route('/shop/edit_avatar/<pid>', methods=['POST'])
+@admin_required
+def edit_avatar(pid):
+    if not pid: return jsonify(success=False, message="معرف الأفاتار مفقود."), 400
+    try:
+        name = request.form.get('avatar_name').strip()
+        price_personal = int(request.form.get('price_sp_personal'))
+        price_gift = int(request.form.get('price_sp_gift'))
+        if not name or price_personal <= 0 or price_gift <= 0: raise ValueError
+        db.reference(f'site_settings/shop_avatars/{pid}').update({'name': name, 'price_sp_personal': price_personal, 'price_sp_gift': price_gift})
+        return jsonify(success=True)
+    except (ValueError, TypeError): return jsonify(success=False, message="بيانات الأفاتار غير صالحة."), 400
+# --- END: NEW EDIT ENDPOINTS ---

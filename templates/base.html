@@ -12,6 +12,9 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
 
+    <!-- <<< بداية التعديل: إضافة مكتبة Toastify >>> -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <!-- <<< نهاية التعديل >>> -->
     <!-- Main Styles -->
     <style>
         :root {
@@ -201,6 +204,9 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
+    <!-- <<< بداية التعديل: إضافة مكتبة Toastify >>> -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <!-- <<< نهاية التعديل >>> -->
     <!-- Main Application Scripts -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
@@ -295,6 +301,11 @@
     });
     </script>
 
+    <!-- <<< بداية التعديل: إضافة ملف الإشعارات الجديد >>> -->
+    {% if session.logged_in %}
+    <script src="{{ url_for('static', filename='js/live_notifications.js') }}" defer></script>
+    {% endif %}
+    <!-- <<< نهاية التعديل >>> -->
     {% block scripts %}{% endblock %}
 </body>
 </html>

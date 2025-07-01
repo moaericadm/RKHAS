@@ -194,7 +194,10 @@ function renderShopAvatars(data) {
             <td><img src="${avatar.image_url}" alt="${avatar.name}" class="avatar-preview"></td>
             <td>${avatar.name}</td>
             <td>${formatNumber(avatar.price_sp_personal || 0)} / ${formatNumber(avatar.price_sp_gift || 0)} SP</td>
-            <td><button class="btn btn-sm btn-outline-danger" onclick="adminActions.deleteAvatar('${id}')"><i class="bi bi-trash"></i></button></td>
+            <td>
+                <button class="btn btn-sm btn-outline-info" onclick="adminActions.editAvatar('${id}', '${avatar.name}', '${avatar.price_sp_personal || 0}', '${avatar.price_sp_gift || 0}')"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm btn-outline-danger ms-1" onclick="adminActions.deleteAvatar('${id}')"><i class="bi bi-trash"></i></button>
+            </td>
         </tr>
     `).join('') || '<tr><td colspan="4" class="text-center text-muted p-3">لا توجد أفاتارات.</td></tr>';
 }
@@ -234,12 +237,22 @@ async function handleAddCandidate(e) {
     }
 }
 
-const renderListItem = (id, text, deleteFnName) => `<li class="list-group-item d-flex justify-content-between align-items-center">${text}<button class="btn btn-sm btn-outline-danger" onclick="window.adminActions.${deleteFnName}('${id}')"><i class="bi bi-trash"></i></button></li>`;
-const renderShopProducts = data => ui.shopProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItem(id, `حزمة ${formatNumber(p.sp_amount)} SP مقابل ${formatNumber(p.cc_price)} CC`, 'deleteProduct')).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
-const renderShopSpinProducts = data => ui.shopSpinProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItem(id, `${formatNumber(p.attempts_amount)} محاولات مقابل ${formatNumber(p.sp_price)} SP`, 'deleteSpinProduct')).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
-const renderShopPointsProducts = data => ui.shopPointsProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItem(id, `منتج ${p.type === 'raise' ? 'رفع' : 'إسقاط'} (${formatNumber(p.points_amount)} نقطة) / ${formatNumber(p.sp_price)} SP`, 'deletePointsProduct')).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
-const renderAnnouncements = data => ui.announcementsList.innerHTML = Object.entries(data).map(([id, ann]) => renderListItem(id, `"${ann.text}"`, 'deleteAnnouncement')).join('') || '<li class="list-group-item text-muted">لا توجد إعلانات.</li>';
-const renderHonorRoll = data => ui.honorRollList.innerHTML = Object.entries(data).map(([id, item]) => renderListItem(id, item.name, 'deleteFromHonorRoll')).join('') || '<li class="list-group-item text-muted">القائمة فارغة.</li>';
+const renderListItemWithEdit = (id, text, deleteFnName, editFnName, editArgs) => {
+    const editButton = editFnName ? `<button class="btn btn-sm btn-outline-info me-1" onclick="window.adminActions.${editFnName}(${editArgs})"><i class="bi bi-pencil"></i></button>` : '';
+    return `<li class="list-group-item d-flex justify-content-between align-items-center">
+                ${text}
+                <div>
+                    ${editButton}
+                    <button class="btn btn-sm btn-outline-danger" onclick="window.adminActions.${deleteFnName}('${id}')"><i class="bi bi-trash"></i></button>
+                </div>
+            </li>`;
+};
+
+const renderShopProducts = data => ui.shopProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItemWithEdit(id, `حزمة ${formatNumber(p.sp_amount)} SP مقابل ${formatNumber(p.cc_price)} CC`, 'deleteProduct', 'editProduct', `'${id}', ${p.sp_amount}, ${p.cc_price}`)).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
+const renderShopSpinProducts = data => ui.shopSpinProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItemWithEdit(id, `${formatNumber(p.attempts_amount)} محاولات مقابل ${formatNumber(p.sp_price)} SP`, 'deleteSpinProduct', 'editSpinProduct', `'${id}', ${p.attempts_amount}, ${p.sp_price}`)).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
+const renderShopPointsProducts = data => ui.shopPointsProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItemWithEdit(id, `منتج ${p.type === 'raise' ? 'رفع' : 'إسقاط'} (${formatNumber(p.points_amount)} نقطة) / ${formatNumber(p.sp_price)} SP`, 'deletePointsProduct', 'editPointsProduct', `'${id}', ${p.points_amount}, ${p.sp_price}, ${p.daily_limit}`)).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
+const renderAnnouncements = data => ui.announcementsList.innerHTML = Object.entries(data).map(([id, ann]) => renderListItemWithEdit(id, `"${ann.text}"`, 'deleteAnnouncement')).join('') || '<li class="list-group-item text-muted">لا توجد إعلانات.</li>';
+const renderHonorRoll = data => ui.honorRollList.innerHTML = Object.entries(data).map(([id, item]) => renderListItemWithEdit(id, item.name, 'deleteFromHonorRoll')).join('') || '<li class="list-group-item text-muted">القائمة فارغة.</li>';
 
 function renderUserTable() {
     if (!ui.tableBody) return;
@@ -366,5 +379,43 @@ window.adminActions = {
             }, 'تم تحديث المحفظة بنجاح.');
         }
     },
-    editPurchasedAttempts: async (id, name) => { const state = (await db.ref(`user_spin_state/${id}`).once('value')).val() || {}; const current = state.purchasedAttempts || 0; const { value: newVal } = await Swal.fire({ title: `تعديل محاولات ${name}`, input: 'number', inputValue: current }); if (newVal !== undefined && newVal !== null) { apiCall('/api/admin/update_purchased_attempts', { method: 'POST', body: new URLSearchParams({ user_id: id, attempts: newVal }) }, 'تم تحديث الرصيد.') } }
+    editPurchasedAttempts: async (id, name) => { const state = (await db.ref(`user_spin_state/${id}`).once('value')).val() || {}; const current = state.purchasedAttempts || 0; const { value: newVal } = await Swal.fire({ title: `تعديل محاولات ${name}`, input: 'number', inputValue: current }); if (newVal !== undefined && newVal !== null) { apiCall('/api/admin/update_purchased_attempts', { method: 'POST', body: new URLSearchParams({ user_id: id, attempts: newVal }) }, 'تم تحديث الرصيد.') } },
+    editProduct: (id, sp, cc) => {
+        Swal.fire({
+            title: 'تعديل منتج SP',
+            html: `<input id="swal-sp" class="swal2-input" placeholder="كمية SP" value="${sp}" type="number"><input id="swal-cc" class="swal2-input" placeholder="سعر CC" value="${cc}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            preConfirm: () => ({ sp_amount: document.getElementById('swal-sp').value, cc_price: document.getElementById('swal-cc').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') });
+    },
+    editSpinProduct: (id, attempts, sp) => {
+        Swal.fire({
+            title: 'تعديل منتج المحاولات',
+            html: `<input id="swal-attempts" class="swal2-input" placeholder="عدد المحاولات" value="${attempts}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            preConfirm: () => ({ attempts_amount: document.getElementById('swal-attempts').value, sp_price: document.getElementById('swal-sp').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_spin_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') });
+    },
+    editPointsProduct: (id, points, sp, limit) => {
+        Swal.fire({
+            title: 'تعديل منتج الأسهم',
+            html: `<input id="swal-points" class="swal2-input" placeholder="كمية النقاط" value="${points}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number"><input id="swal-limit" class="swal2-input" placeholder="الحد اليومي" value="${limit}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            preConfirm: () => ({ points_amount: document.getElementById('swal-points').value, sp_price: document.getElementById('swal-sp').value, daily_limit: document.getElementById('swal-limit').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_points_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') });
+    },
+    editAvatar: (id, name, personalPrice, giftPrice) => {
+        Swal.fire({
+            title: 'تعديل بيانات الأفاتار',
+            html: `<input id="swal-name" class="swal2-input" placeholder="اسم الأفاتار" value="${name}">
+                   <input id="swal-personal" class="swal2-input" placeholder="السعر الشخصي (SP)" value="${personalPrice}" type="number">
+                   <input id="swal-gift" class="swal2-input" placeholder="سعر الهدية (SP)" value="${giftPrice}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            preConfirm: () => ({ avatar_name: document.getElementById('swal-name').value, price_sp_personal: document.getElementById('swal-personal').value, price_sp_gift: document.getElementById('swal-gift').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_avatar/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل الأفاتار بنجاح.') });
+    }
 };

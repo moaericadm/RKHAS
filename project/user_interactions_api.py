@@ -1,4 +1,5 @@
-﻿import time
+﻿# --- START OF FILE project/user_interactions_api.py ---
+import time
 import re
 import sys
 from datetime import datetime, timedelta
@@ -19,11 +20,40 @@ BANNED_WORDS_PATTERN = re.compile(
 def is_abusive(text):
     return bool(BANNED_WORDS_PATTERN.search(text)) if text else False
 
-# <<< بداية الإضافة >>>
+def _log_public_notification(text):
+    """
+    دالة مساعدة لبث إشعار عام ومؤقت.
+    تمنع تسجيل نشاطات الأدمن.
+    """
+    # التحقق من أن المستخدم ليس أدمن
+    if session.get('role') == 'admin':
+        return
+
+    user_id = session.get('user_id')
+    user_name = session.get('name')
+    if not all([user_id, user_name]):
+        return
+    
+    try:
+        user_avatar = db.reference(f'registered_users/{user_id}/current_avatar').get()
+        # استخدام المسار المؤقت الجديد للإشعارات
+        notification_ref = db.reference('live_feed')
+        notification_ref.push({
+            'user_id': user_id,
+            'user_name': user_name,
+            'user_avatar': user_avatar or '',
+            'text': text,
+            'timestamp': int(time.time())
+        })
+    except Exception as e:
+        print(f"!!! Live Feed Broadcast Error: {e}", file=sys.stderr)
+
+
 @bp.route('/contest/vote', methods=['POST'])
 @login_required
 def vote_in_contest():
     user_id = session.get('user_id')
+    user_name = session.get('name')
     voted_for = request.form.get('voted_for_name')
 
     if not voted_for:
@@ -38,20 +68,17 @@ def vote_in_contest():
     if voted_for not in [contest_data.get('contestant1_name'), contest_data.get('contestant2_name')]:
         return jsonify(success=False, message="لا يمكنك التصويت لزاحف ليس في المنافسة الحالية."), 400
 
-    # التحقق من أن المستخدم لم يصوت من قبل في أي من الطرفين
     if (contest_ref.child(f"votes/{contest_data.get('contestant1_name')}/{user_id}").get() or
             contest_ref.child(f"votes/{contest_data.get('contestant2_name')}/{user_id}").get()):
         return jsonify(success=False, message="لقد قمت بالتصويت في هذه المنافسة بالفعل."), 409
     
     try:
-        # تسجيل التصويت
         contest_ref.child(f"votes/{voted_for}/{user_id}").set(True)
+        _log_public_notification(f"صوّت لـِ '{voted_for}' في منافسة الشعبية.")
         return jsonify(success=True, message="تم تسجيل صوتك بنجاح!")
     except Exception as e:
         print(f"!!! Contest Vote Error for user {user_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء تسجيل صوتك."), 500
-# <<< نهاية الإضافة >>>
-
 
 @bp.route('/shop/buy_product', methods=['POST'])
 @login_required
@@ -75,6 +102,7 @@ def buy_shop_product():
             wallet['sp'] = wallet.get('sp', 0) + sp_amount
             return wallet
         user_wallet_ref.transaction(transact_purchase)
+        _log_public_notification(f"اشترى {sp_amount:,} SP من المتجر.")
         return jsonify(success=True, message=f"تم بنجاح شراء {sp_amount:,} SP!")
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
@@ -104,6 +132,7 @@ def buy_spin_attempt():
             return jsonify(success=False, message=f"لا يمكنك شراء المزيد. الحد الأقصى للمحاولات المشتراة هو {purchase_limit} محاولة."), 403
         wallet_ref.child('sp').set(current_wallet_sp - sp_price)
         user_spin_state_ref.child('purchasedAttempts').transaction(lambda current: (current or 0) + attempts_to_add)
+        _log_public_notification(f"اشترى {attempts_to_add} محاولة/محاولات إضافية لعجلة الحظ.")
         return jsonify(success=True, message=f"تم بنجاح شراء {attempts_to_add} محاولة دوران إضافية!")
     except Exception as e:
         print(f"!!! Atomic Spin Purchase Error for user {user_id}: {e}", file=sys.stderr)
@@ -162,6 +191,9 @@ def buy_points_product():
             'user_name': user_name
         })
         
+        action_text = "رفع أسهم" if product.get('type') == 'raise' else "أسقط أسهم"
+        _log_public_notification(f"{action_text} '{target_crawler_name}'.")
+        
         return jsonify(success=True, message="تمت العملية بنجاح!")
         
     except Exception as e:
@@ -187,6 +219,8 @@ def like_user(username):
             'user_id': session.get('user_id'), 
             'user_name': session.get('name')
         })
+        _log_public_notification(f"أبدى إعجابه بـ '{username}'.")
+
     return jsonify(success=True)
 
 
@@ -275,8 +309,10 @@ def invest_in_crawler():
         new_val = sp_to_invest * points_at_investment
         avg_points = (old_val + new_val) / total_sp if total_sp > 0 else points_at_investment
         investment_ref.update({'invested_sp': total_sp, 'points_at_investment': round(avg_points), 'last_updated_timestamp': now})
+        _log_public_notification(f"عزّز استثماره في '{crawler_name}' بمبلغ {sp_to_invest:,.2f} SP.")
     else:
         investment_ref.set({'invested_sp': sp_to_invest, 'points_at_investment': points_at_investment, 'timestamp': now, 'last_updated_timestamp': now})
+        _log_public_notification(f"استثمر في '{crawler_name}' بمبلغ {sp_to_invest:,.2f} SP.")
     
     db.reference('investment_log').push({'investor_id': user_id, 'investor_name': user_name, 'target_name': crawler_name, 'action': 'invest', 'sp_amount': sp_to_invest, 'timestamp': now})
     
@@ -329,6 +365,7 @@ def sell_investment():
             'target_name': crawler_name, 'action': 'sell', 
             'sp_amount': sp_to_return, 'timestamp': int(time.time())
         })
+        _log_public_notification(f"باع أسهمه في '{crawler_name}' مقابل {sp_to_return:,.2f} SP.")
         return jsonify(success=True, message=f"تم بيع الاستثمار بنجاح! لقد حصلت على {sp_to_return:.2f} SP.")
     except Exception as e:
         print(f"!!! Sell Error: {e}", file=sys.stderr)
@@ -357,13 +394,16 @@ def buy_avatar():
             return current_sp - price_sp
         wallet_ref.child('sp').transaction(transact_avatar_purchase)
         user_avatar_ref.set({'purchased_at': int(time.time())})
+        
+        log_text = f"اشترى أفاتار '{avatar_data.get('name')}'."
         db.reference('activity_log').push({
             'type': 'purchase',
-            'text': f"'{session.get('name')}' اشترى أفاتار '{avatar_data.get('name')}'.",
+            'text': f"'{session.get('name')}' {log_text}",
             'timestamp': int(time.time()),
             'user_id': user_id,
             'user_name': session.get('name')
         })
+        _log_public_notification(log_text)
         return jsonify(success=True, message=f"تم شراء أفاتار '{avatar_data.get('name')}' بنجاح!")
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
@@ -444,3 +484,4 @@ def submit_gift_request():
     except Exception as e:
         print(f"!!! CRITICAL: Submit Gift Request Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ كارثي في الخادم أثناء تقديم الطلب."), 500
+# --- END OF FILE project/user_interactions_api.py ---
