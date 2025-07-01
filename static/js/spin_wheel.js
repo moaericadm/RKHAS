@@ -13,14 +13,14 @@ document.addEventListener('firebase-ready', () => {
         purchasedAttemptsText: document.getElementById('purchased-attempts-text'),
         spinTimerContainer: document.getElementById('spin-timer-container'),
         spinTimer: document.getElementById('spin-timer'),
-        spinWheelModal: document.getElementById('spinWheelModal'),
+        spinWheelModalElement: document.getElementById('spinWheelModal'),
         spinCanvas: document.getElementById('spin-canvas')
     };
 
+    const spinWheelModal = ui.spinWheelModalElement ? new bootstrap.Modal(ui.spinWheelModalElement) : null;
+
     let wheel, settings, userState, timerInterval;
-    // <<< بداية الإضافة: متغير لتتبع حالة الدوران >>>
     let isSpinning = false;
-    // <<< نهاية الإضافة >>>
 
     const THEME_COLORS = ['#9f7aea', '#00f2ff', '#ff00f3', '#4fd1c5', '#ed64a6', '#63b3ed', '#f6ad55', '#718096'];
     let colorIndex = 0;
@@ -118,7 +118,7 @@ document.addEventListener('firebase-ready', () => {
 
         if ((userState.freeAttempts || 0) > 0) {
             if (ui.spinTimerContainer) ui.spinTimerContainer.style.display = 'none';
-            if (ui.spinBtn) ui.spinBtn.disabled = isSpinning; // لا تقم بتمكين الزر إذا كانت العجلة تدور
+            if (ui.spinBtn) ui.spinBtn.disabled = isSpinning;
         } else {
             if (ui.spinBtn) ui.spinBtn.disabled = true;
             if (timeRemaining > 0) {
@@ -156,26 +156,22 @@ document.addEventListener('firebase-ready', () => {
         wheel.stopAnimation(false);
         wheel.rotationAngle = 0;
         wheel.draw();
-        // <<< بداية التعديل: تصفير حالة الدوران وتحديث واجهة الأزرار >>>
         isSpinning = false;
         updateUI(userState);
-        // <<< نهاية التعديل >>>
     }
 
+    // *** بداية التعديل: تعديل دالة بدء الدوران ***
     async function performSpin(attemptType, button) {
         if (!wheel || button.disabled || isSpinning) return;
 
-        // <<< بداية التعديل: تحديث حالة الدوران وتعطيل الأزرار >>>
         isSpinning = true;
         ui.spinBtn.disabled = true;
         ui.usePurchasedBtn.disabled = true;
-        // <<< نهاية التعديل >>>
 
-        resetWheel(); // نترك هذه لضمان تصفير الزاوية قبل البدء
         button.disabled = true;
 
+        // الخطوة 1: طلب بدء الدوران من الخادم
         const apiEndpoint = `/api/spin_wheel/initiate_spin/${attemptType}`;
-
         try {
             const response = await fetch(apiEndpoint, { method: 'POST' });
             const data = await response.json();
@@ -184,13 +180,21 @@ document.addEventListener('firebase-ready', () => {
                 throw new Error(data.message || 'فشل في بدء الدوران من الخادم.');
             }
 
-            const { prize, winningSegmentIndex } = data;
-            wheel.spinResultPrize = prize;
+            if (spinWheelModal) {
+                spinWheelModal.show();
+            }
 
+            // إعادة تصفير العجلة قبل الدوران الفعلي
+            resetWheel();
+            isSpinning = true; // إعادة تفعيل القفل بعد التصفير
+            ui.spinBtn.disabled = true;
+            ui.usePurchasedBtn.disabled = true;
+
+
+            const winningSegmentIndex = data.winningSegmentIndex;
             const stopAt = wheel.getRandomForSegment(winningSegmentIndex);
-            wheel.animation.stopAngle = stopAt;
-            if (ui.spinWheelModal) ui.spinWheelModal.classList.add('show');
 
+            wheel.animation.stopAngle = stopAt;
             wheel.startAnimation();
 
         } catch (error) {
@@ -198,46 +202,60 @@ document.addEventListener('firebase-ready', () => {
             resetWheel(); // إعادة تصفير في حالة الفشل
         }
     }
+    // *** نهاية التعديل ***
 
+    // *** بداية التعديل: تعديل دالة انتهاء الدوران ***
     async function handleSpinFinished(indicatedSegment) {
-        const prizeWon = wheel.spinResultPrize;
+        const prizeWon = indicatedSegment.text; // القيمة موجودة كنص في الشريحة
 
-        await Swal.fire({
-            icon: 'success',
-            title: 'مبروك!',
-            html: `لقد فزت بـ <strong>${prizeWon.toLocaleString()}</strong> CC!`,
-            confirmButtonText: 'رائع!'
-        });
+        // الخطوة 2: المطالبة بالجائزة من الخادم
+        try {
+            const response = await fetch('/api/spin_wheel/claim_prize', { method: 'POST' });
+            const data = await response.json();
 
-        if (ui.spinWheelModal) ui.spinWheelModal.classList.remove('show');
-        resetWheel();
-        delete wheel.spinResultPrize;
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || "فشل المطالبة بالجائزة.");
+            }
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'مبروك!',
+                html: `لقد فزت بـ <strong>${parseInt(prizeWon).toLocaleString()}</strong> CC!`,
+                confirmButtonText: 'رائع!'
+            });
+
+        } catch (error) {
+            console.error("Claim prize error:", error);
+            Swal.fire('خطأ!', 'حدث خطأ أثناء إضافة الجائزة إلى محفظتك.', 'error');
+        } finally {
+            if (spinWheelModal) {
+                spinWheelModal.hide();
+            }
+            resetWheel();
+        }
     }
+    // *** نهاية التعديل ***
+
 
     ui.spinBtn?.addEventListener('click', () => performSpin('free', ui.spinBtn));
     ui.usePurchasedBtn?.addEventListener('click', () => performSpin('purchased', ui.usePurchasedBtn));
 
-    // <<< بداية الإضافة: معالج أحداث مخصص لنافذة العجلة >>>
-    if (ui.spinWheelModal) {
-        ui.spinWheelModal.addEventListener('click', (e) => {
-            // الإغلاق عند الضغط على زر X
+    if (ui.spinWheelModalElement) {
+        ui.spinWheelModalElement.addEventListener('click', (e) => {
             if (e.target.classList.contains('custom-close-btn')) {
                 if (isSpinning) {
-                    resetWheel(); // أوقف الدوران وصفّر الحالة
+                    resetWheel();
                 }
-                ui.spinWheelModal.classList.remove('show');
+                if (spinWheelModal) spinWheelModal.hide();
                 return;
             }
-            // الإغلاق عند الضغط على الخلفية (فقط إذا كانت العجلة لا تدور)
-            if (e.target === ui.spinWheelModal) {
+            if (e.target === ui.spinWheelModalElement) {
                 if (!isSpinning) {
-                    ui.spinWheelModal.classList.remove('show');
+                    if (spinWheelModal) spinWheelModal.hide();
                 }
             }
         });
     }
-    // <<< نهاية الإضافة >>>
-
 
     window.spinWheelApp = { reInit, updateUI };
 });

@@ -12,6 +12,16 @@
                 <p><strong>الاسم:</strong> {{ session.name }}</p>
                 <p><strong>البريد الإلكتروني:</strong> {{ session.email }}</p>
                 <p><strong>حالة الحساب:</strong> <span class="badge bg-success">مزحوف ومُعتمد</span></p>
+
+                <!-- *** بداية الإضافة: إعدادات الخصوصية *** -->
+                <hr>
+                <h5 class="h6">إعدادات الخصوصية</h5>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="showOnLeaderboardToggle" {% if show_on_leaderboard %}checked{% endif %}>
+                    <label class="form-check-label" for="showOnLeaderboardToggle">إظهار اسمي في قائمة أغنى المستثمرين</label>
+                </div>
+                <!-- *** نهاية الإضافة *** -->
+
                 <hr>
                 <div class="d-flex gap-2">
                     <a href="{{ url_for('views.user_view') }}" class="btn btn-primary">
@@ -25,5 +35,56 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('showOnLeaderboardToggle');
+    if (toggle) {
+        toggle.addEventListener('change', async (event) => {
+            const isChecked = event.target.checked;
+
+            // إضافة تأثير بصري للإشارة إلى الحفظ
+            const label = document.querySelector('label[for="showOnLeaderboardToggle"]');
+            const originalText = label.textContent;
+            label.textContent = 'جاري الحفظ...';
+
+            try {
+                const response = await fetch('/api/user/privacy_settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        show_on_leaderboard: isChecked
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    Toastify({
+                        text: "تم حفظ الإعداد بنجاح!",
+                        duration: 3000,
+                        gravity: "top",
+                        position: "center",
+                        style: { background: "linear-gradient(to right, #00b09b, #96c93d)" }
+                    }).showToast();
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                console.error('Error saving privacy setting:', error);
+                Swal.fire('خطأ!', 'فشل حفظ الإعداد. يرجى المحاولة مرة أخرى.', 'error');
+                // إعادة المفتاح إلى حالته السابقة عند الفشل
+                event.target.checked = !isChecked;
+            } finally {
+                label.textContent = originalText;
+            }
+        });
+    }
+});
+</script>
 {% endblock %}
 <!-- END OF FILE templates/dashboard.html -->

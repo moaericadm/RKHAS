@@ -5,6 +5,9 @@ let isFirebaseReady = false;
 let allCrawlers = [];
 let allRegisteredUsers = [];
 let ownedAvatars = new Set();
+// *** بداية الإضافة: متغير لتخزين النكزات المملوكة ***
+let ownedNudges = new Set();
+// *** نهاية الإضافة ***
 
 function tryToStartApp() {
     if (isDomReady && isFirebaseReady) {
@@ -23,6 +26,9 @@ function initializeShopPage() {
         spinProductsContainer: document.getElementById('spin-products-container'),
         pointsProductsContainer: document.getElementById('points-products-container'),
         avatarProductsContainer: document.getElementById('avatar-products-container'),
+        // *** بداية الإضافة: تعريف حاوية النكزات ***
+        nudgeProductsContainer: document.getElementById('nudge-products-container'),
+        // *** نهاية الإضافة ***
     };
 
     let db;
@@ -75,15 +81,26 @@ function initializeShopPage() {
             db.ref(`wallets/${currentUserId}`).on('value', (s) => renderWallet(s.val()), (e) => handleFirebaseError(e, 'wallet'));
 
             db.ref('site_settings').on('value', (s) => {
-                db.ref(`user_avatars/${currentUserId}/owned`).once('value', (snap) => {
-                    ownedAvatars = new Set(Object.keys(snap.val() || {}));
-                    renderAllProducts(s.val() || {});
+                const settings = s.val() || {};
+
+                // Fetch owned items in parallel
+                Promise.all([
+                    db.ref(`user_avatars/${currentUserId}/owned`).once('value'),
+                    db.ref(`user_nudges/${currentUserId}/owned`).once('value') // Fetch owned nudges
+                ]).then(([avatarsSnap, nudgesSnap]) => {
+                    ownedAvatars = new Set(Object.keys(avatarsSnap.val() || {}));
+                    ownedNudges = new Set(Object.keys(nudgesSnap.val() || {})); // Store owned nudges
+                    renderAllProducts(settings);
                 });
+
             }, (e) => handleFirebaseError(e, 'site_settings'));
         }
     }
 
     function renderAllProducts(settings) {
+        // *** بداية التعديل: استدعاء دالة عرض النكزات ***
+        renderNudgeProducts(settings.shop_products_nudges || {});
+        // *** نهاية التعديل ***
         renderAvatarProducts(settings.shop_avatars || {});
         renderPointsProducts(settings.shop_products_points || {});
         renderProducts(settings.shop_products || {});
@@ -97,6 +114,32 @@ function initializeShopPage() {
         if (ui.walletCcBalance) ui.walletCcBalance.textContent = formatNumber(currentWallet.cc);
         if (ui.walletSpBalance) ui.walletSpBalance.textContent = formatNumber(currentWallet.sp);
     }
+
+    // *** بداية الإضافة: دالة عرض منتجات النكزات ***
+    function renderNudgeProducts(nudgesData) {
+        if (!ui.nudgeProductsContainer) return;
+        const products = Object.entries(nudgesData);
+        ui.nudgeProductsContainer.innerHTML = products.length > 0 ? products.map(([id, p]) => `
+            <div class="col-lg-3 col-md-4 col-sm-6">
+                <div class="card product-card">
+                    <div class="card-body">
+                        <div class="product-content">
+                            <i class="bi bi-chat-right-quote-fill nudge-product-icon"></i>
+                            <p class="nudge-text my-3">"${p.text}"</p>
+                            <div class="product-price price-sp">${formatNumber(p.sp_price)} SP</div>
+                        </div>
+                        <div class="product-footer d-grid gap-2">
+                            <button class="btn btn-sm btn-warning buy-nudge-btn" data-nudge-id="${id}" data-nudge-text="${p.text}" data-sp-price="${p.sp_price || 0}" ${ownedNudges.has(id) ? 'disabled' : ''}>
+                                ${ownedNudges.has(id) ? 'تم الشراء' : `شراء`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>`).join('') : '<div class="col-12"><p class="text-muted w-100 text-center p-4">لا توجد نكزات متاحة حالياً.</p></div>';
+
+        ui.nudgeProductsContainer.querySelectorAll('.buy-nudge-btn').forEach(b => b.addEventListener('click', handleNudgePurchase));
+    }
+    // *** نهاية الإضافة ***
 
     function renderAvatarProducts(avatarsData) {
         if (!ui.avatarProductsContainer) return;
@@ -365,6 +408,34 @@ function initializeShopPage() {
             }
         }
     }
+
+    // *** بداية الإضافة: دالة التعامل مع شراء النكزات ***
+    async function handleNudgePurchase(e) {
+        const btn = e.target.closest('button');
+        const { nudgeId, nudgeText, spPrice } = btn.dataset;
+
+        const result = await Swal.fire({
+            title: `شراء نكزة`,
+            html: `هل تريد بالتأكيد إنفاق <strong>${formatNumber(spPrice)} SP</strong> لشراء النكزة: <br><i>"${nudgeText}"</i>`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'نعم، شراء!',
+            cancelButtonText: 'إلغاء'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                await apiCall('/api/shop/buy_nudge', {
+                    method: 'POST',
+                    body: new URLSearchParams({ nudge_id: nudgeId })
+                });
+                Swal.fire('تم بنجاح!', `لقد اشتريت النكزة.`, 'success');
+            } catch (error) {
+                Swal.fire('فشل!', error.message, 'error');
+            }
+        }
+    }
+    // *** نهاية الإضافة ***
 
     async function handleAvatarGiftRequest(e) {
         const btn = e.target.closest('button');

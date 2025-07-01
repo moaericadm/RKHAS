@@ -2,6 +2,7 @@
 import time
 import re
 import sys
+import random
 from datetime import datetime, timedelta
 from flask import (
     Blueprint, request, jsonify, session
@@ -21,11 +22,6 @@ def is_abusive(text):
     return bool(BANNED_WORDS_PATTERN.search(text)) if text else False
 
 def _log_public_notification(text):
-    """
-    دالة مساعدة لبث إشعار عام ومؤقت.
-    تمنع تسجيل نشاطات الأدمن.
-    """
-    # التحقق من أن المستخدم ليس أدمن
     if session.get('role') == 'admin':
         return
 
@@ -36,7 +32,6 @@ def _log_public_notification(text):
     
     try:
         user_avatar = db.reference(f'registered_users/{user_id}/current_avatar').get()
-        # استخدام المسار المؤقت الجديد للإشعارات
         notification_ref = db.reference('live_feed')
         notification_ref.push({
             'user_id': user_id,
@@ -48,6 +43,84 @@ def _log_public_notification(text):
     except Exception as e:
         print(f"!!! Live Feed Broadcast Error: {e}", file=sys.stderr)
 
+
+@bp.route('/user/privacy_settings', methods=['POST'])
+@login_required
+def set_privacy_settings():
+    user_id = session.get('user_id')
+    data = request.get_json()
+
+    if data is None or 'show_on_leaderboard' not in data:
+        return jsonify(success=False, message="بيانات ناقصة."), 400
+    
+    show = bool(data.get('show_on_leaderboard'))
+    
+    try:
+        db.reference(f'registered_users/{user_id}').update({
+            'show_on_leaderboard': show
+        })
+        return jsonify(success=True, message="تم تحديث إعدادات الخصوصية بنجاح.")
+    except Exception as e:
+        print(f"!!! Set Privacy Settings Error for user {user_id}: {e}", file=sys.stderr)
+        return jsonify(success=False, message="حدث خطأ في الخادم."), 500
+
+@bp.route('/place_bet', methods=['POST'])
+@login_required
+def place_bet():
+    user_id, user_name = session['user_id'], session.get('name', 'مستخدم')
+    
+    try:
+        bet_amount_str = request.form.get('bet_amount', '0').replace(',', '')
+        bet_amount = float(bet_amount_str)
+        is_double_down = request.form.get('is_double_down') == 'true'
+    except (ValueError, TypeError, AttributeError):
+        return jsonify(success=False, message="مبلغ الرهان غير صالح."), 400
+
+    settings_ref = db.reference('site_settings/gambling_settings')
+    settings = settings_ref.get()
+
+    if not settings or not settings.get('is_enabled'):
+        return jsonify(success=False, message="نظام الرهان معطل حالياً من قبل الإدارة."), 403
+
+    max_bet = settings.get('max_bet', 1000)
+    win_chance = settings.get('win_chance_percent', 49.5)
+
+    if bet_amount <= 0:
+        return jsonify(success=False, message="يجب أن يكون مبلغ الرهان أكبر من صفر."), 400
+    
+    if not is_double_down and bet_amount > max_bet:
+        return jsonify(success=False, message=f"لا يمكنك المراهنة بأكثر من {max_bet:,.0f} SP في المرة الواحدة."), 400
+
+    wallet_sp_ref = db.reference(f'wallets/{user_id}/sp')
+    
+    try:
+        current_sp = wallet_sp_ref.get() or 0
+        if current_sp < bet_amount:
+            return jsonify(success=False, message="رصيد SP غير كافٍ للمراهنة."), 400
+        
+        wallet_sp_ref.set(current_sp - bet_amount)
+
+        is_winner = random.uniform(0, 100) < win_chance
+        
+        if is_winner:
+            winnings = bet_amount * 2
+            wallet_sp_ref.transaction(lambda current: (current or 0) + winnings)
+            
+            log_text_public = f"ربح {winnings:,.2f} SP في رهان الزاحف!"
+            _log_public_notification(log_text_public)
+            
+            log_text = f"ربح {winnings:,.2f} SP في رهان الزاحف."
+            db.reference('activity_log').push({'type':'gamble_win', 'text': f"'{user_name}' {log_text}", 'timestamp': int(time.time()), 'user_id': user_id, 'user_name': user_name})
+            return jsonify(success=True, result='win', message=f"مبروك! لقد ربحت وضاعفت رهانك إلى {winnings:,.2f} SP.", winnings=winnings)
+        else:
+            log_text = f"خسر {bet_amount:,.2f} SP في رهان الزاحف."
+            db.reference('activity_log').push({'type':'gamble_loss', 'text': f"'{user_name}' {log_text}", 'timestamp': int(time.time()), 'user_id': user_id, 'user_name': user_name})
+            return jsonify(success=True, result='loss', message=f"حظ أوفر في المرة القادمة! لقد خسرت {bet_amount:,.2f} SP.")
+
+    except Exception as e:
+        print(f"!!! Place Bet Error for user {user_id}: {e}", file=sys.stderr)
+        wallet_sp_ref.transaction(lambda current: (current or 0) + bet_amount)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء تنفيذ الرهان."), 500
 
 @bp.route('/contest/vote', methods=['POST'])
 @login_required
@@ -109,34 +182,61 @@ def buy_shop_product():
     except Exception as e:
         print(f"!!! Product Purchase Error for user {user_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
-
+        
 @bp.route('/shop/buy_spin_attempt', methods=['POST'])
 @login_required
 def buy_spin_attempt():
-    user_id = session.get('user_id'); product_id = request.form.get('product_id')
-    if not product_id: return jsonify(success=False, message="معرف المنتج مفقود."), 400
+    user_id = session.get('user_id')
+    product_id = request.form.get('product_id')
+    if not product_id:
+        return jsonify(success=False, message="معرف المنتج مفقود."), 400
+
     product = db.reference(f'site_settings/shop_products_spins/{product_id}').get()
-    if not product: return jsonify(success=False, message="المنتج غير موجود أو تم حذفه."), 404
-    sp_price = product.get('sp_price', 0); attempts_to_add = product.get('attempts_amount', 0)
+    if not product:
+        return jsonify(success=False, message="المنتج غير موجود أو تم حذفه."), 404
+
+    sp_price = product.get('sp_price', 0)
+    attempts_to_add = product.get('attempts_amount', 0)
     if not isinstance(sp_price, int) or not isinstance(attempts_to_add, int) or sp_price <= 0 or attempts_to_add <= 0:
         return jsonify(success=False, message="بيانات المنتج غير صالحة."), 500
+
     spin_settings = db.reference('site_settings/spin_wheel_settings').get() or {}
     purchase_limit = spin_settings.get('purchaseLimit', 20)
+
     try:
-        wallet_ref = db.reference(f'wallets/{user_id}'); user_spin_state_ref = db.reference(f'user_spin_state/{user_id}')
+        wallet_ref = db.reference(f'wallets/{user_id}')
+        user_spin_state_ref = db.reference(f'user_spin_state/{user_id}')
+        
         current_wallet_sp = (wallet_ref.child('sp').get() or 0)
         if current_wallet_sp < sp_price:
             return jsonify(success=False, message="رصيد SP غير كافٍ لإتمام عملية الشراء."), 400
+
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        limit_ref = db.reference(f'user_daily_limits/{user_id}/spin_purchase')
+        limit_data = limit_ref.get() or {}
+        
+        purchased_today = limit_data.get('count', 0) if limit_data.get('date') == today_str else 0
+        
+        if purchased_today >= purchase_limit:
+            return jsonify(success=False, message=f"لقد وصلت للحد اليومي لشراء المحاولات وهو {purchase_limit} محاولة."), 403
+
         current_purchased_attempts = (user_spin_state_ref.child('purchasedAttempts').get() or 0)
-        if current_purchased_attempts + attempts_to_add > purchase_limit:
-            return jsonify(success=False, message=f"لا يمكنك شراء المزيد. الحد الأقصى للمحاولات المشتراة هو {purchase_limit} محاولة."), 403
+        max_accumulation = spin_settings.get('maxAccumulation', 10) # Using accumulation limit as overall cap
+        if current_purchased_attempts + attempts_to_add > max_accumulation:
+            return jsonify(success=False, message=f"لا يمكنك تجميع أكثر من {max_accumulation} محاولة. استخدم ما لديك أولاً."), 403
+
         wallet_ref.child('sp').set(current_wallet_sp - sp_price)
         user_spin_state_ref.child('purchasedAttempts').transaction(lambda current: (current or 0) + attempts_to_add)
+        
+        limit_ref.set({'count': purchased_today + 1, 'date': today_str})
+        
         _log_public_notification(f"اشترى {attempts_to_add} محاولة/محاولات إضافية لعجلة الحظ.")
         return jsonify(success=True, message=f"تم بنجاح شراء {attempts_to_add} محاولة دوران إضافية!")
+
     except Exception as e:
         print(f"!!! Atomic Spin Purchase Error for user {user_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
+
 
 @bp.route('/shop/buy_points_product', methods=['POST'])
 @login_required
@@ -200,7 +300,6 @@ def buy_points_product():
         print(f"!!! Buy Points Product Error for user {user_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم."), 500
 
-
 @bp.route('/like/<username>', methods=['POST'])
 @login_required 
 def like_user(username):
@@ -222,7 +321,6 @@ def like_user(username):
         _log_public_notification(f"أبدى إعجابه بـ '{username}'.")
 
     return jsonify(success=True)
-
 
 @bp.route('/nominate', methods=['POST'])
 @login_required
@@ -276,16 +374,15 @@ def invest_in_crawler():
 
     settings = db.reference('site_settings/investment_settings').get() or {}
     max_investments = settings.get('max_investments')
-    
-    investment_ref = db.reference(f'investments/{user_id}/{crawler_name}')
-    current_user_investments = db.reference(f'investments/{user_id}').get()
-    
-    is_new_investment = not bool(current_user_investments and crawler_name in current_user_investments)
 
-    if is_new_investment and max_investments and max_investments > 0:
-        num_current_investments = len(current_user_investments.keys()) if current_user_investments else 0
+    investment_ref = db.reference(f'investments/{user_id}/{crawler_name}')
+    current_investment = investment_ref.get()
+
+    if not current_investment and max_investments and max_investments > 0:
+        all_user_investments = db.reference(f'investments/{user_id}').get()
+        num_current_investments = len(all_user_investments.keys()) if all_user_investments else 0
         if num_current_investments >= max_investments:
-            return jsonify(success=False, message=f"لقد وصلت للحد الأقصى وهو {max_investments} استثمارات مختلفة. لا يمكنك الاستثمار في زاحف جديد."), 403
+            return jsonify(success=False, message=f"لقد وصلت للحد الأقصى وهو {max_investments} استثمارات مختلفة."), 403
 
     crawler_data = db.reference(f'users/{crawler_name}').get()
     if not crawler_data:
@@ -299,76 +396,91 @@ def invest_in_crawler():
     new_sp_balance = current_sp - sp_to_invest
     wallet_ref.child('sp').set(new_sp_balance)
     
-    investment_data = investment_ref.get()
     points_at_investment = crawler_data.get('points', 0)
-    now = int(time.time())
-
-    if investment_data: 
-        total_sp = investment_data.get('invested_sp', 0) + sp_to_invest
-        old_val = investment_data.get('invested_sp', 0) * investment_data.get('points_at_investment', 0)
-        new_val = sp_to_invest * points_at_investment
-        avg_points = (old_val + new_val) / total_sp if total_sp > 0 else points_at_investment
-        investment_ref.update({'invested_sp': total_sp, 'points_at_investment': round(avg_points), 'last_updated_timestamp': now})
-        _log_public_notification(f"عزّز استثماره في '{crawler_name}' بمبلغ {sp_to_invest:,.2f} SP.")
-    else:
-        investment_ref.set({'invested_sp': sp_to_invest, 'points_at_investment': points_at_investment, 'timestamp': now, 'last_updated_timestamp': now})
-        _log_public_notification(f"استثمر في '{crawler_name}' بمبلغ {sp_to_invest:,.2f} SP.")
+    now_timestamp = int(time.time())
     
-    db.reference('investment_log').push({'investor_id': user_id, 'investor_name': user_name, 'target_name': crawler_name, 'action': 'invest', 'sp_amount': sp_to_invest, 'timestamp': now})
+    new_lot = {
+        'sp': sp_to_invest,
+        'p': points_at_investment,
+        't': now_timestamp
+    }
+
+    investment_ref.child('lots').push().set(new_lot)
+    
+    _log_public_notification(f"استثمر في '{crawler_name}' بمبلغ {sp_to_invest:,.2f} SP.")
+    db.reference('investment_log').push({
+        'investor_id': user_id, 'investor_name': user_name,
+        'target_name': crawler_name, 'action': 'invest',
+        'sp_amount': sp_to_invest, 'timestamp': now_timestamp
+    })
     
     return jsonify(success=True, message=f"تم استثمار {sp_to_invest:,.2f} SP بنجاح في {crawler_name}!")
 
-
-@bp.route('/sell', methods=['POST'])
+@bp.route('/sell_lot', methods=['POST'])
 @login_required
-def sell_investment():
+def sell_lot():
     user_id, user_name = session.get('user_id'), session.get('name')
     crawler_name = request.form.get('crawler_name')
-    if not crawler_name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
-    
-    investment_ref = db.reference(f'investments/{user_id}/{crawler_name}')
-    investment_data = investment_ref.get()
-    if not investment_data: return jsonify(success=False, message="ليس لديك استثمار في هذا الزاحف."), 404
+    lot_id = request.form.get('lot_id')
+
+    if not all([crawler_name, lot_id]):
+        return jsonify(success=False, message="بيانات غير مكتملة للبيع."), 400
+
+    lot_ref = db.reference(f'investments/{user_id}/{crawler_name}/lots/{lot_id}')
+    lot_data = lot_ref.get()
+
+    if not lot_data:
+        return jsonify(success=False, message="دفعة الاستثمار هذه غير موجودة أو تم بيعها."), 404
 
     settings = db.reference('site_settings/investment_settings').get() or {}
     lock_hours = settings.get('investment_lock_hours', 0)
+    lock_seconds = lock_hours * 3600
     
-    if lock_hours > 0:
-        last_updated_timestamp = investment_data.get('last_updated_timestamp') or investment_data.get('timestamp', 0)
-        now = int(time.time())
-        lock_seconds = lock_hours * 3600
-        
-        time_elapsed = now - last_updated_timestamp
-        
-        if time_elapsed < lock_seconds:
-            time_remaining = lock_seconds - time_elapsed
-            hours, remainder = divmod(time_remaining, 3600)
-            minutes, _ = divmod(remainder, 60)
-            return jsonify(success=False, message=f"لا يمكنك بيع استثمارك الآن. يجب الانتظار لمدة {int(hours)} ساعة و {int(minutes)} دقيقة إضافية."), 403
+    lot_timestamp = int(lot_data.get('t', 0))
+    now = int(time.time())
+
+    if now - lot_timestamp < lock_seconds:
+        return jsonify(success=False, message="لا يمكن بيع هذه الدفعة، فهي لا تزال تحت مدة القفل."), 403
+
+    sell_tax_percent = settings.get('sell_tax_percent', 0.0)
+    sell_fee_sp = settings.get('sell_fee_sp', 0.0)
 
     crawler_data = db.reference(f'users/{crawler_name}').get()
-    
-    invested_sp = float(investment_data.get('invested_sp', 0))
-    points_at_inv = float(investment_data.get('points_at_investment', 1)) or 1
-    
-    current_points = float(crawler_data.get('points', 0)) if crawler_data else points_at_inv
+    current_points = float(max(1, crawler_data.get('points', 1))) if crawler_data else 1.0
     stock_multiplier = float(crawler_data.get('stock_multiplier', 1.0)) if crawler_data else 1.0
     
-    sp_to_return = invested_sp * (current_points / points_at_inv) * stock_multiplier
-    sp_to_return = max(0, sp_to_return)
+    invested_sp = float(lot_data.get('sp', 0))
+    points_at_inv = float(max(1, lot_data.get('p', 1)))
     
+    value_of_lot_before_tax = invested_sp * (current_points / points_at_inv) * stock_multiplier
+    
+    profit = value_of_lot_before_tax - invested_sp
+    tax_amount = 0
+    if profit > 0 and sell_tax_percent > 0:
+        tax_amount = profit * (sell_tax_percent / 100.0)
+        
+    final_sp_to_return = value_of_lot_before_tax - tax_amount - sell_fee_sp
+    final_sp_to_return = max(0, final_sp_to_return)
+
     try:
-        db.reference(f'wallets/{user_id}/sp').transaction(lambda current_sp: (current_sp or 0) + sp_to_return)
-        investment_ref.delete()
+        db.reference(f'wallets/{user_id}/sp').transaction(lambda current_sp: (current_sp or 0) + final_sp_to_return)
+        
+        lot_ref.delete()
+
+        remaining_lots = db.reference(f'investments/{user_id}/{crawler_name}/lots').get()
+        if not remaining_lots:
+            db.reference(f'investments/{user_id}/{crawler_name}').delete()
+
         db.reference('investment_log').push({
-            'investor_id': user_id, 'investor_name': user_name, 
-            'target_name': crawler_name, 'action': 'sell', 
-            'sp_amount': sp_to_return, 'timestamp': int(time.time())
+            'investor_id': user_id, 'investor_name': user_name,
+            'target_name': crawler_name, 'action': 'sell',
+            'sp_amount': final_sp_to_return, 'timestamp': now
         })
-        _log_public_notification(f"باع أسهمه في '{crawler_name}' مقابل {sp_to_return:,.2f} SP.")
-        return jsonify(success=True, message=f"تم بيع الاستثمار بنجاح! لقد حصلت على {sp_to_return:.2f} SP.")
+        _log_public_notification(f"باع حصة من أسهمه في '{crawler_name}' مقابل {final_sp_to_return:,.2f} SP.")
+        
+        return jsonify(success=True, message=f"تم بيع الدفعة بنجاح! لقد حصلت على {final_sp_to_return:.2f} SP.")
     except Exception as e:
-        print(f"!!! Sell Error: {e}", file=sys.stderr)
+        print(f"!!! Sell Lot Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء البيع."), 500
 
 @bp.route('/shop/buy_avatar', methods=['POST'])
@@ -484,4 +596,116 @@ def submit_gift_request():
     except Exception as e:
         print(f"!!! CRITICAL: Submit Gift Request Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ كارثي في الخادم أثناء تقديم الطلب."), 500
+
+@bp.route('/shop/buy_nudge', methods=['POST'])
+@login_required
+def buy_nudge():
+    user_id = session.get('user_id')
+    nudge_id = request.form.get('nudge_id')
+    
+    if not nudge_id:
+        return jsonify(success=False, message="معرف النكزة مفقود."), 400
+
+    nudge_product_ref = db.reference(f'site_settings/shop_products_nudges/{nudge_id}')
+    nudge_product = nudge_product_ref.get()
+
+    if not nudge_product:
+        return jsonify(success=False, message="هذه النكزة غير متوفرة في المتجر."), 404
+    
+    user_owned_ref = db.reference(f'user_nudges/{user_id}/owned/{nudge_id}')
+    if user_owned_ref.get():
+        return jsonify(success=False, message="أنت تمتلك هذه النكزة بالفعل."), 400
+    
+    sp_price = nudge_product.get('sp_price', 0)
+    
+    try:
+        wallet_ref = db.reference(f'wallets/{user_id}')
+        
+        def transact_nudge_purchase(current_wallet_data):
+            wallet = current_wallet_data or {'sp': 0}
+            current_sp = wallet.get('sp', 0)
+            if current_sp < sp_price:
+                raise ValueError("رصيد SP غير كافٍ لإتمام عملية الشراء.")
+            wallet['sp'] = current_sp - sp_price
+            return wallet
+            
+        wallet_ref.transaction(transact_nudge_purchase)
+        
+        user_owned_ref.set({'purchased_at': int(time.time())})
+        
+        log_text = f"اشترى نكزة: '{nudge_product.get('text', '')[:30]}...'"
+        _log_public_notification(log_text)
+        
+        db.reference('activity_log').push({
+            'type': 'purchase',
+            'text': f"'{session.get('name')}' {log_text}",
+            'timestamp': int(time.time()),
+            'user_id': user_id,
+            'user_name': session.get('name')
+        })
+        
+        return jsonify(success=True, message="تم شراء النكزة بنجاح!")
+    
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        print(f"!!! Nudge Purchase Error for user {user_id}: {e}", file=sys.stderr)
+        db.reference(f'wallets/{user_id}/sp').transaction(lambda current: (current or 0) + sp_price)
+        return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
+
+@bp.route('/send_nudge', methods=['POST'])
+@login_required
+def send_nudge():
+    sender_id = session.get('user_id')
+    sender_name = session.get('name')
+    
+    target_uid = request.form.get('target_uid')
+    nudge_id = request.form.get('nudge_id')
+    target_type = request.form.get('target_type')
+    target_element_id = request.form.get('target_element_id')
+
+    if not all([target_uid, nudge_id, target_type]):
+        return jsonify(success=False, message="بيانات الطلب غير مكتملة."), 400
+        
+    if not db.reference(f'user_nudges/{sender_id}/owned/{nudge_id}').get():
+        return jsonify(success=False, message="أنت لا تمتلك هذه النكزة."), 403
+    
+    # *** بداية التعديل: جلب بيانات النكزة كاملة ***
+    nudge_product = db.reference(f'site_settings/shop_products_nudges/{nudge_id}').get()
+    if not nudge_product:
+        return jsonify(success=False, message="لم يتم العثور على نص النكزة."), 404
+        
+    nudge_text = nudge_product.get('text')
+    sp_price = nudge_product.get('sp_price', 0)
+    # *** نهاية التعديل ***
+
+    sender_avatar = db.reference(f'registered_users/{sender_id}/current_avatar').get()
+
+    # *** بداية التعديل: تعديل حمولة النكزة لتشمل السعر ***
+    nudge_payload = {
+        "text": nudge_text,
+        "sender_name": sender_name,
+        "sender_avatar": sender_avatar or '',
+        "timestamp": int(time.time()),
+        "sp_price": sp_price
+    }
+    # *** نهاية التعديل ***
+
+    try:
+        print(f"Sending nudge from '{sender_name}' to UID '{target_uid}' of type '{target_type}'") # For debugging
+        
+        if target_type == 'user':
+            print(f"Dispatching PRIVATE nudge to user_nudges/{target_uid}/incoming")
+            db.reference(f'user_nudges/{target_uid}/incoming').push(nudge_payload)
+        elif target_type == 'crawler':
+            print(f"Dispatching PUBLIC nudge to public_nudges")
+            nudge_payload['target_element_id'] = target_element_id
+            db.reference('public_nudges').push(nudge_payload)
+        else:
+            return jsonify(success=False, message="نوع الهدف غير صحيح."), 400
+            
+        return jsonify(success=True)
+    except Exception as e:
+        print(f"!!! Send Nudge Error by {sender_id}: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم أثناء إرسال النكزة."), 500
 # --- END OF FILE project/user_interactions_api.py ---

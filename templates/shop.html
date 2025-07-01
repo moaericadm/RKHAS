@@ -153,9 +153,8 @@
         transition: transform 0.3s ease-in-out; /* تم تعديل الانتقال */
     }
 
-    /* --- التعديل: إبقاء الـ blur ثابتاً عند مرور الماوس --- */
     .product-card:hover .avatar-product-icon {
-        transform: scale(1.05); /* فقط تكبير الصورة دون إزالة الفلتر */
+        transform: scale(1.05);
     }
 
     .avatar-name {
@@ -163,6 +162,21 @@
         font-weight: 700;
         color: var(--text-color);
     }
+
+    /* *** بداية الإضافة: تنسيقات النكزات *** */
+    .nudge-product-icon {
+        font-size: 3.5rem;
+        color: var(--bs-warning);
+        text-shadow: 0 0 15px var(--bs-warning);
+    }
+
+    .nudge-text {
+        font-size: 1rem;
+        font-style: italic;
+        color: var(--text-muted-color);
+        min-height: 50px; /* To prevent layout shift */
+    }
+    /* *** نهاية الإضافة *** */
 </style>
 {% endblock %}
 
@@ -188,12 +202,21 @@
     </div>
 </div>
 
-<!-- التعديل: إضافة حاوية التوهج shop-glow-container -->
+<!-- *** بداية الإضافة: إضافة حاوية النكزات *** -->
 <div class="row justify-content-center shop-glow-container">
     <div class="col-lg-10">
+        <!-- Nudge Products -->
+        <h3 class="text-center mb-2">شراء نكزات</h3>
+        <p class="text-center text-muted mb-4 small">(الدفع باستخدام SP)</p>
+        <div id="nudge-products-container" class="row g-4 justify-content-center">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-warning" role="status"><span class="visually-hidden">...</span></div>
+            </div>
+        </div>
+        <hr class="my-5" style="border-color: var(--card-border);">
+
         <!-- Avatar Products -->
         <h3 class="text-center mb-2">شراء أفتار</h3>
-        <!-- التعديل: إضافة شرح للعملة -->
         <p class="text-center text-muted mb-4 small">(الدفع باستخدام SP)</p>
         <div id="avatar-products-container" class="row g-4 justify-content-center">
             <div class="col-12 text-center py-5">
@@ -204,7 +227,6 @@
 
         <!-- Points Products -->
         <h3 class="text-center mb-2">شراء تأثير مباشر على الأسهم</h3>
-        <!-- التعديل: إضافة شرح للعملة -->
         <p class="text-center text-muted mb-4 small">(الدفع باستخدام SP)</p>
         <div id="points-products-container" class="row g-4 justify-content-center">
             <div class="col-12 text-center py-5">
@@ -215,7 +237,6 @@
 
         <!-- SP Products -->
         <h3 class="text-center mb-2">شراء نقاط الدعم</h3>
-        <!-- التعديل: إضافة شرح للعملة -->
         <p class="text-center text-muted mb-4 small">(التحويل من CC إلى SP)</p>
         <div id="products-container" class="row g-4 justify-content-center">
             <div class="col-12 text-center py-5">
@@ -227,7 +248,6 @@
 
         <!-- Spin Products -->
         <h3 class="text-center mb-2">شراء محاولات عجلة الحظ</h3>
-        <!-- التعديل: إضافة شرح للعملة -->
         <p class="text-center text-muted mb-4 small">(الدفع باستخدام SP)</p>
         <div id="spin-products-container" class="row g-4 justify-content-center">
             <div class="col-12 text-center py-5">
@@ -236,6 +256,7 @@
         </div>
     </div>
 </div>
+<!-- *** نهاية الإضافة *** -->
 {% endblock %}
 
 {% block scripts %}

@@ -1,4 +1,5 @@
-﻿import time
+﻿# --- START OF FILE project/admin_api.py ---
+import time
 import sys
 import os
 import io
@@ -26,13 +27,13 @@ def add_user():
     try:
         name = request.form.get('name', '').strip()
         points_str = request.form.get('points', '0')
-        stock_trend_str = request.form.get('stock_trend')
+        stock_multiplier_str = request.form.get('stock_multiplier')
         avatar_url = request.form.get('avatar_url', '') 
         original_name = request.form.get('original_name', '').strip()
 
         if not name: return jsonify(success=False, message="اسم الزاحف مطلوب."), 400
         points = int(points_str)
-        stock_trend = float(stock_trend_str) if stock_trend_str else 0.0
+        stock_multiplier = float(stock_multiplier_str) if stock_multiplier_str else 1.0
         
         ref_users = db.reference('users/')
         ref_history = db.reference('points_history/')
@@ -56,12 +57,10 @@ def add_user():
         user_data.update({
             'name': name, 
             'points': points, 
-            'stock_trend': stock_trend,
+            'stock_multiplier': stock_multiplier,
             'avatar_url': avatar_url
         })
         
-        if 'stock_multiplier' not in user_data:
-            user_data['stock_multiplier'] = 1.0
         if 'likes' not in user_data: user_data['likes'] = 0
 
         ref_users.child(name).set(user_data)
@@ -70,49 +69,10 @@ def add_user():
         return jsonify(success=True)
         
     except (ValueError, TypeError):
-        return jsonify(success=False, message="النقاط واتجاه السهم يجب أن تكون أرقاماً صالحة."), 400
+        return jsonify(success=False, message="النقاط ومضاعف السهم يجب أن تكون أرقاماً صالحة."), 400
     except Exception as e:
         print(f"!!! Add/Edit User Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
-
-@bp.route('/market/update_trends', methods=['POST'])
-@admin_required
-def update_market_trends():
-    try:
-        users_ref = db.reference('users')
-        all_users = users_ref.get()
-        if not all_users:
-            return jsonify(success=False, message="لا يوجد زواحف لتحديثهم."), 404
-
-        updates = {}
-        updated_crawlers_count = 0
-        now = int(time.time())
-
-        for name, data in all_users.items():
-            if isinstance(data, dict):
-                trend = data.get('stock_trend', 0.0)
-                
-                if trend != 0:
-                    current_multiplier = float(data.get('stock_multiplier', 1.0))
-                    new_multiplier = current_multiplier + (trend / 100.0)
-                    
-                    updates[f'users/{name}/stock_multiplier'] = max(0, new_multiplier)
-                    updated_crawlers_count += 1
-
-                if data.get('stock_trend') is not None and data.get('stock_trend') != 0:
-                    updates[f'users/{name}/stock_trend'] = 0
-        
-        if updates:
-            db.reference().update(updates)
-        
-        log_text = f"الأدمن '{session.get('name')}' قام بتحديث السوق. تم تعديل مُضاعِف أسهم {updated_crawlers_count} زاحف."
-        db.reference('activity_log').push({'type': 'admin_edit', 'text': log_text, 'timestamp': now})
-        
-        return jsonify(success=True, message=f"تم تحديث السوق بنجاح. تم تعديل مُضاعِف أسهم {updated_crawlers_count} زاحف.")
-
-    except Exception as e:
-        print(f"!!! Market Update Error: {e}", file=sys.stderr)
-        return jsonify(success=False, message="حدث خطأ أثناء تحديث السوق."), 500
 
 @bp.route('/delete_user/<username>', methods=['POST'])
 @admin_required
@@ -171,7 +131,14 @@ def manage_user(user_id, action):
 @admin_required
 def approve_candidate():
     name = request.form.get('name', '').strip()
-    if name: db.reference(f'users/{name}').set({'name': name, 'points': 0, 'likes': 0, 'stock_trend': 0, 'stock_multiplier': 1.0}); db.reference(f'candidates/{name}').delete()
+    if name: 
+        db.reference(f'users/{name}').set({
+            'name': name, 
+            'points': 0, 
+            'likes': 0, 
+            'stock_multiplier': 1.0
+        })
+        db.reference(f'candidates/{name}').delete()
     return jsonify(success=True)
 
 @bp.route('/candidate/reject', methods=['POST'])
@@ -249,6 +216,34 @@ def save_spin_wheel_settings():
         db.reference('site_settings/spin_wheel_settings').set(settings)
         return jsonify(success=True)
     except (ValueError, TypeError): return jsonify(success=False, message="بيانات غير صالحة."), 400
+
+@bp.route('/settings/gambling', methods=['POST'])
+@admin_required
+def save_gambling_settings():
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="لم يتم استلام أي بيانات."), 400
+    
+    try:
+        settings = {
+            'is_enabled': bool(data.get('is_enabled')),
+            'max_bet': int(data.get('max_bet')),
+            'win_chance_percent': float(data.get('win_chance_percent'))
+        }
+
+        if not (0 <= settings['win_chance_percent'] <= 100):
+            raise ValueError("نسبة الربح يجب أن تكون بين 0 و 100.")
+        if settings['max_bet'] < 0:
+            raise ValueError("الحد الأعلى للرهان لا يمكن أن يكون سالباً.")
+
+        db.reference('site_settings/gambling_settings').set(settings)
+        return jsonify(success=True, message="تم حفظ إعدادات الرهان بنجاح!")
+
+    except (ValueError, TypeError) as e:
+        return jsonify(success=False, message=f"بيانات غير صالحة: {e}"), 400
+    except Exception as e:
+        print(f"!!! Save Gambling Settings Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
 
 @bp.route('/settings/contest', methods=['POST'])
 @admin_required
@@ -474,23 +469,20 @@ def save_investment_settings():
         return jsonify(success=False, message="No data received."), 400
     
     try:
-        max_investments = data.get('max_investments')
-        lock_hours = data.get('investment_lock_hours')
+        settings = {
+            'max_investments': int(data.get('max_investments', 0)),
+            'investment_lock_hours': int(data.get('investment_lock_hours', 0)),
+            'sell_tax_percent': float(data.get('sell_tax_percent', 0)),
+            'sell_fee_sp': float(data.get('sell_fee_sp', 0))
+        }
         
-        if max_investments is None or lock_hours is None:
-             raise ValueError("max_investments and investment_lock_hours are required")
-        
-        # Ensure values are non-negative integers
-        max_investments_val = int(max_investments)
-        lock_hours_val = int(lock_hours)
-        
-        if max_investments_val < 0 or lock_hours_val < 0:
+        if any(v < 0 for v in settings.values()):
             raise ValueError("Values cannot be negative.")
+        
+        if not (0 <= settings['sell_tax_percent'] <= 100):
+            raise ValueError("Sell tax must be between 0 and 100.")
 
-        db.reference('site_settings/investment_settings').set({
-            'max_investments': max_investments_val,
-            'investment_lock_hours': lock_hours_val
-        })
+        db.reference('site_settings/investment_settings').set(settings)
         return jsonify(success=True)
 
     except (ValueError, TypeError) as e:
@@ -499,7 +491,6 @@ def save_investment_settings():
         print(f"!!! Save Investment Settings Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
 
-# --- START: NEW EDIT ENDPOINTS ---
 @bp.route('/shop/edit_product/<pid>', methods=['POST'])
 @admin_required
 def edit_product(pid):
@@ -545,4 +536,73 @@ def edit_avatar(pid):
         db.reference(f'site_settings/shop_avatars/{pid}').update({'name': name, 'price_sp_personal': price_personal, 'price_sp_gift': price_gift})
         return jsonify(success=True)
     except (ValueError, TypeError): return jsonify(success=False, message="بيانات الأفاتار غير صالحة."), 400
-# --- END: NEW EDIT ENDPOINTS ---
+
+# *** بداية الإضافة: نقاط نهاية API لإدارة النكزات ***
+@bp.route('/shop/add_nudge', methods=['POST'])
+@admin_required
+def add_nudge():
+    try:
+        text = request.form.get('nudge_text', '').strip()
+        sp_price = int(request.form.get('sp_price'))
+        if not text or sp_price <= 0:
+            raise ValueError
+        db.reference('site_settings/shop_products_nudges').push({
+            'text': text,
+            'sp_price': sp_price
+        })
+        return jsonify(success=True)
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="نص النكزة والسعر الموجب مطلوبان."), 400
+
+@bp.route('/shop/edit_nudge/<pid>', methods=['POST'])
+@admin_required
+def edit_nudge(pid):
+    if not pid:
+        return jsonify(success=False, message="معرف المنتج مفقود."), 400
+    try:
+        text = request.form.get('nudge_text', '').strip()
+        sp_price = int(request.form.get('sp_price'))
+        if not text or sp_price <= 0:
+            raise ValueError
+        db.reference(f'site_settings/shop_products_nudges/{pid}').update({
+            'text': text,
+            'sp_price': sp_price
+        })
+        return jsonify(success=True)
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="بيانات المنتج غير صالحة."), 400
+
+@bp.route('/shop/delete_nudge/<pid>', methods=['POST'])
+@admin_required
+def delete_nudge(pid):
+    if pid:
+        db.reference(f'site_settings/shop_products_nudges/{pid}').delete()
+        return jsonify(success=True)
+    return jsonify(success=False, message="معرف المنتج مفقود."), 400
+
+@bp.route('/user_nudge/toggle', methods=['POST'])
+@admin_required
+def toggle_user_nudge():
+    try:
+        user_id = request.form.get('user_id')
+        nudge_id = request.form.get('nudge_id')
+        action = request.form.get('action') # 'grant' or 'revoke'
+
+        if not all([user_id, nudge_id, action]):
+            return jsonify(success=False, message="بيانات ناقصة."), 400
+        
+        user_nudge_ref = db.reference(f'user_nudges/{user_id}/owned/{nudge_id}')
+        
+        if action == 'grant':
+            user_nudge_ref.set({'granted_at': int(time.time())})
+        elif action == 'revoke':
+            user_nudge_ref.delete()
+        else:
+            return jsonify(success=False, message="إجراء غير معروف."), 400
+            
+        return jsonify(success=True)
+    except Exception as e:
+        print(f"!!! Toggle User Nudge Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
+# *** نهاية الإضافة ***
+# --- END OF FILE project/admin_api.py ---

@@ -26,7 +26,6 @@ except Exception as e:
 
 scheduler = APScheduler()
 
-# <<< بداية الإضافة: دالة تنظيف الإشعارات القديمة >>>
 def clean_old_notifications():
     """
     هذه الوظيفة تعمل في الخلفية لحذف الإشعارات القديمة من live_feed.
@@ -38,14 +37,47 @@ def clean_old_notifications():
         # حذف أي إشعار أقدم من 60 ثانية
         cutoff_timestamp = int(time.time()) - 60
         
-        # استعلام عن الإشعارات القديمة
         old_notifications = feed_ref.order_by_child('timestamp').end_at(cutoff_timestamp).get()
         
         if old_notifications:
             updates = {key: None for key in old_notifications.keys()}
             feed_ref.update(updates)
             print(f"Cleaner removed {len(updates)} old notifications.")
-# <<< نهاية الإضافة >>>
+
+# *** بداية الإضافة: دالة تنظيف النكزات القديمة ***
+def clean_old_nudges():
+    """
+    هذه الوظيفة تعمل في الخلفية لحذف النكزات القديمة (العامة والخاصة).
+    """
+    with scheduler.app.app_context():
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Running Old Nudges Cleaner...")
+        updates = {}
+        # 30 ثانية مدة كافية جداً لظهور واختفاء النكزة
+        cutoff_timestamp = int(time.time()) - 30
+
+        # تنظيف النكزات العامة
+        public_nudges_ref = db.reference('public_nudges')
+        old_public_nudges = public_nudges_ref.order_by_child('timestamp').end_at(cutoff_timestamp).get()
+        if old_public_nudges:
+            for key in old_public_nudges:
+                updates[f'public_nudges/{key}'] = None
+        
+        # تنظيف النكزات الخاصة
+        # هذه العملية قد تكون مكلفة إذا كان هناك عدد كبير جداً من المستخدمين
+        # ولكنها ضرورية لضمان عدم تراكم البيانات
+        # في التطبيقات الضخمة، يتم استخدام تقنيات أخرى مثل Cloud Functions
+        all_user_nudges = db.reference('user_nudges').get()
+        if all_user_nudges:
+            for user_id, nudges in all_user_nudges.items():
+                if 'incoming' in nudges:
+                    for nudge_id, nudge_data in nudges['incoming'].items():
+                        if nudge_data.get('timestamp', 0) < cutoff_timestamp:
+                            updates[f'user_nudges/{user_id}/incoming/{nudge_id}'] = None
+        
+        if updates:
+            db.reference('/').update(updates)
+            print(f"Nudge Cleaner removed {len(updates)} old nudges.")
+# *** نهاية الإضافة ***
 
 
 def manage_popularity_contest():
@@ -53,50 +85,66 @@ def manage_popularity_contest():
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Running Popularity Contest check...")
         contest_ref = db.reference('popularity_contest')
         settings_ref = db.reference('site_settings/contest_settings')
+        
+        all_crawlers_now = db.reference('users').get() or {}
+
         settings = settings_ref.get()
         if not settings or not settings.get('is_enabled', False):
+            if contest_ref.get(): contest_ref.set(None) # Clear any existing contest if disabled
             print("Contest system is disabled. Exiting task.")
             return
+
         current_contest = contest_ref.get()
+
         if current_contest and current_contest.get('status') == 'active':
-            end_timestamp = current_contest.get('end_timestamp', 0)
-            if time.time() >= end_timestamp:
-                print("Contest finished. Processing results...")
-                votes = current_contest.get('votes', {})
-                name1 = current_contest.get('contestant1_name')
-                name2 = current_contest.get('contestant2_name')
-                votes1_count = len(votes.get(name1, {}))
-                votes2_count = len(votes.get(name2, {}))
-                winner_name = None
-                winning_voters = {}
-                if votes1_count > votes2_count:
-                    winner_name = name1
-                    winning_voters = votes.get(name1, {})
-                elif votes2_count > votes1_count:
-                    winner_name = name2
-                    winning_voters = votes.get(name2, {})
-                
-                if winner_name:
-                    winner_reward = settings.get('winner_points_reward', 0)
-                    voter_reward = settings.get('voter_sp_reward', 0)
-                    if winner_reward > 0:
-                        db.reference(f'users/{winner_name}/points').transaction(lambda p: (p or 0) + winner_reward)
-                        print(f"Awarded {winner_reward} points to crawler {winner_name}.")
-                    if voter_reward > 0 and winning_voters:
-                        for uid in winning_voters.keys():
-                            db.reference(f'wallets/{uid}/sp').transaction(lambda sp: (sp or 0) + voter_reward)
-                            db.reference(f'user_messages/{uid}').push({
-                                'text': f"🎉 مبروك! لقد فزت بـ {voter_reward} SP لتصويتك للزاحف الفائز '{winner_name}'.",
-                                'timestamp': int(time.time())
-                            })
-                        print(f"Awarded {voter_reward} SP to {len(winning_voters)} winning voters.")
-                contest_ref.child('status').set('completed')
+            # *** بداية التعديل: التحقق من وجود المتنافسين قبل أي شيء آخر ***
+            contestant1_name = current_contest.get('contestant1_name')
+            contestant2_name = current_contest.get('contestant2_name')
+
+            if not contestant1_name or not contestant2_name or contestant1_name not in all_crawlers_now or contestant2_name not in all_crawlers_now:
+                print(f"Invalid contest found (missing contestant). Cancelling contest between '{contestant1_name}' and '{contestant2_name}'.")
+                contest_ref.set(None)
                 current_contest = None
+            # *** نهاية التعديل ***
+            else:
+                end_timestamp = current_contest.get('end_timestamp', 0)
+                if time.time() >= end_timestamp:
+                    print("Contest finished. Processing results...")
+                    votes = current_contest.get('votes', {})
+                    name1 = current_contest.get('contestant1_name')
+                    name2 = current_contest.get('contestant2_name')
+                    votes1_count = len(votes.get(name1, {}))
+                    votes2_count = len(votes.get(name2, {}))
+                    winner_name = None
+                    winning_voters = {}
+                    if votes1_count > votes2_count:
+                        winner_name = name1
+                        winning_voters = votes.get(name1, {})
+                    elif votes2_count > votes1_count:
+                        winner_name = name2
+                        winning_voters = votes.get(name2, {})
+                    
+                    if winner_name:
+                        winner_reward = settings.get('winner_points_reward', 0)
+                        voter_reward = settings.get('voter_sp_reward', 0)
+                        if winner_reward > 0:
+                            db.reference(f'users/{winner_name}/points').transaction(lambda p: (p or 0) + winner_reward)
+                            print(f"Awarded {winner_reward} points to crawler {winner_name}.")
+                        if voter_reward > 0 and winning_voters:
+                            for uid in winning_voters.keys():
+                                db.reference(f'wallets/{uid}/sp').transaction(lambda sp: (sp or 0) + voter_reward)
+                                db.reference(f'user_messages/{uid}').push({
+                                    'text': f"🎉 مبروك! لقد فزت بـ {voter_reward} SP لتصويتك للزاحف الفائز '{winner_name}'.",
+                                    'timestamp': int(time.time())
+                                })
+                            print(f"Awarded {voter_reward} SP to {len(winning_voters)} winning voters.")
+                    contest_ref.child('status').set('completed')
+                    current_contest = None
+
         if not current_contest:
             print("No active contest found. Starting a new one...")
-            all_crawlers = db.reference('users').get()
-            if all_crawlers and len(all_crawlers) >= 2:
-                crawler_names = list(all_crawlers.keys())
+            if len(all_crawlers_now) >= 2:
+                crawler_names = list(all_crawlers_now.keys())
                 try:
                     contestants = random.sample(crawler_names, 2)
                     new_contest_data = {
@@ -135,16 +183,25 @@ def create_app():
         )
         print(">> Popularity Contest management job scheduled.")
 
-    # <<< بداية الإضافة: تسجيل وظيفة تنظيف الإشعارات >>>
     if not scheduler.get_job('clean_notifications_job'):
         scheduler.add_job(
             id='clean_notifications_job', 
             func=clean_old_notifications, 
             trigger='interval', 
-            minutes=5  # تعمل كل 5 دقائق
+            minutes=5
         )
         print(">> Notifications Cleaner job scheduled.")
-    # <<< نهاية الإضافة >>>
+        
+    # *** بداية الإضافة: تسجيل وظيفة تنظيف النكزات ***
+    if not scheduler.get_job('clean_nudges_job'):
+        scheduler.add_job(
+            id='clean_nudges_job', 
+            func=clean_old_nudges, 
+            trigger='interval', 
+            minutes=1  # تعمل كل دقيقة لتنظيف سريع
+        )
+        print(">> Nudges Cleaner job scheduled.")
+    # *** نهاية الإضافة ***
 
 
     from . import auth_routes, views, admin_api, user_interactions_api, spin_wheel_api

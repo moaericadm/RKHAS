@@ -1,3 +1,4 @@
+<!-- START OF FILE templates/admin.html -->
 {% extends "base.html" %}
 {% block title %}لوحة التحكم{% endblock %}
 {% block header_title %}لوحة تحكم المسؤول{% endblock %}
@@ -97,13 +98,10 @@
                             </select>
                         </div>
                         <div class="col-md-2"><label for="pointsInput" class="form-label">النقاط الحالية</label><input type="number" class="form-control" id="pointsInput" name="points" required value="0"></div>
-                        <div class="col-md-2"><label for="stockTrendInput" class="form-label">تعديل مضاعف السهم (%)</label><input type="number" step="0.1" class="form-control" id="stockTrendInput" name="stock_trend" placeholder="مثال: 1.5 أو -2.0" value="0"></div>
+                        <div class="col-md-2"><label for="stockMultiplierInput" class="form-label">مضاعف السهم</label><input type="number" step="0.01" class="form-control" id="stockMultiplierInput" name="stock_multiplier" placeholder="مثال: 1.05" value="1.0"></div>
                         <div class="col-md-2 d-grid"><div class="d-flex"><button type="submit" id="saveUserBtn" class="btn btn-primary w-100">إضافة</button><button type="button" id="clearFormBtn" class="btn btn-outline-secondary ms-2" style="display: none;"><i class="bi bi-x-lg"></i></button></div></div>
                     </div>
                 </form>
-            </div>
-            <div class="card-footer text-end">
-                <button class="btn btn-success" onclick="Swal.fire({title:'هل أنت متأكد؟',text:'سيتم تحديث مضاعفات أسهم جميع الزواحف بناءً على قيم التعديل المدخلة لكل منهم.',icon:'warning',showCancelButton:true, confirmButtonText: 'نعم، قم بالتحديث'}).then(r=>r.isConfirmed&&apiCall('/api/admin/market/update_trends',{method:'POST'},'تم تحديث السوق بنجاح!'))"><i class="bi bi-graph-up-arrow me-2"></i>تحديث السوق الآن</button>
             </div>
         </div>
         <div class="card shadow-lg">
@@ -188,6 +186,41 @@
     <!-- Settings Panel -->
     <div class="tab-pane fade" id="settings-panel" role="tabpanel">
         <div class="accordion" id="settingsAccordion">
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#gambling-settings-collapse">
+                        <i class="bi bi-dice-5-fill me-2"></i>إعدادات رهان الزاحف (Double or Nothing)
+                    </button>
+                </h2>
+                <div id="gambling-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion">
+                    <div class="accordion-body">
+                        <form id="gambling-settings-form">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="gambling-enabled-toggle">
+                                <label class="form-check-label" for="gambling-enabled-toggle">تفعيل نظام الرهان</label>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="gambling-max-bet-input" class="form-label">الحد الأعلى للرهان (SP)</label>
+                                    <input type="number" id="gambling-max-bet-input" class="form-control" min="0">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="gambling-win-chance-input" class="form-label">نسبة ربح اللاعب (%)</label>
+                                    <input type="number" id="gambling-win-chance-input" class="form-control" min="0" max="100" step="0.1">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary w-100">حفظ إعدادات الرهان</button>
+                                </div>
+                            </div>
+                            <div class="form-text mt-2">
+                                نسبة ربح 50% تعني فرصة متساوية. أقل من 50% تعني أفضلية للكازينو (House Edge) وتساعد على سحب الـ SP من الاقتصاد.
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
             <div class="accordion-item">
                 <h2 class="accordion-header">
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#contest-settings-collapse">
@@ -222,40 +255,99 @@
                 </div>
             </div>
 
-            <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button" data-bs-toggle="collapse" data-bs-target="#spin-settings-collapse">إعدادات عجلة الحظ</button></h2><div id="spin-settings-collapse" class="accordion-collapse collapse show" data-bs-parent="#settingsAccordion"><div class="accordion-body"><form id="spin-wheel-settings-form"><div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="spin-wheel-enabled-toggle" name="enabled"><label class="form-check-label" for="spin-wheel-enabled-toggle">تفعيل عجلة الحظ</label></div><div class="row g-3"><div class="col-md-3"><label class="form-label">فترة التبريد (ساعة)</label><input type="number" id="spin-cooldown-hours" class="form-control"></div><div class="col-md-3"><label class="form-label">المحاولات المجانية/يوم</label><input type="number" id="spin-max-attempts" class="form-control"></div><div class="col-md-3"><label class="form-label">الحد الأقصى لتجميع المحاولات</label><input type="number" id="spin-max-accumulation" class="form-control"></div><div class="col-md-3"><label class="form-label">حد شراء المحاولات</label><input type="number" id="spin-purchase-limit" class="form-control"></div></div><hr><h6 class="mt-4">الجوائز والأوزان</h6><div id="prizes-container"></div><button type="button" id="add-prize-btn" class="btn btn-sm btn-outline-info mt-2"><i class="bi bi-plus-circle"></i> إضافة جائزة</button><hr><div class="d-flex justify-content-between mt-4"><button type="submit" class="btn btn-primary">حفظ إعدادات العجلة</button><button type="button" id="resetAllSpinsBtn" class="btn btn-danger"><i class="bi bi-arrow-counterclockwise me-2"></i>إعادة تعيين المحاولات المجانية للجميع</button></div></form></div></div></div>
-
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#investment-settings-collapse">إعدادات الاستثمار</button>
+                    <button class="accordion-button" data-bs-toggle="collapse" data-bs-target="#spin-settings-collapse">إعدادات عجلة الحظ</button>
                 </h2>
-                <div id="investment-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion">
+                <div id="spin-settings-collapse" class="accordion-collapse collapse show" data-bs-parent="#settingsAccordion">
                     <div class="accordion-body">
-                        <form id="investment-settings-form">
-                            <div class="row g-3 align-items-end">
-                                <div class="col-md-4">
-                                    <label for="max-investments-input" class="form-label">الحد الأقصى للاستثمارات</label>
-                                    <input type="number" id="max-investments-input" class="form-control" min="0">
-                                    <div class="form-text">
-                                        أقصى عدد من الزواحف المختلفين للاستثمار بهم.
-                                    </div>
+                        <form id="spin-wheel-settings-form">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="spin-wheel-enabled-toggle" name="enabled">
+                                <label class="form-check-label" for="spin-wheel-enabled-toggle">تفعيل عجلة الحظ</label>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">فترة التبريد (ساعة)</label>
+                                    <input type="number" id="spin-cooldown-hours" class="form-control">
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="investment-lock-hours-input" class="form-label">مدة قفل الاستثمار (بالساعات)</label>
-                                    <input type="number" id="investment-lock-hours-input" class="form-control" min="0">
-                                    <div class="form-text">
-                                        المدة قبل أن يتمكن المستخدم من بيع استثماره. (0 = بدون قفل).
-                                    </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">المحاولات المجانية/يوم</label>
+                                    <input type="number" id="spin-max-attempts" class="form-control">
                                 </div>
-                                <div class="col-md-4">
-                                    <button type="submit" class="btn btn-primary w-100">حفظ إعدادات الاستثمار</button>
+                                <div class="col-md-3">
+                                    <label class="form-label">الحد الأقصى لتجميع المحاولات</label>
+                                    <input type="number" id="spin-max-accumulation" class="form-control">
                                 </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">حد شراء المحاولات</label>
+                                    <input type="number" id="spin-purchase-limit" class="form-control">
+                                </div>
+                            </div>
+                            <hr>
+                            <h6 class="mt-4">الجوائز والأوزان</h6>
+                            <div id="prizes-container"></div>
+                            <button type="button" id="add-prize-btn" class="btn btn-sm btn-outline-info mt-2"><i class="bi bi-plus-circle"></i> إضافة جائزة</button>
+                            <hr>
+                            <div class="d-flex justify-content-between mt-4">
+                                <button type="submit" class="btn btn-primary">حفظ إعدادات العجلة</button>
+                                <button type="button" id="resetAllSpinsBtn" class="btn btn-danger"><i class="bi bi-arrow-counterclockwise me-2"></i>إعادة تعيين المحاولات المجانية للجميع</button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#shop-settings-collapse">إعدادات المتجر</button></h2><div id="shop-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion"><div class="accordion-body"><div class="row g-4"><div class="col-lg-4 col-md-6"><h6>منتجات SP (CC -> SP)</h6><form id="add-product-form" class="mb-3"><div class="input-group"><input type="number" name="sp_amount" class="form-control" placeholder="كمية SP" required><input type="number" name="cc_price" class="form-control" placeholder="سعر CC" required><button class="btn btn-secondary" type="submit"><i class="bi bi-plus-lg"></i> إضافة</button></div></form><ul class="list-group" id="shop-products-list"></ul></div><div class="col-lg-4 col-md-6"><h6>منتجات المحاولات (SP -> Attempts)</h6><form id="add-spin-product-form" class="mb-3"><div class="input-group"><input type="number" name="attempts_amount" class="form-control" placeholder="عدد المحاولات" required><input type="number" name="sp_price" class="form-control" placeholder="سعر SP" required><button class="btn btn-secondary" type="submit"><i class="bi bi-plus-lg"></i> إضافة</button></div></form><ul class="list-group" id="shop-spin-products-list"></ul></div><div class="col-lg-4 col-md-12"><h6>منتجات تعديل الأسهم</h6><form id="add-points-product-form" class="mb-3"><select name="type" class="form-select mb-2"><option value="raise">رفع أسهم</option><option value="drop">إسقاط أسهم</option></select><input type="number" name="points_amount" class="form-control mb-2" placeholder="كمية النقاط" required><input type="number" name="sp_price" class="form-control mb-2" placeholder="سعر SP" required><input type="number" name="daily_limit" class="form-control" placeholder="الحد اليومي للاستخدام" value="1" required><button class="btn btn-secondary w-100 mt-2" type="submit">إضافة منتج أسهم</button></form><ul class="list-group" id="shop-points-products-list"></ul></div></div><hr class="my-4"><h6><i class="bi bi-person-square me-2"></i>إدارة الأفاتارات</h6><div class="row"><div class="col-md-5"><form id="add-avatar-form"><div class="mb-2"><label for="avatar_name" class="form-label">اسم الأفاتار</label><input type="text" id="avatar_name" name="avatar_name" class="form-control" required></div><div class="row g-2 mb-2"><div class="col"><label for="price_sp_personal" class="form-label">السعر (شراء شخصي)</label><input type="number" id="price_sp_personal" name="price_sp_personal" class="form-control" min="1" required></div><div class="col"><label for="price_sp_gift" class="form-label">السعر (كهدية)</label><input type="number" id="price_sp_gift" name="price_sp_gift" class="form-control" min="1" required></div></div><div class="mb-3"><label for="avatar_file" class="form-label">ملف الصورة (PNG, JPG, GIF)</label><input type="file" id="avatar_file" name="avatar_file" class="form-control" accept="image/png, image/jpeg, image/gif" required></div><button type="submit" class="btn btn-success"><i class="bi bi-plus-circle-fill me-2"></i>إضافة أفاتar جديد</button></form></div><div class="col-md-7"><p class="text-muted">قائمة الأفاتارات المتاحة في المتجر</p><div class="table-responsive" style="max-height: 300px; overflow-y: auto;"><table class="table table-sm"><thead><tr><th>الصورة</th><th>الاسم</th><th>الأسعار (شخصي / هدية)</th><th>إجراء</th></tr></thead><tbody id="shop-avatars-list"></tbody></table></div></div></div></div></div></div>
+            <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#investment-settings-collapse">إعدادات الاستثمار</button></h2><div id="investment-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion"><div class="accordion-body"><form id="investment-settings-form"><div class="row g-3"><div class="col-md-6 col-lg-3"><label for="max-investments-input" class="form-label">الحد الأقصى للاستثمارات</label><input type="number" id="max-investments-input" name="max_investments" class="form-control" min="0"></div><div class="col-md-6 col-lg-3"><label for="investment-lock-hours-input" class="form-label">مدة قفل الاستثمار (ساعة)</label><input type="number" id="investment-lock-hours-input" name="investment_lock_hours" class="form-control" min="0"></div><div class="col-md-6 col-lg-3"><label for="sell-tax-percent-input" class="form-label">ضريبة الأرباح (%)</label><input type="number" id="sell-tax-percent-input" name="sell_tax_percent" class="form-control" min="0" max="100" step="0.1"></div><div class="col-md-6 col-lg-3"><label for="sell-fee-sp-input" class="form-label">رسوم البيع الثابتة (SP)</label><input type="number" id="sell-fee-sp-input" name="sell_fee_sp" class="form-control" min="0" step="0.01"></div></div><div class="d-grid mt-3"><button type="submit" class="btn btn-primary">حفظ إعدادات الاستثمار</button></div></form></div></div></div>
+
+            <!-- *** بداية التعديل: إضافة قسم النكزات في المتجر *** -->
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#shop-settings-collapse">إعدادات المتجر</button></h2>
+                <div id="shop-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion">
+                    <div class="accordion-body">
+                        <div class="row g-4">
+                            <!-- Existing Products -->
+                            <div class="col-lg-4 col-md-6"><h6>منتجات SP (CC -> SP)</h6><form id="add-product-form" class="mb-3"><div class="input-group"><input type="number" name="sp_amount" class="form-control" placeholder="كمية SP" required><input type="number" name="cc_price" class="form-control" placeholder="سعر CC" required><button class="btn btn-secondary" type="submit"><i class="bi bi-plus-lg"></i> إضافة</button></div></form><ul class="list-group" id="shop-products-list"></ul></div>
+                            <div class="col-lg-4 col-md-6"><h6>منتجات المحاولات (SP -> Attempts)</h6><form id="add-spin-product-form" class="mb-3"><div class="input-group"><input type="number" name="attempts_amount" class="form-control" placeholder="عدد المحاولات" required><input type="number" name="sp_price" class="form-control" placeholder="سعر SP" required><button class="btn btn-secondary" type="submit"><i class="bi bi-plus-lg"></i> إضافة</button></div></form><ul class="list-group" id="shop-spin-products-list"></ul></div>
+                            <div class="col-lg-4 col-md-12"><h6>منتجات تعديل الأسهم</h6><form id="add-points-product-form" class="mb-3"><select name="type" class="form-select mb-2"><option value="raise">رفع أسهم</option><option value="drop">إسقاط أسهم</option></select><input type="number" name="points_amount" class="form-control mb-2" placeholder="كمية النقاط" required><input type="number" name="sp_price" class="form-control mb-2" placeholder="سعر SP" required><input type="number" name="daily_limit" class="form-control" placeholder="الحد اليومي للاستخدام" value="1" required><button class="btn btn-secondary w-100 mt-2" type="submit">إضافة منتج أسهم</button></form><ul class="list-group" id="shop-points-products-list"></ul></div>
+
+                            <!-- New Nudge Products Section -->
+                            <div class="col-lg-6 col-md-6">
+                                <h6><i class="bi bi-sticky-fill me-2"></i>منتجات النكزات (Nudges)</h6>
+                                <form id="add-nudge-form" class="mb-3">
+                                    <div class="mb-2">
+                                        <textarea name="nudge_text" class="form-control" placeholder="اكتب نص النكزة هنا..." rows="2" required></textarea>
+                                    </div>
+                                    <div class="input-group">
+                                        <input type="number" name="sp_price" class="form-control" placeholder="سعر SP" required>
+                                        <button class="btn btn-secondary" type="submit"><i class="bi bi-plus-lg"></i> إضافة نكزة</button>
+                                    </div>
+                                </form>
+                                <ul class="list-group" id="shop-nudges-list"></ul>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        <h6><i class="bi bi-person-square me-2"></i>إدارة الأفاتارات</h6>
+                        <div class="row">
+                            <div class="col-md-5">
+                                <form id="add-avatar-form">
+                                    <div class="mb-2"><label for="avatar_name" class="form-label">اسم الأفاتار</label><input type="text" id="avatar_name" name="avatar_name" class="form-control" required></div>
+                                    <div class="row g-2 mb-2"><div class="col"><label for="price_sp_personal" class="form-label">السعر (شراء شخصي)</label><input type="number" id="price_sp_personal" name="price_sp_personal" class="form-control" min="1" required></div><div class="col"><label for="price_sp_gift" class="form-label">السعر (كهدية)</label><input type="number" id="price_sp_gift" name="price_sp_gift" class="form-control" min="1" required></div></div>
+                                    <div class="mb-3"><label for="avatar_file" class="form-label">ملف الصورة (PNG, JPG, GIF)</label><input type="file" id="avatar_file" name="avatar_file" class="form-control" accept="image/png, image/jpeg, image/gif" required></div>
+                                    <button type="submit" class="btn btn-success"><i class="bi bi-plus-circle-fill me-2"></i>إضافة أفاتar جديد</button>
+                                </form>
+                            </div>
+                            <div class="col-md-7">
+                                <p class="text-muted">قائمة الأفاتارات المتاحة في المتجر</p>
+                                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;"><table class="table table-sm"><thead><tr><th>الصورة</th><th>الاسم</th><th>الأسعار (شخصي / هدية)</th><th>إجراء</th></tr></thead><tbody id="shop-avatars-list"></tbody></table></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- *** نهاية التعديل *** -->
+
             <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#site-settings-collapse">إدارة الموقع</button></h2><div id="site-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion"><div class="accordion-body"><div class="row g-4"><div class="col-md-6"><h6>الإعلانات المتحركة</h6><form id="announcementForm" class="mb-3"><div class="input-group"><input type="text" name="text" class="form-control" placeholder="نص الإعلان..." required><button class="btn btn-secondary" type="submit">+</button></div></form><ul class="list-group" id="announcements-list"></ul></div><div class="col-md-6"><h6>قائمة الشرف (Honor Roll)</h6><form id="honorRollForm" class="mb-3"><div class="input-group"><input type="text" name="name" class="form-control" placeholder="اسم الزاحف..." required><button class="btn btn-secondary" type="submit">+</button></div></form><ul class="list-group" id="honorRollList"></ul></div></div></div></div></div>
         </div>
     </div>
@@ -266,3 +358,4 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 {% endblock %}
+<!-- END OF FILE templates/admin.html -->

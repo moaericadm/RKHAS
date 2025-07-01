@@ -1,8 +1,8 @@
-﻿<!-- START OF FILE templates/partials/_sidebar.html (WITH AVATAR CHOOSER) -->
+﻿<!-- START OF FILE templates/partials/_sidebar.html -->
+<!-- *** بداية التعديل: إعادة الشريط الجانبي إلى عمود واحد *** -->
 <div class="col-lg-4">
     <div class="vstack gap-4">
 
-        <!-- <<< بداية الإضافة: بطاقة منافسة الشعبية >>> -->
         <div class="card shadow-lg" id="popularity-contest-card" style="display: none;">
             <div class="card-header text-warning d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-trophy-fill me-2"></i>منافسة الشعبية</span>
@@ -10,17 +10,14 @@
             </div>
             <div class="card-body p-3">
                 <div class="row g-2 align-items-center" id="contest-container">
-                    <!-- سيتم ملء هذا الجزء عبر JavaScript -->
                     <div class="col-12 text-center text-muted p-4">جاري تحميل المنافسة...</div>
                 </div>
             </div>
         </div>
-        <!-- <<< نهاية الإضافة >>> -->
-        <!-- Card: Wallet -->
+
         <div class="card shadow-lg">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-wallet2 me-2 text-success"></i>محفظتي</span>
-                <!-- Avatar Chooser Button -->
                 <div class="d-flex align-items-center">
                     <img id="user-avatar-preview" src="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c757d'%3e%3cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3e%3c/svg%3e" class="user-avatar-preview" alt="User Avatar" title="تغيير الأفتار">
                 </div>
@@ -36,10 +33,32 @@
                         <strong id="user-sp-balance" class="fs-5 text-success">--</strong>
                     </li>
                 </ul>
+                <hr class="mx-2 my-3">
+                <div class="px-1">
+                    <h6 class="small text-muted mb-2">إعدادات الخصوصية</h6>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="showOnLeaderboardToggle">
+                        <label class="form-check-label small" for="showOnLeaderboardToggle">إظهار اسمي في قائمة الأغنياء</label>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Card: Free Spin Wheel -->
+        <div class="card shadow-lg" id="gambling-card" style="display: none;">
+            <div class="card-header text-danger">
+                <span><i class="bi bi-dice-5-fill me-2"></i>رهان الزاحف</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">هل تشعر بالزحف؟ خاطر بمبلغ من SP لفرصة مضاعفته أو خسارته بالكامل!</p>
+                <div class="input-group">
+                    <span class="input-group-text">SP</span>
+                    <input type="number" id="bet-amount-input" class="form-control" placeholder="أدخل المبلغ..." min="1">
+                    <button id="place-bet-btn" class="btn btn-danger">راهن الآن!</button>
+                </div>
+                <div id="bet-max-amount-text" class="form-text mt-1"></div>
+            </div>
+        </div>
+
         <div class="card shadow-lg" id="spin-wheel-card">
             <div class="card-header text-warning"><i class="bi bi-bullseye me-2"></i>عجلة الزحف (المجانية)</div>
             <div class="card-body text-center">
@@ -55,7 +74,6 @@
             </div>
         </div>
 
-        <!-- Card: Purchased Spins -->
         <div class="card shadow-lg" id="purchased-spins-card" style="display: none;">
             <div class="card-header text-info"><i class="bi bi-gem me-2"></i>المحاولات المشتراة</div>
             <div class="card-body text-center">
@@ -67,7 +85,6 @@
             </div>
         </div>
 
-        <!-- Card: Crawl Detector -->
         <div class="card shadow-lg">
             <div class="card-header"><i class="bi bi-speedometer2 me-2 text-info"></i>كاشف الزحفنة</div>
             <div class="card-body">
@@ -79,33 +96,28 @@
             </div>
         </div>
 
-        <!-- <<< بداية التصحيح: استبدال الهيكل القديم بالجديد >>> -->
         <div class="card shadow-lg">
             <div class="card-header text-white" style="background: linear-gradient(45deg, var(--bs-success), #20c997);">
                 <i class="bi bi-graph-up-arrow me-2"></i>أغنى المستثمرين
             </div>
             <div class="card-body p-3">
                 <div id="richest-investors-list" class="vstack gap-2">
-                    <!-- سيتم تعبئة هذا الجزء عبر JavaScript -->
                     <div class="text-center text-muted p-4">
                         <div class="spinner-border spinner-border-sm"></div>
                     </div>
                 </div>
             </div>
         </div>
-        <!-- <<< نهاية التصحيح >>> -->
-        <!-- Card: Top 3 -->
+
         <div class="card shadow-lg"><div class="card-header bg-warning text-dark"><i class="bi bi-trophy-fill me-2"></i>توب 3 زحيفة</div><ul class="list-group list-group-flush" id="hall-of-fame"><li class="list-group-item text-muted text-center"><div class="spinner-border spinner-border-sm"></div></li></ul></div>
 
-        <!-- Card: Honor Roll -->
         <div class="card shadow-lg"><div class="card-header" style="background: var(--primary-glow); color: #fff;"><i class="bi bi-award-fill me-2"></i>الاكثر ذكراً</div><ul class="list-group list-group-flush" id="honor-roll-view-list"><li class="list-group-item text-muted text-center"><div class="spinner-border spinner-border-sm"></div></li></ul></div>
 
-        <!-- Card: Candidates -->
         <div class="card shadow-lg"><div class="card-header"><i class="bi bi-person-check-fill me-2 text-success"></i>مرشحون جدد</div><ul class="list-group list-group-flush" id="candidates-list"><li class="list-group-item text-muted text-center"><div class="spinner-border spinner-border-sm"></div></li></ul></div>
 
-        <!-- Card: Interactions -->
         <div class="card shadow-lg"><div class="card-header"><i class="bi bi-joystick me-2"></i>تفاعل معنا</div><div class="card-body d-grid gap-2"><button class="btn btn-success" id="nominate-btn"><i class="bi bi-person-up me-2"></i>رشح زاحفاً</button><button class="btn btn-outline-danger" id="report-btn"><i class="bi bi-exclamation-triangle-fill me-2"></i>أبلغ عن زاحف</button></div></div>
 
     </div>
 </div>
+<!-- *** نهاية التعديل *** -->
 <!-- END OF FILE templates/partials/_sidebar.html -->

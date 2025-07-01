@@ -1,11 +1,10 @@
-<!-- START OF FILE templates/user_view.html (WITH INVESTMENT DEMAND COLUMN) -->
+<!-- START OF FILE templates/user_view.html -->
 {% extends "base.html" %}
 {% block title %}زواحف افاق ال(IT){% endblock %}
 {% block header_title %}نظام حساب و استثمار نقاط زواحف فرع ال (IT){% endblock %}
 
 {% block styles %}
 <style>
-    /* ... (All previous styles are kept the same) ... */
     #announcements-container {
         opacity: 0;
         transform: translateY(-20px);
@@ -133,6 +132,15 @@
                 animation: heart-pulse 0.5s ease;
             }
 
+    .nudge-btn {
+        transition: all 0.2s ease-in-out;
+    }
+
+        .nudge-btn:hover {
+            transform: scale(1.1) rotate(-15deg);
+            color: var(--bs-warning);
+        }
+
     @keyframes heart-pulse {
         0% {
             transform: scale(1);
@@ -171,50 +179,41 @@
         }
     }
 
-    .custom-modal {
-        display: none;
-        position: fixed;
-        z-index: 1060;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        overflow-y: auto;
-        background-color: rgba(11,2,29,.9);
-        backdrop-filter: blur(8px);
-        align-items: center;
-        justify-content: center;
+    .modal {
+        --bs-modal-bg: var(--card-bg);
+        --bs-modal-header-border-color: var(--card-border);
+        --bs-modal-footer-border-color: var(--card-border);
+        color: var(--text-color);
     }
 
-        .custom-modal.show {
-            display: flex;
-        }
+    .modal-backdrop.show {
+        backdrop-filter: blur(8px) brightness(0.7);
+        -webkit-backdrop-filter: blur(8px) brightness(0.7);
+    }
 
-    .custom-modal-content {
-        background: var(--card-bg);
+    .modal-content {
         border: 1px solid var(--card-border);
-        margin: 1rem;
-        padding: 30px;
-        width: 90%;
-        max-width: 500px;
-        border-radius: .75rem;
-        position: relative;
-        animation: modal-fade-in .3s ease-out;
+        box-shadow: 0 0 30px rgba(159,122,234,.15);
     }
 
-    @keyframes modal-fade-in {
-        from {
-            opacity: 0;
-            transform: translateY(-20px);
-        }
-
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+    .modal-header .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
     }
 
-    .custom-close-btn {
+    .modal-header .modal-title {
+        color: var(--header-color);
+        text-shadow: 0 0 10px var(--header-color);
+    }
+
+    html:not(.dark-mode) .modal-backdrop {
+        background-color: rgba(0,0,0,0.5);
+    }
+
+    html:not(.dark-mode) .modal-header .btn-close {
+        filter: none;
+    }
+
+    .custom-close-btn { /* For Spin Wheel Modal */
         color: #aaa;
         position: absolute;
         top: 10px;
@@ -224,11 +223,20 @@
         cursor: pointer;
         transition: color .2s;
         z-index: 1070;
+        line-height: 1;
+        opacity: 0.7;
     }
 
         .custom-close-btn:hover {
             color: #fff;
+            opacity: 1;
         }
+
+    @media (min-width: 992px) {
+        #sellLotsModal .modal-lg {
+            --bs-modal-width: 800px;
+        }
+    }
 
     #spin-wheel-card .card-body {
         background-image: linear-gradient(45deg,rgba(255,215,0,.1),transparent),linear-gradient(-45deg,rgba(0,242,255,.1),transparent);
@@ -258,11 +266,19 @@
         font-size: 1rem;
     }
 
+    #spinWheelModal .modal-content {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
     #wheel-container {
         position: relative;
         width: 450px;
         height: 450px;
         margin: 0 auto;
+        border-radius: 50%;
+        animation: wheel-glow 5s ease-in-out infinite;
     }
 
         #wheel-container::after {
@@ -280,35 +296,22 @@
             z-index: 10;
         }
 
-    #spinWheelModal .custom-modal-content {
-        max-width: 480px;
-        padding: 15px;
-        background-color: transparent;
-        border: none;
-        box-shadow: none;
-    }
-
     @keyframes wheel-glow {
         0% {
-            box-shadow: 0 0 25px -5px var(--primary-glow), 0 0 45px -15px var(--secondary-glow);
+            box-shadow: 0 0 25px -5px var(--primary-glow), 0 0 45px -15px var(--secondary-glow), 0 0 75px -25px var(--accent-glow);
         }
 
         50% {
-            box-shadow: 0 0 40px -5px var(--primary-glow), 0 0 60px -15px var(--secondary-glow);
+            box-shadow: 0 0 40px -5px var(--primary-glow), 0 0 60px -15px var(--secondary-glow), 0 0 90px -25px var(--accent-glow);
         }
 
         100% {
-            box-shadow: 0 0 25px -5px var(--primary-glow), 0 0 45px -15px var(--secondary-glow);
+            box-shadow: 0 0 25px -5px var(--primary-glow), 0 0 45px -15px var(--secondary-glow), 0 0 75px -25px var(--accent-glow);
         }
     }
 
     .wheel-wrapper-glow {
-        background: transparent !important;
-        border-radius: 50%;
-        border: none !important;
-        animation: wheel-glow 5s ease-in-out infinite;
     }
-
 
     #spin-canvas {
         display: block;
@@ -343,6 +346,98 @@
     .investment-actions-col {
         min-width: 200px;
     }
+
+    .online-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #28a745;
+        margin-right: 8px; /* RTL */
+        vertical-align: middle;
+        border: 1px solid rgba(255,255,255,0.5);
+        animation: pulse-green 2s infinite;
+    }
+
+    @keyframes pulse-green {
+        0% {
+            box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+        }
+
+        70% {
+            box-shadow: 0 0 0 8px rgba(40, 167, 69, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+        }
+    }
+
+    /* *** بداية التعديل: إضافة تنسيقات إشعار النكز داخل الجدول *** */
+    .crawler-name-cell {
+        position: relative;
+    }
+
+    .table-nudge-indicator {
+        position: absolute;
+        top: 50%;
+        right: 0; /* يبدأ من اليمين في RTL */
+        transform: translateY(-50%);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        padding: 5px 10px;
+        background: linear-gradient(135deg, #0072ff, #00c6ff);
+        color: white;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        box-shadow: 0 4px 15px rgba(0, 150, 255, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        animation: nudge-table-fade 4s ease-out forwards;
+        pointer-events: none;
+    }
+
+        .table-nudge-indicator img {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            margin-left: 8px; /* RTL */
+        }
+
+        .table-nudge-indicator .sp-price-tag {
+            display: inline-block;
+            margin-right: 8px; /* RTL */
+            padding: 1px 6px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            background-color: rgba(255, 193, 7, 0.9);
+            color: #0b021d;
+            border-radius: 8px;
+        }
+
+    @keyframes nudge-table-fade {
+        0% {
+            opacity: 0;
+            transform: translateY(-50%) scale(0.8);
+        }
+
+        15% {
+            opacity: 1;
+            transform: translateY(-50%) scale(1);
+        }
+
+        85% {
+            opacity: 1;
+            transform: translateY(-50%) scale(1);
+        }
+
+        100% {
+            opacity: 0;
+            transform: translateY(-50%) scale(0.8);
+        }
+    }
+    /* *** نهاية التعديل *** */
 </style>
 {% endblock %}
 
@@ -371,12 +466,13 @@
                             <th>اسم الزاحف</th>
                             <th class="text-center">النقاط</th>
                             <th class="text-center">تفاعل</th>
+                            <th class="text-center">نكز</th>
                             <th class="text-center" id="investment-demand-header" style="display: none;">الإقبال</th>
                             <th class="text-center investment-actions-col">الاستثمار</th>
                         </tr>
                     </thead>
                     <tbody id="user-table-body">
-                        <tr><td colspan="6" class="text-center py-5"><div id="loading-spinner"><div class="spinner-border text-danger"></div><p class="mt-2">جاري الزحف...</p></div></td></tr>
+                        <tr><td colspan="7" class="text-center py-5"><div id="loading-spinner"><div class="spinner-border text-danger"></div><p class="mt-2">جاري الزحف...</p></div></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -397,3 +493,4 @@
 <script src="{{ url_for('static', filename='js/user_interactions.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/user_view.js') }}" defer></script>
 {% endblock %}
+<!-- END OF FILE templates/user_view.html -->

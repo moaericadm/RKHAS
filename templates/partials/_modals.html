@@ -1,11 +1,10 @@
-﻿<!-- START OF FILE templates/partials/_modals.html (WITH NEW AVATAR MODAL) -->
+﻿<!-- START OF FILE templates/partials/_modals.html -->
 <!-- Spin Wheel Modal -->
-<div id="spinWheelModal" class="custom-modal">
-    <!-- <<< بداية التعديل: إضافة حاوية التوهج >>> -->
-    <div class="custom-modal-content wheel-wrapper-glow">
-        <!-- <<< نهاية التعديل >>> -->
-        <span class="custom-close-btn" title="إغلاق">×</span>
+<div class="modal fade" id="spinWheelModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered wheel-wrapper-glow" style="max-width: 480px;">
+        <!-- لا نحتاج لـ modal-content هنا للحفاظ على التوهج الدائري -->
         <div id="wheel-container">
+            <button type="button" class="btn-close custom-close-btn" data-bs-dismiss="modal" aria-label="Close" title="إغلاق"></button>
             <canvas id="spin-canvas" width="450" height="450">
                 <p>عذراً, متصفحك لا يدعم هذه الميزة (Canvas).</p>
             </canvas>
@@ -13,74 +12,135 @@
     </div>
 </div>
 
+<!-- Contest Info Modal -->
+<div class="modal fade" id="contestInfoModal" tabindex="-1" aria-labelledby="contestInfoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content text-center">
+            <div class="modal-header">
+                <h5 class="modal-title w-100" id="contestInfoModalLabel">تفاصيل منافسة الشعبية</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- سيتم تعبئة المحتوى هنا عبر جافاسكريبت -->
+                <div class="spinner-border text-warning" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generic Avatar Display Modal (for offline users) -->
+<div class="modal fade" id="genericAvatarDisplayModal" tabindex="-1" aria-labelledby="genericAvatarDisplayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-center">
+            <div class="modal-header">
+                <h5 class="modal-title w-100" id="genericAvatarDisplayModalLabel">أفاتار الزاحف</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <img id="generic-modal-avatar-image" src="" alt="User Avatar" class="img-fluid rounded-circle mb-3" style="max-width: 250px; border: 5px solid var(--primary-glow); box-shadow: 0 0 25px var(--primary-glow);">
+                <h4 id="generic-modal-avatar-name" class="fw-bold"></h4>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- User History Chart Modal -->
-<div id="userChartModal" class="custom-modal">
-    <div class="custom-modal-content">
-        <span class="custom-close-btn" data-bs-dismiss="modal" title="إغلاق">×</span>
-        <h5 class="mb-3" id="chartModalLabel">سجل نقاط الزاحف</h5>
-        <div id="user-chart-container" style="height: 300px;">
-            <canvas id="userPointsChart"></canvas>
+<div class="modal fade" id="userChartModal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chartModalLabel">سجل نقاط الزاحف</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="user-chart-container" style="height: 300px;">
+                    <canvas id="userPointsChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Crawl Detector Modal -->
-<div id="crawlModal" class="custom-modal">
-    <div class="custom-modal-content text-center">
-        <span class="custom-close-btn" data-bs-dismiss="modal" title="إغلاق">×</span>
-        <h3 class="mb-3" id="crawl-modal-title">نتيجة فحص الزحفنة</h3>
-        <div id="crawl-chart-container" style="height: 250px; max-width: 250px; margin: auto;">
-            <canvas id="crawlChart"></canvas>
+<div class="modal fade" id="crawlModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-center">
+            <div class="modal-header">
+                <h5 class="modal-title w-100" id="crawl-modal-title">نتيجة فحص الزحفنة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="crawl-chart-container" style="height: 250px; max-width: 250px; margin: auto;">
+                    <canvas id="crawlChart"></canvas>
+                </div>
+                <p id="crawl-modal-text" class="fs-5 mt-3 fw-bold"></p>
+            </div>
         </div>
-        <p id="crawl-modal-text" class="fs-5 mt-3 fw-bold"></p>
     </div>
 </div>
 
 <!-- Investment Modal -->
-<div id="investmentModal" class="custom-modal">
-    <div class="custom-modal-content">
-        <span class="custom-close-btn" data-bs-dismiss="modal" title="إغلاق">×</span>
-        <h4 class="mb-1 text-center" id="invest-modal-title">الاستثمار في <strong id="invest-crawler-name" class="text-info"></strong></h4>
-        <p id="invest-modal-subtitle" class="text-muted text-center small mb-3">أدخل كمية نقاط الدعم (SP) التي ترغب في استثمارها.</p>
-        <form id="investment-form">
-            <input type="hidden" id="invest-crawler-name-hidden" name="crawler_name">
-            <div class="form-floating mb-3">
-                <input type="number" id="sp-amount-input" name="sp_amount" class="form-control" placeholder="كمية SP" required min="1" step="any">
-                <label for="sp-amount-input">كمية SP للاستثمار</label>
+<div class="modal fade" id="investmentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title w-100 text-center" id="invest-modal-title">الاستثمار في <strong id="invest-crawler-name" class="text-info"></strong></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="d-grid">
-                <button type="submit" class="btn btn-primary">تأكيد الاستثمار الزاحف</button>
+            <div class="modal-body">
+                <div id="invest-modal-subtitle" class="text-muted text-center small mb-3 p-2 bg-dark bg-opacity-10 rounded">
+                    أدخل كمية نقاط الدعم (SP) التي ترغب في استثمارها.
+                </div>
+                <form id="investment-form">
+                    <input type="hidden" id="invest-crawler-name-hidden" name="crawler_name">
+                    <div class="form-floating mb-3">
+                        <input type="number" id="sp-amount-input" name="sp_amount" class="form-control" placeholder="كمية SP" required min="1" step="any">
+                        <label for="sp-amount-input">كمية SP للاستثمار</label>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">تأكيد الاستثمار الزاحف</button>
+                    </div>
+                </form>
             </div>
-        </form>
+        </div>
     </div>
 </div>
-<!-- Investment Info Modal (Profit/Loss Details) -->
-<div id="investmentInfoModal" class="custom-modal">
-    <div class="custom-modal-content">
-        <span class="custom-close-btn" data-bs-dismiss="modal" title="إغلاق">×</span>
-        <h4 class="mb-3 text-center">تفاصيل استثمارك في <strong id="infoModalCrawlerName" class="text-info"></strong></h4>
-        <ul class="list-group list-group-flush">
-            <li class="list-group-item d-flex justify-content-between"><span>المبلغ المستثمر (SP):</span><strong id="infoModalInvestedSP">--</strong></li>
-            <li class="list-group-item d-flex justify-content-between"><span>نقاط السهم عند الشراء:</span><strong id="infoModalPointsThen">--</strong></li>
-            <li class="list-group-item d-flex justify-content-between"><span>نقاط السهم الحالية:</span><strong id="infoModalPointsNow">--</strong></li>
-            <li class="list-group-item d-flex justify-content-between"><span>مُضاعِف السهم (تأثير الأدمن):</span><strong id="infoModalStockMultiplier">--</strong></li>
-            <li class="list-group-item d-flex justify-content-between"><span>الربح / الخسارة (SP):</span><strong id="infoModalProfitLoss">--</strong></li>
-        </ul>
-        <div class="d-grid mt-4"><button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('investmentInfoModal').classList.remove('show')">إغلاق</button></div>
+
+<!-- Sell Lots Modal (New Structure) -->
+<div class="modal fade" id="sellLotsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sellLotsModalTitle">إدارة الاستثمار</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="sellLotsModalBody">
+                <div class="text-center p-5"><div class="spinner-border"></div></div>
+            </div>
+        </div>
     </div>
 </div>
+
 <!-- Avatar Chooser Modal -->
-<div id="avatarChooserModal" class="custom-modal">
-    <div class="custom-modal-content">
-        <span class="custom-close-btn" data-bs-dismiss="modal" title="إغلاق">×</span>
-        <h4 class="mb-3 text-center">اختر الأفاتار الخاص بك</h4>
-        <p class="text-muted text-center">اختر صورة من الأفاتارات التي تمتلكها.</p>
-        <div id="owned-avatars-container" class="d-flex flex-wrap justify-content-center gap-3" style="max-height: 400px; overflow-y: auto;">
-            <!-- سيتم تعبئة الأفاتارات هنا عبر JavaScript -->
-            <div class="text-center p-5"><div class="spinner-border"></div></div>
-        </div>
-        <div class="d-grid mt-4">
-            <a href="{{ url_for('views.shop_page') }}" class="btn btn-success"><i class="bi bi-shop me-2"></i>شراء أفاتارات جديدة</a>
+<div class="modal fade" id="avatarChooserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">اختر الأفاتار الخاص بك</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted text-center">اختر صورة من الأفاتارات التي تمتلكها.</p>
+                <div id="owned-avatars-container" class="d-flex flex-wrap justify-content-center gap-3" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center p-5"><div class="spinner-border"></div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ url_for('views.shop_page') }}" class="btn btn-success w-100"><i class="bi bi-shop me-2"></i>شراء أفاتارات جديدة</a>
+            </div>
         </div>
     </div>
 </div>
+<!-- END OF FILE templates/partials/_modals.html -->

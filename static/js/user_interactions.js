@@ -1,4 +1,4 @@
-﻿
+﻿// --- START OF FILE static/js/user_interactions.js ---
 document.addEventListener('DOMContentLoaded', () => {
     const userTableBody = document.getElementById('user-table-body');
     if (!userTableBody) return;
@@ -32,23 +32,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupEventListeners() {
-        // <<< بداية التعديل: استثناء نافذة العجلة من الإغلاق التلقائي >>>
-        document.querySelectorAll('.custom-modal:not(#spinWheelModal)').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                // هذا الكود سيعمل على كل النوافذ ما عدا نافذة العجلة
-                const modal = e.target.closest('.custom-modal');
-                if (modal && (e.target === modal || e.target.classList.contains('custom-close-btn'))) {
-                    modal.classList.remove('show');
-                }
-            });
-        });
-        // <<< نهاية التعديل >>>
+        // **التعديل**: تم حذف الكود القديم لإغلاق النوافذ. Bootstrap سيتولى الأمر.
 
         if (ui.checkCrawlBtn) ui.checkCrawlBtn.addEventListener('click', showCrawlCheckModal);
         if (ui.nominateBtn) ui.nominateBtn.addEventListener('click', handleNomination);
         if (ui.reportBtn) ui.reportBtn.addEventListener('click', handleReport);
     }
 
+    // هذه الدالة الآن مسؤولة فقط عن جمع البيانات من المستخدم
     async function showCrawlCheckModal() {
         const name = ui.crawlNameInput.value.trim();
         if (!name) {
@@ -92,6 +83,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleCrawlCheck(name, extraData) {
+        if (!ui.crawlModal) return;
+
         const existingUser = allUsersCache.find(u => u.name.toLowerCase() === name.toLowerCase());
         let percentage, title, text, color;
 
@@ -132,10 +125,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // **التعديل**: استخدام Bootstrap API لإظهار النافذة
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(ui.crawlModal);
+
         ui.crawlModalTitle.textContent = "جاري الفحص...";
         ui.crawlModalText.textContent = "";
         if (crawlChartInstance) crawlChartInstance.destroy();
-        ui.crawlModal.classList.add('show');
+
+        modalInstance.show();
 
         const ctx = ui.crawlChartCanvas.getContext('2d');
         setTimeout(() => {
@@ -219,3 +216,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     exportInteractionFunctions();
 });
+// --- END OF FILE static/js/user_interactions.js ---
