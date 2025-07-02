@@ -1,5 +1,4 @@
 ﻿<!-- START OF FILE templates/partials/_sidebar.html -->
-<!-- *** بداية التعديل: إعادة الشريط الجانبي إلى عمود واحد *** -->
 <div class="col-lg-4">
     <div class="vstack gap-4">
 
@@ -19,9 +18,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-wallet2 me-2 text-success"></i>محفظتي</span>
                 <div class="d-flex align-items-center">
-                    <!-- *** بداية التعديل: إضافة خصائص data-bs-toggle لفتح نافذة اختيار الأفاتار *** -->
                     <img id="user-avatar-preview" src="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c757d'%3e%3cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3e%3c/svg%3e" class="user-avatar-preview" alt="User Avatar" title="تغيير الأفتار" data-bs-toggle="modal" data-bs-target="#avatarChooserModal">
-                    <!-- *** نهاية التعديل *** -->
                 </div>
             </div>
             <div class="card-body">
@@ -35,29 +32,13 @@
                         <strong id="user-sp-balance" class="fs-5 text-success">--</strong>
                     </li>
                 </ul>
-                <hr class="mx-2 my-3">
-                <div class="px-1">
+                <div class="mt-auto pt-2">
                     <h6 class="small text-muted mb-2">إعدادات الخصوصية</h6>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" role="switch" id="showOnLeaderboardToggle">
                         <label class="form-check-label small" for="showOnLeaderboardToggle">إظهار اسمي في قائمة الأغنياء</label>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="card shadow-lg" id="gambling-card" style="display: none;">
-            <div class="card-header text-danger">
-                <span><i class="bi bi-dice-5-fill me-2"></i>رهان الزاحف</span>
-            </div>
-            <div class="card-body">
-                <p class="text-muted small">هل تشعر بالزحف؟ خاطر بمبلغ من SP لفرصة مضاعفته أو خسارته بالكامل!</p>
-                <div class="input-group">
-                    <span class="input-group-text">SP</span>
-                    <input type="number" id="bet-amount-input" class="form-control" placeholder="أدخل المبلغ..." min="1">
-                    <button id="place-bet-btn" class="btn btn-danger">راهن الآن!</button>
-                </div>
-                <div id="bet-max-amount-text" class="form-text mt-1"></div>
             </div>
         </div>
 
@@ -87,13 +68,86 @@
             </div>
         </div>
 
-        <div class="card shadow-lg">
-            <div class="card-header"><i class="bi bi-speedometer2 me-2 text-info"></i>كاشف الزحفنة</div>
+        <div class="card shadow-lg" id="gambling-card" style="display: none;">
+            <div class="card-header text-danger">
+                <span><i class="bi bi-dice-5-fill me-2"></i>رهان الزاحف</span>
+            </div>
             <div class="card-body">
-                <p class="text-muted small">هل أنت زاحف؟ أدخل اسمك واكتشف نسبة زحفك!</p>
+                <p class="text-muted small">هل تشعر بالزحف؟ خاطر بمبلغ من SP لفرصة مضاعفته أو خسارته بالكامل!</p>
                 <div class="input-group">
-                    <input type="text" id="crawl-name-input" class="form-control form-control-sm" placeholder="أدخل اسماً...">
-                    <button id="check-crawl-btn" class="btn btn-info btn-sm">افحص الزحفنة</button>
+                    <span class="input-group-text">SP</span>
+                    <input type="number" id="bet-amount-input" class="form-control" placeholder="أدخل المبلغ..." min="1">
+                    <button id="place-bet-btn" class="btn btn-danger">راهن الآن!</button>
+                </div>
+                <div id="bet-max-amount-text" class="form-text mt-1"></div>
+            </div>
+        </div>
+
+        <div class="card shadow-lg" id="stock-prediction-game-card" style="display: none;">
+            <div class="card-header text-info">
+                <span><i class="bi bi-graph-up-arrow me-2"></i>لعبة توقع السهم</span>
+            </div>
+            <div class="card-body text-center" id="stock-game-body">
+                <div id="stock-game-start-section">
+                    <p class="text-muted small">خمن ما إذا كان سهم الزاحف سيرتفع أم سينخفض لفرصة مضاعفة رهانك.</p>
+                    <div class="input-group input-group-sm mb-3">
+                        <span class="input-group-text">SP</span>
+                        <input type="number" id="stock-game-bet-amount" class="form-control" placeholder="مبلغ الرهان" value="10" min="1">
+                    </div>
+                    <button id="stock-game-start-btn" class="btn btn-info w-100">ابدأ اللعبة</button>
+                </div>
+                <div id="stock-game-play-section" class="d-none">
+                    <img id="stock-game-avatar" src="" class="rounded-circle mb-2" style="width: 60px; height: 60px; border: 3px solid var(--secondary-glow); object-fit: cover;">
+                    <h6 id="stock-game-name" class="fw-bold"></h6>
+                    <p class="text-muted small mb-3">هل سيرتفع سهم هذا الزاحف أم سينخفض؟</p>
+                    <div class="d-grid gap-2">
+                        <button id="stock-game-up-btn" class="btn btn-success"><i class="bi bi-arrow-up"></i> سيرتفع</button>
+                        <button id="stock-game-down-btn" class="btn btn-danger"><i class="bi bi-arrow-down"></i> سينخفض</button>
+                    </div>
+                    <hr class="my-3">
+                    <div class="d-flex justify-content-between">
+                        <span class="small text-muted">الرهان الحالي:</span>
+                        <span id="stock-game-current-bet" class="small fw-bold text-warning"></span>
+                    </div>
+                </div>
+                <div id="stock-game-continue-section" class="d-none">
+                    <p class="fs-5 text-success fw-bold">توقع صحيح!</p>
+                    <p class="text-muted small">ربحك الحالي هو <strong id="stock-game-winnings" class="text-warning"></strong> SP.</p>
+                    <div class="d-grid gap-2">
+                        <button id="stock-game-double-btn" class="btn btn-warning"><i class="bi bi-gem me-2"></i>ضاعف واستمر</button>
+                        <button id="stock-game-cashout-btn" class="btn btn-info"><i class="bi bi-wallet-fill me-2"></i>اسحب الأرباح</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-lg" id="rps-pvp-game-card" style="display: none;">
+            <div class="card-header d-flex justify-content-between align-items-center" style="color: var(--bs-purple); text-shadow: 0 0 8px var(--bs-purple);">
+                <span><i class="bi bi-scissors me-2"></i>تحدي حجر، ورقة، مقص</span>
+                <span id="rps-game-timer" class="badge bg-secondary" style="display: none;"></span>
+            </div>
+            <div class="card-body" id="rps-pvp-game-body">
+                <div id="rps-lobby-section">
+                    <div id="rps-create-section">
+                        <p class="text-muted small text-center">أنشئ تحدياً جديداً أو انضم إلى تحدٍ موجود.</p>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text">SP</span>
+                            <input type="number" id="rps-create-bet-amount" class="form-control" placeholder="مبلغ الرهان" value="100" min="10">
+                        </div>
+                        <button id="rps-create-challenge-btn" class="btn w-100" style="background-color: var(--bs-purple); color: white;">إنشاء تحدي جديد</button>
+                    </div>
+                    <div id="rps-waiting-section" class="d-none text-center">
+                        <div class="spinner-border spinner-border-sm text-info me-2"></div>
+                        <span id="rps-waiting-text" class="text-muted"></span>
+                        <button id="rps-cancel-challenge-btn" class="btn btn-sm btn-outline-danger ms-2">إلغاء</button>
+                    </div>
+                    <hr>
+                    <div id="rps-challenges-section">
+                        <h6 class="small text-center text-muted">التحديات المفتوحة</h6>
+                        <ul class="list-group list-group-flush" id="rps-challenges-list" style="max-height: 150px; overflow-y: auto;">
+                            <li class="list-group-item text-muted text-center"><div class="spinner-border spinner-border-sm"></div></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -112,14 +166,11 @@
         </div>
 
         <div class="card shadow-lg"><div class="card-header bg-warning text-dark"><i class="bi bi-trophy-fill me-2"></i>توب 3 زحيفة</div><ul class="list-group list-group-flush" id="hall-of-fame"><li class="list-group-item text-muted text-center"><div class="spinner-border spinner-border-sm"></div></li></ul></div>
-
         <div class="card shadow-lg"><div class="card-header" style="background: var(--primary-glow); color: #fff;"><i class="bi bi-award-fill me-2"></i>الاكثر ذكراً</div><ul class="list-group list-group-flush" id="honor-roll-view-list"><li class="list-group-item text-muted text-center"><div class="spinner-border spinner-border-sm"></div></li></ul></div>
-
         <div class="card shadow-lg"><div class="card-header"><i class="bi bi-person-check-fill me-2 text-success"></i>مرشحون جدد</div><ul class="list-group list-group-flush" id="candidates-list"><li class="list-group-item text-muted text-center"><div class="spinner-border spinner-border-sm"></div></li></ul></div>
-
+        <div class="card shadow-lg"><div class="card-header"><i class="bi bi-speedometer2 me-2 text-info"></i>كاشف الزحفنة</div><div class="card-body"><p class="text-muted small">هل أنت زاحف؟ أدخل اسمك واكتشف نسبة زحفك!</p><div class="input-group"><input type="text" id="crawl-name-input" class="form-control form-control-sm" placeholder="أدخل اسماً..."><button id="check-crawl-btn" class="btn btn-info btn-sm">افحص الزحفنة</button></div></div></div>
         <div class="card shadow-lg"><div class="card-header"><i class="bi bi-joystick me-2"></i>تفاعل معنا</div><div class="card-body d-grid gap-2"><button class="btn btn-success" id="nominate-btn"><i class="bi bi-person-up me-2"></i>رشح زاحفاً</button><button class="btn btn-outline-danger" id="report-btn"><i class="bi bi-exclamation-triangle-fill me-2"></i>أبلغ عن زاحف</button></div></div>
 
     </div>
 </div>
-<!-- *** نهاية التعديل *** -->
 <!-- END OF FILE templates/partials/_sidebar.html -->

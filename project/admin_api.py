@@ -537,7 +537,6 @@ def edit_avatar(pid):
         return jsonify(success=True)
     except (ValueError, TypeError): return jsonify(success=False, message="بيانات الأفاتار غير صالحة."), 400
 
-# *** بداية الإضافة: نقاط نهاية API لإدارة النكزات ***
 @bp.route('/shop/add_nudge', methods=['POST'])
 @admin_required
 def add_nudge():
@@ -604,5 +603,95 @@ def toggle_user_nudge():
     except Exception as e:
         print(f"!!! Toggle User Nudge Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
-# *** نهاية الإضافة ***
+
+@bp.route('/update_personal_multiplier', methods=['POST'])
+@admin_required
+def update_personal_multiplier():
+    try:
+        investor_id = request.form.get('user_id')
+        crawler_name = request.form.get('crawler_name')
+        multiplier_str = request.form.get('multiplier')
+
+        if not all([investor_id, crawler_name, multiplier_str]):
+            return jsonify(success=False, message="بيانات ناقصة."), 400
+
+        multiplier = float(multiplier_str)
+        if multiplier < 0:
+            return jsonify(success=False, message="المضاعف لا يمكن أن يكون سالباً."), 400
+
+        investment_ref = db.reference(f'investments/{investor_id}/{crawler_name}')
+        if not investment_ref.get():
+            return jsonify(success=False, message="هذا المستخدم ليس لديه استثمار في هذا الزاحف."), 404
+
+        investment_ref.update({'personal_multiplier': multiplier})
+        
+        investor_name = (db.reference(f'registered_users/{investor_id}/name').get() or 'مستخدم')
+        log_text = (f"الأدمن '{session.get('name')}'"
+                    f" عدّل مضاعف الربح الشخصي للمستثمر '{investor_name}'"
+                    f" في الزاحف '{crawler_name}' إلى {multiplier:.2f}x.")
+        
+        db.reference('activity_log').push({
+            'type': 'admin_edit', 
+            'text': log_text, 
+            'timestamp': int(time.time())
+        })
+
+        return jsonify(success=True, message="تم تحديث المضاعف الشخصي بنجاح.")
+
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="قيمة المضاعف غير صالحة."), 400
+    except Exception as e:
+        print(f"!!! Update Personal Multiplier Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
+
+@bp.route('/settings/stock_prediction_game', methods=['POST'])
+@admin_required
+def save_stock_prediction_game_settings():
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="لم يتم استلام أي بيانات."), 400
+    
+    try:
+        settings = {
+            'is_enabled': bool(data.get('is_enabled')),
+            'max_bet': int(data.get('max_bet')),
+            'win_chance_percent': float(data.get('win_chance_percent'))
+        }
+        if not (0 <= settings['win_chance_percent'] <= 100) or settings['max_bet'] < 0:
+            raise ValueError("قيم الإعدادات غير صالحة.")
+
+        db.reference('site_settings/stock_prediction_game').set(settings)
+        return jsonify(success=True, message="تم حفظ إعدادات اللعبة بنجاح!")
+
+    except (ValueError, TypeError) as e:
+        return jsonify(success=False, message=f"بيانات غير صالحة: {e}"), 400
+    except Exception as e:
+        print(f"!!! Save Stock Prediction Settings Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
+
+@bp.route('/settings/rps_game', methods=['POST'])
+@admin_required
+def save_rps_game_settings():
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="لم يتم استلام أي بيانات."), 400
+    
+    try:
+        settings = {
+            'is_enabled': bool(data.get('is_enabled')),
+            'max_bet': int(data.get('max_bet')),
+            'cooldown_seconds': int(data.get('cooldown_seconds', 60)) # *** إضافة جديدة ***
+        }
+        if settings['max_bet'] < 0 or settings['cooldown_seconds'] < 0:
+            raise ValueError("القيم لا يمكن أن تكون سالبة.")
+
+        # لا نقوم بتحديث lock_until هنا، هو يتحدث تلقائياً عند انتهاء اللعبة
+        db.reference('site_settings/rps_game').update(settings)
+        return jsonify(success=True, message="تم حفظ إعدادات اللعبة بنجاح!")
+
+    except (ValueError, TypeError) as e:
+        return jsonify(success=False, message=f"بيانات غير صالحة: {e}"), 400
+    except Exception as e:
+        print(f"!!! Save RPS Game Settings Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
 # --- END OF FILE project/admin_api.py ---

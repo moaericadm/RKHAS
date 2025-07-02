@@ -12,9 +12,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
 
-    <!-- <<< بداية التعديل: إضافة مكتبة Toastify >>> -->
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <!-- <<< نهاية التعديل >>> -->
+
     <!-- Main Styles -->
     <style>
         :root {
@@ -175,7 +174,9 @@
 </head>
 <body>
     <div id="particles-js"></div>
+    <!-- *** بداية التعديل: العودة إلى الحاوية القياسية container *** -->
     <div class="container mt-5 mb-5">
+        <!-- *** نهاية التعديل *** -->
         <header class="main-header mb-4 pb-3 border-bottom" style="border-color: var(--card-border) !important">
             <h1 class="h3 fw-bold mb-0" style="color: var(--header-color); text-shadow: 0 0 10px var(--header-color);">{% block header_title %}الزواحف{% endblock %}</h1>
             <div class="d-flex align-items-center gap-2">
@@ -203,10 +204,8 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
-    <!-- <<< بداية التعديل: إضافة مكتبة Toastify >>> -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-    <!-- <<< نهاية التعديل >>> -->
+
     <!-- Main Application Scripts -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
@@ -231,19 +230,18 @@
         const setupParticles = () => {
             if (typeof particlesJS !== 'undefined' && document.getElementById('particles-js')) {
                 const isDark = document.documentElement.classList.contains('dark-mode');
-                // <<< --- بداية التعديل: العودة إلى الإصدار الصحيح والمطلوب --- >>>
                 particlesJS("particles-js", {
                     "particles": {
                         "number": { "value": 60, "density": { "enable": true, "value_area": 550 } },
-                        "color": { "value": isDark ? "#9f7aea" : "#6b46c1" }, // اللون الأساسي للجزيئات (بنفسجي)
+                        "color": { "value": isDark ? "#9f7aea" : "#6b46c1" },
                         "shape": { "type": "circle" },
                         "opacity": { "value": 0.4, "random": true },
                         "size": { "value": 3, "random": true },
                         "line_linked": {
                             "enable": true,
                             "distance": 250,
-                            "color": "#1E3A8A", // لون الخطوط الافتراضي (سيتم تجاهله تقريبًا بسبب الشفافية)
-                            "opacity": 0.3,    // شفافية خافتة جداً للخطوط العادية
+                            "color": "#1E3A8A",
+                            "opacity": 0.3,
                             "width": 1.5
                         },
                         "move": { "enable": true, "speed": 1.5, "direction": "none", "out_mode": "out" }
@@ -259,8 +257,8 @@
                             "grab": {
                                 "distance": 200,
                                 "line_linked": {
-                                    "opacity": 1, // شفافية قوية للخطوط عند التفاعل
-                                    "color": isDark ? "#00f2ff" : "#2b6cb0" // اللون الأزرق المضيء للخطوط التفاعلية
+                                    "opacity": 1,
+                                    "color": isDark ? "#00f2ff" : "#2b6cb0"
                                 }
                             },
                             "push": { "particles_nb": 4 }
@@ -268,7 +266,6 @@
                     },
                     "retina_detect": true
                 });
-                // <<< --- نهاية التعديل --- >>>
             }
         };
         setTimeout(setupParticles, 500);
@@ -301,11 +298,10 @@
     });
     </script>
 
-    <!-- <<< بداية التعديل: إضافة ملف الإشعارات الجديد >>> -->
     {% if session.logged_in %}
     <script src="{{ url_for('static', filename='js/live_notifications.js') }}" defer></script>
     {% endif %}
-    <!-- <<< نهاية التعديل >>> -->
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

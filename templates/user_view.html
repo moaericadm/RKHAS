@@ -373,7 +373,6 @@
         }
     }
 
-    /* *** بداية التعديل: إضافة تنسيقات إشعار النكز داخل الجدول *** */
     .crawler-name-cell {
         position: relative;
     }
@@ -437,7 +436,6 @@
             transform: translateY(-50%) scale(0.8);
         }
     }
-    /* *** نهاية التعديل *** */
 </style>
 {% endblock %}
 
@@ -456,7 +454,7 @@
         <div class="card shadow-lg h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-bar-chart-line-fill me-2"></i>قائمة نقاط الزواحف</span>
-                <input type="search" id="searchInput" class="form-control form-control-sm w-50" placeholder="🔍 ابحث عن سهم..." />
+                <input type="search" id="searchInput" class="form-control form-control-sm w-auto" placeholder="🔍 ابحث عن سهم..." />
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-hover align-middle mb-0">
@@ -467,7 +465,7 @@
                             <th class="text-center">النقاط</th>
                             <th class="text-center">تفاعل</th>
                             <th class="text-center">نكز</th>
-                            <th class="text-center" id="investment-demand-header" style="display: none;">الإقبال</th>
+                            <th class="text-center" id="investment-return-header" style="display: none;">العائد</th>
                             <th class="text-center investment-actions-col">الاستثمار</th>
                         </tr>
                     </thead>
@@ -492,5 +490,7 @@
 <script src="{{ url_for('static', filename='js/spin_wheel.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/user_interactions.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/user_view.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/stock_prediction_game.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/rps_pvp_game.js') }}" defer></script>
 {% endblock %}
 <!-- END OF FILE templates/user_view.html -->

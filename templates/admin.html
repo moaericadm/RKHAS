@@ -223,6 +223,73 @@
 
             <div class="accordion-item">
                 <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#stock-prediction-settings-collapse">
+                        <i class="bi bi-graph-up-arrow me-2"></i>إعدادات لعبة توقع السهم
+                    </button>
+                </h2>
+                <div id="stock-prediction-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion">
+                    <div class="accordion-body">
+                        <form id="stock-prediction-settings-form">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="stock-prediction-enabled-toggle">
+                                <label class="form-check-label" for="stock-prediction-enabled-toggle">تفعيل لعبة توقع السهم</label>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="stock-prediction-max-bet-input" class="form-label">الحد الأعلى للرهان الأولي (SP)</label>
+                                    <input type="number" id="stock-prediction-max-bet-input" class="form-control" min="0">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="stock-prediction-win-chance-input" class="form-label">نسبة ربح اللاعب (%)</label>
+                                    <input type="number" id="stock-prediction-win-chance-input" class="form-control" min="0" max="100" step="0.1">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary w-100">حفظ إعدادات اللعبة</button>
+                                </div>
+                            </div>
+                            <div class="form-text mt-2">
+                                نسبة ربح أقل من 50% تضمن أفضلية للكازينو (House Edge) وتساعد على سحب الـ SP من الاقتصاد على المدى الطويل.
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#rps-game-settings-collapse">
+                        <i class="bi bi-scissors me-2"></i>إعدادات لعبة حجر، ورقة، مقص
+                    </button>
+                </h2>
+                <div id="rps-game-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion">
+                    <div class="accordion-body">
+                        <form id="rps-game-settings-form">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="rps-game-enabled-toggle">
+                                <label class="form-check-label" for="rps-game-enabled-toggle">تفعيل لعبة حجر، ورقة، مقص (لاعب ضد لاعب)</label>
+                            </div>
+                            <div class="row g-3">
+                                <!-- *** بداية التعديل: إضافة حقل مدة القفل *** -->
+                                <div class="col-md-4">
+                                    <label for="rps-game-max-bet-input" class="form-label">الحد الأعلى للرهان (SP)</label>
+                                    <input type="number" id="rps-game-max-bet-input" class="form-control" min="0">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="rps-game-cooldown-input" class="form-label">مدة القفل بعد المباراة (بالثواني)</label>
+                                    <input type="number" id="rps-game-cooldown-input" class="form-control" min="0">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary w-100">حفظ إعدادات اللعبة</button>
+                                </div>
+                                <!-- *** نهاية التعديل *** -->
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#contest-settings-collapse">
                         <i class="bi bi-trophy-fill me-2"></i>إعدادات منافسة الشعبية
                     </button>
@@ -256,9 +323,7 @@
             </div>
 
             <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button" data-bs-toggle="collapse" data-bs-target="#spin-settings-collapse">إعدادات عجلة الحظ</button>
-                </h2>
+                <h2 class="accordion-header"><button class="accordion-button" data-bs-toggle="collapse" data-bs-target="#spin-settings-collapse">إعدادات عجلة الحظ</button></h2>
                 <div id="spin-settings-collapse" class="accordion-collapse collapse show" data-bs-parent="#settingsAccordion">
                     <div class="accordion-body">
                         <form id="spin-wheel-settings-form">
@@ -300,7 +365,6 @@
 
             <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#investment-settings-collapse">إعدادات الاستثمار</button></h2><div id="investment-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion"><div class="accordion-body"><form id="investment-settings-form"><div class="row g-3"><div class="col-md-6 col-lg-3"><label for="max-investments-input" class="form-label">الحد الأقصى للاستثمارات</label><input type="number" id="max-investments-input" name="max_investments" class="form-control" min="0"></div><div class="col-md-6 col-lg-3"><label for="investment-lock-hours-input" class="form-label">مدة قفل الاستثمار (ساعة)</label><input type="number" id="investment-lock-hours-input" name="investment_lock_hours" class="form-control" min="0"></div><div class="col-md-6 col-lg-3"><label for="sell-tax-percent-input" class="form-label">ضريبة الأرباح (%)</label><input type="number" id="sell-tax-percent-input" name="sell_tax_percent" class="form-control" min="0" max="100" step="0.1"></div><div class="col-md-6 col-lg-3"><label for="sell-fee-sp-input" class="form-label">رسوم البيع الثابتة (SP)</label><input type="number" id="sell-fee-sp-input" name="sell_fee_sp" class="form-control" min="0" step="0.01"></div></div><div class="d-grid mt-3"><button type="submit" class="btn btn-primary">حفظ إعدادات الاستثمار</button></div></form></div></div></div>
 
-            <!-- *** بداية التعديل: إضافة قسم النكزات في المتجر *** -->
             <div class="accordion-item">
                 <h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#shop-settings-collapse">إعدادات المتجر</button></h2>
                 <div id="shop-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion">
@@ -311,7 +375,6 @@
                             <div class="col-lg-4 col-md-6"><h6>منتجات المحاولات (SP -> Attempts)</h6><form id="add-spin-product-form" class="mb-3"><div class="input-group"><input type="number" name="attempts_amount" class="form-control" placeholder="عدد المحاولات" required><input type="number" name="sp_price" class="form-control" placeholder="سعر SP" required><button class="btn btn-secondary" type="submit"><i class="bi bi-plus-lg"></i> إضافة</button></div></form><ul class="list-group" id="shop-spin-products-list"></ul></div>
                             <div class="col-lg-4 col-md-12"><h6>منتجات تعديل الأسهم</h6><form id="add-points-product-form" class="mb-3"><select name="type" class="form-select mb-2"><option value="raise">رفع أسهم</option><option value="drop">إسقاط أسهم</option></select><input type="number" name="points_amount" class="form-control mb-2" placeholder="كمية النقاط" required><input type="number" name="sp_price" class="form-control mb-2" placeholder="سعر SP" required><input type="number" name="daily_limit" class="form-control" placeholder="الحد اليومي للاستخدام" value="1" required><button class="btn btn-secondary w-100 mt-2" type="submit">إضافة منتج أسهم</button></form><ul class="list-group" id="shop-points-products-list"></ul></div>
 
-                            <!-- New Nudge Products Section -->
                             <div class="col-lg-6 col-md-6">
                                 <h6><i class="bi bi-sticky-fill me-2"></i>منتجات النكزات (Nudges)</h6>
                                 <form id="add-nudge-form" class="mb-3">
@@ -346,9 +409,44 @@
                     </div>
                 </div>
             </div>
-            <!-- *** نهاية التعديل *** -->
 
             <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#site-settings-collapse">إدارة الموقع</button></h2><div id="site-settings-collapse" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion"><div class="accordion-body"><div class="row g-4"><div class="col-md-6"><h6>الإعلانات المتحركة</h6><form id="announcementForm" class="mb-3"><div class="input-group"><input type="text" name="text" class="form-control" placeholder="نص الإعلان..." required><button class="btn btn-secondary" type="submit">+</button></div></form><ul class="list-group" id="announcements-list"></ul></div><div class="col-md-6"><h6>قائمة الشرف (Honor Roll)</h6><form id="honorRollForm" class="mb-3"><div class="input-group"><input type="text" name="name" class="form-control" placeholder="اسم الزاحف..." required><button class="btn btn-secondary" type="submit">+</button></div></form><ul class="list-group" id="honorRollList"></ul></div></div></div></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="investorsModal" tabindex="-1" aria-labelledby="investorsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="investorsModalLabel">المستثمرون في...</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="investorsModalBody">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="profitEditorModal" tabindex="-1" aria-labelledby="profitEditorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="profitEditorModalLabel">تعديل أرباح المستثمرين في...</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="profitEditorModalBody">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-warning" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>

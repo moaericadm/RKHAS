@@ -8,6 +8,7 @@ document.addEventListener('firebase-ready', () => { isFirebaseReady = true; tryT
 const ui = {};
 let db, usersCache = {};
 let investmentsCache = {};
+let registeredUsersCache = {};
 
 const formatNumber = (num) => new Intl.NumberFormat('en-US').format(parseInt(num || 0));
 
@@ -57,6 +58,7 @@ function renderUserTable() {
         const mClass = multiplier > 1.0 ? 'trend-up' : multiplier < 1.0 ? 'trend-down' : 'trend-neutral';
         const mText = `x${multiplier.toFixed(2)}`;
         const avatarImg = user.avatar_url ? `<img src="${user.avatar_url}" class="avatar-preview me-2">` : `<span class="avatar-preview d-inline-block me-2" style="background-color: var(--card-border);"></span>`;
+
         return `<tr>
                     <th class="align-middle rank">#${index + 1}</th>
                     <td class="align-middle fw-bold">${avatarImg}${user.name}</td>
@@ -65,10 +67,15 @@ function renderUserTable() {
                     <td class="text-center align-middle"><i class="bi bi-heart-fill text-danger"></i> ${formatNumber(user.likes || 0)}</td>
                     <td class="text-center align-middle"><i class="bi bi-people-fill text-primary"></i> ${investorCount}</td>
                     <td class="text-center align-middle">
-                        <button class="btn btn-info btn-sm" onclick="adminActions.editUser('${user.name}')"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-danger btn-sm ms-2" onclick="adminActions.confirmDelete('${user.name}')"><i class="bi bi-trash-fill"></i></button>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-primary" onclick="adminActions.showInvestors('${user.name}')" title="عرض المستثمرين"><i class="bi bi-people-fill"></i></button>
+                            <button class="btn btn-warning" onclick="adminActions.showProfitEditor('${user.name}')" title="تعديل أرباح المستثمرين"><i class="bi bi-sliders"></i></button>
+                            <button class="btn btn-info" onclick="adminActions.editUser('${user.name}')"><i class="bi bi-pencil-fill"></i></button>
+                            <button class="btn btn-danger" onclick="adminActions.confirmDelete('${user.name}')"><i class="bi bi-trash-fill"></i></button>
+                        </div>
                     </td>
                 </tr>`;
+
     }).join('') || '<tr><td colspan="7" class="text-center py-4">لا يوجد زواحف.</td></tr>';
 }
 
@@ -78,14 +85,12 @@ function initializeApprovedUsersPanel(allUsers) {
     ui.approvedUsersTable.innerHTML = Object.values(allUsers).filter(u => u.status === "approved").sort((a, b) => (b.registered_at || 0) - (a.registered_at || 0)).map(user => {
         const regDate = safeFormatDate(user.registered_at);
         const roleBadge = user.role === 'admin' ? '<span class="badge bg-danger">أدمن</span>' : '<span class="badge bg-secondary">مستخدم</span>';
-        // *** بداية التعديل: إضافة زر إدارة النكزات ***
         const actions = `
             <button class="btn btn-outline-success btn-sm" onclick="adminActions.editUserWallet('${user.uid}','${user.name}')" title="تعديل المحفظة"><i class="bi bi-wallet2"></i></button>
             <button class="btn btn-outline-info btn-sm" onclick="adminActions.manageUserAvatars('${user.uid}','${user.name}')" title="إدارة أفاتارات المستخدم"><i class="bi bi-person-bounding-box"></i></button>
             <button class="btn btn-outline-primary btn-sm" onclick="adminActions.manageUserNudges('${user.uid}','${user.name}')" title="إدارة نكزات المستخدم"><i class="bi bi-sticky-fill"></i></button>
             <button class="btn btn-outline-warning btn-sm" onclick="adminActions.editPurchasedAttempts('${user.uid}','${user.name}')" title="تعديل المحاولات المشتراة"><i class="bi bi-ticket-perforated-fill"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="adminActions.confirmBanUser('${user.uid}','${user.name}')" title="حظر المستخدم"><i class="bi bi-slash-circle-fill"></i></button>`;
-        // *** نهاية التعديل ***
         return `<tr><td>${user.name}</td><td>${user.email}</td><td class="text-center">${roleBadge}</td><td class="text-center">${regDate}</td><td class="text-center d-flex justify-content-center gap-2">${actions}</td></tr>`
     }).join('') || '<tr><td colspan="5" class="text-center py-4">لا توجد حسابات.</td></tr>'
 }
@@ -116,7 +121,6 @@ const renderListItemWithEdit = (id, text, deleteFnName, editFnName, editArgs) =>
 const renderShopProducts = data => ui.shopProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItemWithEdit(id, `حزمة ${formatNumber(p.sp_amount)} SP مقابل ${formatNumber(p.cc_price)} CC`, 'deleteProduct', 'editProduct', `'${id}', ${p.sp_amount}, ${p.cc_price}`)).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
 const renderShopSpinProducts = data => ui.shopSpinProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItemWithEdit(id, `${formatNumber(p.attempts_amount)} محاولات مقابل ${formatNumber(p.sp_price)} SP`, 'deleteSpinProduct', 'editSpinProduct', `'${id}', ${p.attempts_amount}, ${p.sp_price}`)).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
 const renderShopPointsProducts = data => ui.shopPointsProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItemWithEdit(id, `منتج ${p.type === 'raise' ? 'رفع' : 'إسقاط'} (${formatNumber(p.points_amount)} نقطة) / ${formatNumber(p.sp_price)} SP`, 'deletePointsProduct', 'editPointsProduct', `'${id}', ${p.points_amount}, ${p.sp_price}, ${p.daily_limit}`)).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
-// *** بداية الإضافة: دالة عرض النكزات ***
 const renderShopNudges = data => {
     if (!ui.shopNudgesList) return;
     ui.shopNudgesList.innerHTML = Object.entries(data).map(([id, p]) => {
@@ -125,7 +129,6 @@ const renderShopNudges = data => {
         return renderListItemWithEdit(id, `"${textDisplay}" - ${formatNumber(p.sp_price)} SP`, 'deleteNudge', 'editNudge', `'${id}', \`${fullTextForEdit}\`, ${p.sp_price}`);
     }).join('') || '<li class="list-group-item text-muted">لا توجد نكزات.</li>';
 };
-// *** نهاية الإضافة ***
 const renderAnnouncements = data => ui.announcementsList.innerHTML = Object.entries(data).map(([id, ann]) => renderListItemWithEdit(id, `"${ann.text}"`, 'deleteAnnouncement')).join('') || '<li class="list-group-item text-muted">لا توجد إعلانات.</li>';
 const renderHonorRoll = data => ui.honorRollList.innerHTML = Object.entries(data).map(([id, item]) => renderListItemWithEdit(id, item.name, 'deleteFromHonorRoll')).join('') || '<li class="list-group-item text-muted">القائمة فارغة.</li>';
 function renderGiftRequestsTable(requests) { if (!ui.giftRequestsTable) return; const requestsArray = Object.entries(requests).filter(([id, req]) => req.status === 'pending'); if (requestsArray.length === 0) { ui.giftRequestsTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">لا توجد طلبات إهداء حالياً.</td></tr>'; return; } ui.giftRequestsTable.innerHTML = requestsArray.map(([id, req]) => ` <tr> <td>${req.gifter_name}</td> <td>${req.target_user_name}</td> <td> <img src="${req.avatar_image_url}" class="avatar-preview me-2" alt="${req.avatar_name}"> ${req.avatar_name} </td> <td class="text-center">${formatNumber(req.price_sp)} SP</td> <td class="text-center"> <button class="btn btn-sm btn-success" onclick="adminActions.handleGiftRequest('${id}', 'approve', this)">قبول</button> <button class="btn btn-sm btn-danger ms-2" onclick="adminActions.handleGiftRequest('${id}', 'reject', this)">رفض</button> </td> </tr> `).join(''); }
@@ -187,10 +190,16 @@ function initializeAdminPanel() {
         gamblingEnabledToggle: document.getElementById('gambling-enabled-toggle'),
         gamblingMaxBetInput: document.getElementById('gambling-max-bet-input'),
         gamblingWinChanceInput: document.getElementById('gambling-win-chance-input'),
-        // *** بداية الإضافة: تعريف عناصر النكزات ***
         addNudgeForm: document.getElementById('add-nudge-form'),
         shopNudgesList: document.getElementById('shop-nudges-list'),
-        // *** نهاية الإضافة ***
+        stockPredictionSettingsForm: document.getElementById('stock-prediction-settings-form'),
+        stockPredictionEnabledToggle: document.getElementById('stock-prediction-enabled-toggle'),
+        stockPredictionMaxBetInput: document.getElementById('stock-prediction-max-bet-input'),
+        stockPredictionWinChanceInput: document.getElementById('stock-prediction-win-chance-input'),
+        rpsGameSettingsForm: document.getElementById('rps-game-settings-form'),
+        rpsGameEnabledToggle: document.getElementById('rps-game-enabled-toggle'),
+        rpsGameMaxBetInput: document.getElementById('rps-game-max-bet-input'),
+        rpsGameCooldownInput: document.getElementById('rps-game-cooldown-input'),
     });
     db = firebase.database();
     firebase.auth().signInWithCustomToken(sessionStorage.getItem('firebaseToken')).then(initializeDataListeners).catch(e => console.error("Admin Auth Error:", e));
@@ -211,10 +220,16 @@ function initializeDataListeners() {
     onValue('site_settings/shop_products_spins', renderShopSpinProducts);
     onValue('site_settings/shop_products_points', renderShopPointsProducts);
     onValue('site_settings/shop_avatars', data => { renderShopAvatars(data); populateCrawlerAvatarDropdown(data); });
-    // *** بداية الإضافة: الاستماع لتغييرات النكزات ***
     onValue('site_settings/shop_products_nudges', renderShopNudges);
-    // *** نهاية الإضافة ***
-    onValue('registered_users', data => { initializeApprovalPanel(data); initializeApprovedUsersPanel(data); });
+    onValue('site_settings/stock_prediction_game', loadStockPredictionSettings);
+    onValue('site_settings/rps_game', loadRpsGameSettings);
+
+    onValue('registered_users', data => {
+        registeredUsersCache = data;
+        initializeApprovalPanel(data);
+        initializeApprovedUsersPanel(data);
+    });
+
     onValue('gift_requests', renderGiftRequestsTable);
     onValue('site_settings/contest_settings', loadContestSettings);
     onValue('site_settings/gambling_settings', loadGamblingSettings);
@@ -236,13 +251,13 @@ function setupEventListeners() {
     listen(ui.addProductForm, 'submit', e => handleShopProductForm(e, '/api/admin/shop/add_product'));
     listen(ui.addSpinProductForm, 'submit', e => handleShopProductForm(e, '/api/admin/shop/add_spin_product'));
     listen(ui.addPointsProductForm, 'submit', e => handleShopProductForm(e, '/api/admin/shop/add_points_product'));
-    // *** بداية الإضافة: ربط حدث فورم النكزات ***
     listen(ui.addNudgeForm, 'submit', e => handleShopProductForm(e, '/api/admin/shop/add_nudge'));
-    // *** نهاية الإضافة ***
     listen(ui.resetAllSpinsBtn, 'click', () => Swal.fire({ title: 'هل أنت متأكد؟', text: "سيتم إعادة تعيين المحاولات المجانية لليوم لجميع المستخدمين المعتمدين.", icon: 'warning', showCancelButton: true, confirmButtonText: "نعم, أعد التعيين!" }).then(r => r.isConfirmed && apiCall('/api/admin/reset_all_free_spins', { method: 'POST' }, "تمت إعادة التعيين بنجاح!")));
     listen(ui.addAvatarForm, 'submit', handleAddAvatar);
     listen(ui.contestSettingsForm, 'submit', handleContestSettingsSubmit);
     listen(ui.gamblingSettingsForm, 'submit', handleGamblingSettingsSubmit);
+    listen(ui.stockPredictionSettingsForm, 'submit', handleStockPredictionSettingsSubmit);
+    listen(ui.rpsGameSettingsForm, 'submit', handleRpsGameSettingsSubmit);
 }
 
 async function handleGamblingSettingsSubmit(e) { e.preventDefault(); const settings = { is_enabled: ui.gamblingEnabledToggle.checked, max_bet: parseInt(ui.gamblingMaxBetInput.value) || 1000, win_chance_percent: parseFloat(ui.gamblingWinChanceInput.value) || 49.5 }; await apiCall('/api/admin/settings/gambling', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }, 'تم حفظ إعدادات الرهان!'); }
@@ -275,9 +290,51 @@ async function handleSpinWheelSettingsSubmit(e) {
 
 async function handleShopProductForm(e, url) { e.preventDefault(); await apiCall(url, { method: 'POST', body: new FormData(e.target) }, "تمت إضافة المنتج!").then(() => e.target.reset()).catch(() => { }); }
 
+async function handleStockPredictionSettingsSubmit(e) {
+    e.preventDefault();
+    const settings = {
+        is_enabled: ui.stockPredictionEnabledToggle.checked,
+        max_bet: parseInt(ui.stockPredictionMaxBetInput.value) || 1000,
+        win_chance_percent: parseFloat(ui.stockPredictionWinChanceInput.value) || 49.0
+    };
+    await apiCall('/api/admin/settings/stock_prediction_game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    }, 'تم حفظ إعدادات لعبة توقع السهم!');
+}
+
+async function handleRpsGameSettingsSubmit(e) {
+    e.preventDefault();
+    const settings = {
+        is_enabled: ui.rpsGameEnabledToggle.checked,
+        max_bet: parseInt(ui.rpsGameMaxBetInput.value) || 500,
+        cooldown_seconds: parseInt(ui.rpsGameCooldownInput.value) || 60
+    };
+    await apiCall('/api/admin/settings/rps_game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    }, 'تم حفظ إعدادات لعبة حجر، ورقة، مقص!');
+}
+
+function loadStockPredictionSettings(data) {
+    if (!data || !ui.stockPredictionSettingsForm) return;
+    ui.stockPredictionEnabledToggle.checked = data.is_enabled || false;
+    ui.stockPredictionMaxBetInput.value = data.max_bet || 1000;
+    ui.stockPredictionWinChanceInput.value = data.win_chance_percent || 49.0;
+}
+
+function loadRpsGameSettings(data) {
+    if (!data || !ui.rpsGameSettingsForm) return;
+    ui.rpsGameEnabledToggle.checked = data.is_enabled || false;
+    ui.rpsGameMaxBetInput.value = data.max_bet || 500;
+    ui.rpsGameCooldownInput.value = data.cooldown_seconds || 60;
+}
+
+
 window.adminActions = {
     editUser: (name) => { const u = usersCache[name]; if (u) { ui.nameInput.value = name; ui.pointsInput.value = u.points || 0; ui.stockMultiplierInput.value = u.stock_multiplier || 1.0; ui.originalNameInput.value = name; ui.avatarUrlInput.value = u.avatar_url || ""; ui.formTitle.innerText = `تعديل: ${name}`; ui.saveUserBtn.innerText = 'حفظ'; ui.saveUserBtn.classList.replace('btn-primary', 'btn-warning'); ui.clearFormBtn.style.display = 'inline-block'; window.scrollTo({ top: 0, behavior: 'smooth' }); } }, confirmDelete: name => Swal.fire({ title: `حذف ${name}؟`, icon: 'warning', showCancelButton: true, confirmButtonText: 'نعم, احذف' }).then(r => r.isConfirmed && apiCall(`/api/admin/delete_user/${name}`, { method: 'POST' }, 'تم الحذف.')), manageUser: (id, action, btn) => { btn.disabled = true; apiCall(`/api/admin/manage_user/${id}/${action}`, { method: 'POST' }, `تم ${action === 'approve' ? 'قبول' : 'رفض'} المستخدم.`).catch(() => btn.disabled = false) }, confirmBanUser: (id, name) => Swal.fire({ title: `حظر ${name}؟`, icon: 'warning', showCancelButton: true, confirmButtonText: 'نعم, قم بالحظر' }).then(r => r.isConfirmed && apiCall('/api/admin/ban_user', { method: 'POST', body: new URLSearchParams({ user_id_to_ban: id, user_name_to_ban: name }) }, `تم حظر ${name}.`)), unbanUser: id => apiCall(`/api/admin/unban_user/${id}`, { method: 'POST' }, 'تم فك الحظر.'), approveCandidate: name => apiCall('/api/admin/candidate/approve', { method: 'POST', body: new URLSearchParams({ name }) }), rejectCandidate: name => apiCall('/api/admin/candidate/reject', { method: 'POST', body: new URLSearchParams({ name }) }), deleteAnnouncement: id => apiCall(`/api/admin/announcements/delete/${id}`, { method: 'POST' }), deleteFromHonorRoll: id => apiCall(`/api/admin/honor_roll/delete/${id}`, { method: 'POST' }), deleteProduct: id => apiCall(`/api/admin/shop/delete_product/${id}`, { method: 'POST' }), deleteSpinProduct: id => apiCall(`/api/admin/shop/delete_spin_product/${id}`, { method: 'POST' }), deletePointsProduct: id => apiCall(`/api/admin/shop/delete_points_product/${id}`, { method: 'POST' }), deleteAvatar: id => { Swal.fire({ title: 'هل أنت متأكد؟', text: "سيتم حذف الأفاتار نهائياً من المتجر والتخزين!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم, احذفه!', cancelButtonText: 'إلغاء' }).then(result => { if (result.isConfirmed) { apiCall(`/api/admin/shop/delete_avatar/${id}`, { method: 'POST' }, 'تم حذف الأفاتار.'); } }); }, manageUserAvatars: async (userId, userName) => { Swal.fire({ title: `جلب أفاتارات ${userName}...`, didOpen: () => Swal.showLoading() }); try { const ownedAvatarsSnap = await db.ref(`user_avatars/${userId}/owned`).once('value'); const ownedAvatars = ownedAvatarsSnap.val() || {}; const avatarIds = Object.keys(ownedAvatars); if (avatarIds.length === 0) { Swal.fire('فارغ', `المستخدم ${userName} لا يمتلك أي أفاتارات.`, 'info'); return; } const allAvatarsSnap = await db.ref('site_settings/shop_avatars').once('value'); const allAvatars = allAvatarsSnap.val() || {}; const listHtml = avatarIds.map(id => { const avatar = allAvatars[id]; if (!avatar) return ''; return ` <li class="list-group-item d-flex justify-content-between align-items-center" id="user-avatar-li-${id}"> <div> <img src="${avatar.image_url}" class="avatar-preview me-2"> <span>${avatar.name}</span> </div> <button class="btn btn-sm btn-outline-danger" data-avatar-id="${id}" data-avatar-name="${avatar.name}">إزالة</button> </li> `; }).join(''); Swal.fire({ title: `أفاتارات ${userName}`, html: `<ul class="list-group" style="max-height: 40vh; overflow-y: auto;">${listHtml}</ul>`, width: '500px', didOpen: () => { document.querySelectorAll('.swal2-container .btn-outline-danger').forEach(btn => { btn.addEventListener('click', (e) => { const avatarId = e.currentTarget.dataset.avatarId; const avatarName = e.currentTarget.dataset.avatarName; Swal.fire({ title: `تأكيد الإزالة`, text: `هل أنت متأكد من إزالة أفاتار "${avatarName}" من المستخدم ${userName}؟`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم، قم بالإزالة!', cancelButtonText: 'إلغاء' }).then(async (result) => { if (result.isConfirmed) { try { await apiCall('/api/admin/user_avatar/remove', { method: 'POST', body: new URLSearchParams({ user_id: userId, avatar_id: avatarId }) }, `تمت إزالة الأفاتار.`); document.getElementById(`user-avatar-li-${id}`).remove(); } catch (err) { } } }); }); }); } }); } catch (error) { console.error("Error fetching user avatars:", error); Swal.fire('خطأ', 'فشل في جلب بيانات أفاتارات المستخدم.', 'error'); } }, handleGiftRequest: (requestId, action, btn) => { btn.disabled = true; const otherBtn = action === 'approve' ? btn.nextElementSibling : btn.previousElementSibling; if (otherBtn) otherBtn.disabled = true; apiCall(`/api/admin/gift_request/${requestId}/${action}`, { method: 'POST' }).then(response => { Swal.fire('تم!', response.message, 'success'); }).catch(err => { btn.disabled = false; if (otherBtn) otherBtn.disabled = false; }); }, sendUserMessage: async (id, name) => { const { value: msg } = await Swal.fire({ title: `رسالة إلى ${name}`, input: 'textarea', inputPlaceholder: 'اكتب رسالتك هنا...' }); if (msg) apiCall('/api/admin/user_message/send', { method: 'POST', body: new URLSearchParams({ user_id: id, message: msg }) }) }, editUserWallet: async (id, name) => { const walletSnapshot = await db.ref(`wallets/${id}`).once('value'); const wallet = walletSnapshot.val() || { cc: 0, sp: 0 }; const { value: formValues } = await Swal.fire({ title: `تعديل محفظة ${name}`, html: ` <label for="swal-cc" class="swal2-label">زاحف كوين (CC)</label> <input id="swal-cc" type="number" class="swal2-input" value="${wallet.cc || 0}"> <label for="swal-sp" class="swal2-label">نقاط الدعم (SP)</label> <input id="swal-sp" type="number" step="0.01" class="swal2-input" value="${(wallet.sp || 0).toFixed(2)}"> `, focusConfirm: false, showCancelButton: true, confirmButtonText: 'حفظ التغييرات', cancelButtonText: 'إلغاء', preConfirm: () => ({ cc: document.getElementById('swal-cc').value, sp: document.getElementById('swal-sp').value }) }); if (formValues) { apiCall('/api/admin/update_wallet', { method: 'POST', body: new URLSearchParams({ user_id: id, user_name: name, cc: formValues.cc, sp: formValues.sp }) }, 'تم تحديث المحفظة بنجاح.'); } }, editPurchasedAttempts: async (id, name) => { const state = (await db.ref(`user_spin_state/${id}`).once('value')).val() || {}; const current = state.purchasedAttempts || 0; const { value: newVal } = await Swal.fire({ title: `تعديل محاولات ${name}`, input: 'number', inputValue: current }); if (newVal !== undefined && newVal !== null) { apiCall('/api/admin/update_purchased_attempts', { method: 'POST', body: new URLSearchParams({ user_id: id, attempts: newVal }) }, 'تم تحديث الرصيد.') } }, editProduct: (id, sp, cc) => { Swal.fire({ title: 'تعديل منتج SP', html: `<input id="swal-sp" class="swal2-input" placeholder="كمية SP" value="${sp}" type="number"><input id="swal-cc" class="swal2-input" placeholder="سعر CC" value="${cc}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ sp_amount: document.getElementById('swal-sp').value, cc_price: document.getElementById('swal-cc').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') }); }, editSpinProduct: (id, attempts, sp) => { Swal.fire({ title: 'تعديل منتج المحاولات', html: `<input id="swal-attempts" class="swal2-input" placeholder="عدد المحاولات" value="${attempts}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ attempts_amount: document.getElementById('swal-attempts').value, sp_price: document.getElementById('swal-sp').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_spin_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') }); }, editPointsProduct: (id, points, sp, limit) => { Swal.fire({ title: 'تعديل منتج الأسهم', html: `<input id="swal-points" class="swal2-input" placeholder="كمية النقاط" value="${points}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number"><input id="swal-limit" class="swال2-input" placeholder="الحد اليومي" value="${limit}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ points_amount: document.getElementById('swal-points').value, sp_price: document.getElementById('swal-sp').value, daily_limit: document.getElementById('swal-limit').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_points_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') }); }, editAvatar: (id, name, personalPrice, giftPrice) => { Swal.fire({ title: 'تعديل بيانات الأفاتار', html: `<input id="swal-name" class="swal2-input" placeholder="اسم الأفاتار" value="${name}"> <input id="swal-personal" class="swal2-input" placeholder="السعر الشخصي (SP)" value="${personalPrice}" type="number"> <input id="swal-gift" class="swal2-input" placeholder="سعر الهدية (SP)" value="${giftPrice}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ avatar_name: document.getElementById('swal-name').value, price_sp_personal: document.getElementById('swal-personal').value, price_sp_gift: document.getElementById('swal-gift').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_avatar/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل الأفاتار بنجاح.') }); },
-    // *** بداية الإضافة: دوال إدارة النكزات ***
     deleteNudge: id => apiCall(`/api/admin/shop/delete_nudge/${id}`, { method: 'POST' }),
     editNudge: (id, text, price) => { Swal.fire({ title: 'تعديل النكزة', html: `<textarea id="swal-text" class="swal2-textarea" placeholder="نص النكزة">${text}</textarea><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${price}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ nudge_text: document.getElementById('swal-text').value, sp_price: document.getElementById('swal-sp').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_nudge/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل النكزة بنجاح.') }); },
     manageUserNudges: async (userId, userName) => {
@@ -335,7 +392,179 @@ window.adminActions = {
             console.error("Error fetching user nudges:", error);
             Swal.fire('خطأ!', 'فشل في جلب بيانات النكزات.', 'error');
         }
+    },
+
+    showInvestors: (crawlerName) => {
+        const modalElement = document.getElementById('investorsModal');
+        const modalTitle = document.getElementById('investorsModalLabel');
+        const modalBody = document.getElementById('investorsModalBody');
+        const modal = new bootstrap.Modal(modalElement);
+
+        modalTitle.textContent = `المستثمرون في: ${crawlerName}`;
+        modalBody.innerHTML = `<div class="text-center py-5"><div class="spinner-border"></div></div>`;
+        modal.show();
+
+        const crawlerData = usersCache[crawlerName];
+        if (!crawlerData) {
+            modalBody.innerHTML = `<p class="text-danger text-center">لم يتم العثور على بيانات الزاحف.</p>`;
+            return;
+        }
+
+        const investorsList = [];
+        for (const investorId in investmentsCache) {
+            if (investmentsCache[investorId] && investmentsCache[investorId][crawlerName]) {
+                const investment = investmentsCache[investorId][crawlerName];
+                const lots = investment.lots || {};
+                if (Object.keys(lots).length === 0) continue;
+
+                const totalInvestedSP = Object.values(lots).reduce((sum, lot) => sum + (lot.sp || 0), 0);
+
+                const personalMultiplier = parseFloat(investment.personal_multiplier || 1.0);
+                const totalCurrentValue = Object.values(lots).reduce((sum, lot) => {
+                    const pointsThen = Math.max(1, lot.p || 1);
+                    const pointsNow = Math.max(1, crawlerData.points || 1);
+                    const stockMultiplier = crawlerData.stock_multiplier || 1.0;
+                    return sum + ((lot.sp || 0) * (pointsNow / pointsThen) * stockMultiplier * personalMultiplier);
+                }, 0);
+
+                const profitPercentage = totalInvestedSP > 0 ? ((totalCurrentValue / totalInvestedSP) - 1) * 100 : 0;
+
+                const investorInfo = registeredUsersCache[investorId];
+                const investorName = investorInfo ? investorInfo.name : `مستخدم (${investorId.slice(0, 5)}...)`;
+
+                investorsList.push({
+                    name: investorName,
+                    profit: profitPercentage,
+                    invested: totalInvestedSP,
+                    currentValue: totalCurrentValue
+                });
+            }
+        }
+
+        if (investorsList.length === 0) {
+            modalBody.innerHTML = `<p class="text-muted text-center my-4">لا يوجد مستثمرون في هذا الزاحف حالياً.</p>`;
+            return;
+        }
+
+        investorsList.sort((a, b) => b.profit - a.profit);
+
+        modalBody.innerHTML = `
+            <ul class="list-group list-group-flush">
+                ${investorsList.map(investor => {
+            const profitClass = investor.profit > 0.01 ? 'text-success' : investor.profit < -0.01 ? 'text-danger' : 'text-muted';
+            const profitIcon = investor.profit > 0.01 ? 'bi-arrow-up' : investor.profit < -0.01 ? 'bi-arrow-down' : 'bi-dash';
+            const formattedProfit = `${investor.profit >= 0 ? '+' : ''}${investor.profit.toFixed(2)}%`;
+
+            return `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${investor.name}</strong>
+                                <div class="small text-muted">
+                                    المستثمر: ${investor.invested.toFixed(2)} SP | القيمة الحالية: ${investor.currentValue.toFixed(2)} SP
+                                </div>
+                            </div>
+                            <span class="fw-bold fs-5 ${profitClass}">
+                                <i class="bi ${profitIcon}"></i>
+                                ${formattedProfit}
+                            </span>
+                        </li>`;
+        }).join('')}
+            </ul>`;
+    },
+
+    showProfitEditor: (crawlerName) => {
+        const modalElement = document.getElementById('profitEditorModal');
+        const modalTitle = document.getElementById('profitEditorModalLabel');
+        const modalBody = document.getElementById('profitEditorModalBody');
+        const modal = new bootstrap.Modal(modalElement);
+
+        modalTitle.textContent = `تعديل أرباح المستثمرين في: ${crawlerName}`;
+        modalBody.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-warning"></div></div>`;
+        modal.show();
+
+        const investorsList = [];
+        for (const investorId in investmentsCache) {
+            if (investmentsCache[investorId] && investmentsCache[investorId][crawlerName]) {
+                const investment = investmentsCache[investorId][crawlerName];
+                const investorInfo = registeredUsersCache[investorId];
+                const investorName = investorInfo ? investorInfo.name : `مستخدم (${investorId.slice(0, 5)}...)`;
+
+                investorsList.push({
+                    id: investorId,
+                    name: investorName,
+                    multiplier: parseFloat(investment.personal_multiplier || 1.0)
+                });
+            }
+        }
+
+        if (investorsList.length === 0) {
+            modalBody.innerHTML = `<p class="text-muted text-center my-4">لا يوجد مستثمرون للتعديل عليهم.</p>`;
+            return;
+        }
+
+        modalBody.innerHTML = `
+            <div class="alert alert-warning small">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                أدخل مضاعف الربح لكل مستثمر. القيمة الافتراضية هي <strong>1.0</strong> (بلا تأثير).
+                قيمة أكبر من 1 تزيد الربح (أو تقلل الخسارة)، وقيمة أقل من 1 تقلل الربح (أو تزيد الخسارة).
+                سيتم الحفظ تلقائياً عند الخروج من حقل الإدخال.
+            </div>
+            <ul class="list-group list-group-flush">
+                ${investorsList.map(investor => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <strong>${investor.name}</strong>
+                        <div class="input-group" style="width: 120px;">
+                            <span class="input-group-text">x</span>
+                            <input 
+                                type="number" 
+                                step="0.01" 
+                                class="form-control form-control-sm personal-multiplier-input" 
+                                value="${investor.multiplier.toFixed(2)}"
+                                data-user-id="${investor.id}"
+                                data-crawler-name="${crawlerName}"
+                                placeholder="1.00">
+                        </div>
+                    </li>
+                `).join('')}
+            </ul>`;
+
+        modalBody.querySelectorAll('.personal-multiplier-input').forEach(input => {
+            input.addEventListener('blur', async (e) => {
+                const target = e.target;
+                const { userId, crawlerName } = target.dataset;
+                const newMultiplier = parseFloat(target.value);
+
+                if (isNaN(newMultiplier) || newMultiplier < 0) {
+                    target.value = '1.00';
+                    Swal.fire('خطأ', 'الرجاء إدخال رقم موجب صالح.', 'error');
+                    return;
+                }
+
+                target.style.transition = 'none';
+                target.style.boxShadow = '0 0 10px rgba(255, 193, 7, 0.5)'; // Yellow glow for processing
+
+                try {
+                    await apiCall('/api/admin/update_personal_multiplier', {
+                        method: 'POST',
+                        body: new URLSearchParams({
+                            user_id: userId,
+                            crawler_name: crawlerName,
+                            multiplier: newMultiplier
+                        })
+                    });
+
+                    target.style.transition = 'box-shadow 0.5s ease-out';
+                    target.style.boxShadow = '0 0 10px rgba(25, 135, 84, 0.8)'; // Green glow for success
+
+                    setTimeout(() => {
+                        target.style.boxShadow = 'none';
+                    }, 1500);
+
+                } catch (error) {
+                    target.style.boxShadow = '0 0 10px rgba(220, 53, 69, 0.8)'; // Red glow for error
+                }
+            });
+        });
     }
-    // *** نهاية الإضافة ***
 };
 // --- END OF FILE static/js/admin.js ---

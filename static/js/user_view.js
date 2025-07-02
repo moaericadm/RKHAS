@@ -42,7 +42,9 @@ function initializeUserView() {
         userAvatarPreview: document.getElementById('user-avatar-preview'),
         avatarChooserModal: document.getElementById('avatarChooserModal'),
         ownedAvatarsContainer: document.getElementById('owned-avatars-container'),
-        investmentDemandHeader: document.getElementById('investment-demand-header'),
+        // *** بداية التعديل: تحديث معرّف رأس الجدول ***
+        investmentReturnHeader: document.getElementById('investment-return-header'),
+        // *** نهاية التعديل ***
         contestCard: document.getElementById('popularity-contest-card'),
         contestContainer: document.getElementById('contest-container'),
         contestTimer: document.getElementById('contest-timer'),
@@ -384,9 +386,11 @@ function initializeUserView() {
     function renderUserTable() {
         if (!ui.tableBody) return;
         const userHasAnyInvestment = Object.keys(userInvestments).length > 0;
-        if (ui.investmentDemandHeader) {
-            ui.investmentDemandHeader.style.display = userHasAnyInvestment ? '' : 'none';
+        // *** بداية التعديل: تحديث معرّف رأس الجدول ***
+        if (ui.investmentReturnHeader) {
+            ui.investmentReturnHeader.style.display = userHasAnyInvestment ? '' : 'none';
         }
+        // *** نهاية التعديل ***
 
         const term = ui.searchInput.value.toLowerCase();
         const usersToRender = allUsersCache.filter(u => u?.name?.toLowerCase().includes(term));
@@ -416,10 +420,14 @@ function initializeUserView() {
 
             if (hasInvestment) {
                 totalInvestedSP = Object.values(lots).reduce((sum, lot) => sum + (lot.sp || 0), 0);
+
+                // *** بداية التعديل: تطبيق المضاعف الشخصي هنا ***
+                const personalMultiplier = parseFloat(investment.personal_multiplier || 1.0);
                 currentValue = Object.values(lots).reduce((sum, lot) => {
                     const pointsThen = Math.max(1, lot.p || 1);
-                    return sum + ((lot.sp || 0) * (Math.max(1, pointsNow) / pointsThen) * stockMultiplier);
+                    return sum + ((lot.sp || 0) * (Math.max(1, pointsNow) / pointsThen) * stockMultiplier * personalMultiplier);
                 }, 0);
+                // *** نهاية التعديل ***
 
                 const returnPercentage = totalInvestedSP > 0 ? ((currentValue / totalInvestedSP) - 1) * 100 : 0;
                 const percentageColor = returnPercentage > 0.01 ? 'text-success' : returnPercentage < -0.01 ? 'text-danger' : 'text-muted';
@@ -530,7 +538,65 @@ function initializeUserView() {
 
     async function handleInvestment(e) { e.preventDefault(); const form = e.target, btn = form.querySelector('button[type="submit"]'), originalHTML = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { const data = await apiCall('/api/invest', { method: 'POST', body: new FormData(form) }); Swal.fire('تم الاستثمار!', data.message, 'success'); bootstrap.Modal.getInstance(ui.investmentModal)?.hide(); form.reset(); } catch (err) { Swal.fire('فشل!', err.message, 'error'); } finally { btn.disabled = false; btn.innerHTML = originalHTML; } }
 
-    async function showSellLotsModal(crawlerName) { if (!ui.sellLotsModal) return; ui.sellLotsModalTitle.textContent = `إدارة استثمارك في ${crawlerName}`; ui.sellLotsModalBody.innerHTML = `<div class="text-center p-5"><div class="spinner-border"></div></div>`; bootstrap.Modal.getOrCreateInstance(ui.sellLotsModal).show(); const investment = userInvestments[crawlerName]; const lots = investment?.lots || {}; const crawler = allUsersCache.find(u => u.name === crawlerName); if (!crawler || Object.keys(lots).length === 0) { ui.sellLotsModalBody.innerHTML = '<p class="text-muted text-center my-4">لا توجد دفعات استثمار لهذا الزاحف.</p>'; return; } const lockSeconds = (siteSettings.investment_lock_hours || 0) * 3600; const now = Math.floor(Date.now() / 1000); const pointsNow = Math.max(1, parseFloat(crawler.points) || 1); const stockMultiplier = parseFloat(crawler.stock_multiplier) || 1.0; const lotsArray = Object.entries(lots).map(([lotKey, lotData]) => ({ lotKey, ...lotData })); lotsArray.sort((a, b) => (a.t || 0) - (b.t || 0)); let tableHtml = `<div class="table-responsive"> <table class="table table-sm table-hover align-middle"> <thead><tr><th>المبلغ المستثمر</th><th>تاريخ الشراء</th><th>القيمة الحالية</th><th>الحالة</th><th></th></tr></thead> <tbody>`; lotsArray.forEach(({ lotKey, sp, p, t }) => { const investedSP = sp || 0; const pointsThen = Math.max(1, p || 1); const lotTimestamp = t || 0; const isLocked = (now - lotTimestamp) < lockSeconds; const currentValue = investedSP * (pointsNow / pointsThen) * stockMultiplier; const profit = currentValue - investedSP; const profitColor = profit > 0.01 ? 'text-success' : profit < -0.01 ? 'text-danger' : 'text-muted'; let statusHtml, actionHtml; if (isLocked) { const unlockTime = lotTimestamp + lockSeconds; const remaining = unlockTime - now; const hours = Math.floor(remaining / 3600); const minutes = Math.floor((remaining % 3600) / 60); statusHtml = `<span class="badge bg-secondary">مقفلة (${hours}س ${minutes}د)</span>`; actionHtml = `<button class="btn btn-sm btn-outline-secondary" disabled>بيع</button>`; } else { statusHtml = `<span class="badge bg-success">متاحة</span>`; actionHtml = `<button class="btn btn-sm btn-danger sell-lot-btn" data-lot-key="${lotKey}" data-crawler-name="${crawlerName}">بيع</button>`; } tableHtml += `<tr id="lot-row-${lotKey}"> <td>${investedSP.toFixed(2)} SP</td> <td>${safeFormatDate(lotTimestamp)}</td> <td class="${profitColor} fw-bold">${currentValue.toFixed(2)} SP</td> <td>${statusHtml}</td> <td class="text-end">${actionHtml}</td> </tr>`; }); tableHtml += `</tbody></table></div>`; ui.sellLotsModalBody.innerHTML = tableHtml; ui.sellLotsModalBody.querySelectorAll('.sell-lot-btn').forEach(btn => { btn.addEventListener('click', handleSellSingleLot); }); }
+    async function showSellLotsModal(crawlerName) {
+        if (!ui.sellLotsModal) return;
+        ui.sellLotsModalTitle.textContent = `إدارة استثمارك في ${crawlerName}`;
+        ui.sellLotsModalBody.innerHTML = `<div class="text-center p-5"><div class="spinner-border"></div></div>`;
+        bootstrap.Modal.getOrCreateInstance(ui.sellLotsModal).show();
+
+        const investment = userInvestments[crawlerName];
+        const lots = investment?.lots || {};
+        const crawler = allUsersCache.find(u => u.name === crawlerName);
+
+        if (!crawler || Object.keys(lots).length === 0) {
+            ui.sellLotsModalBody.innerHTML = '<p class="text-muted text-center my-4">لا توجد دفعات استثمار لهذا الزاحف.</p>';
+            return;
+        }
+
+        const lockSeconds = (siteSettings.investment_lock_hours || 0) * 3600;
+        const now = Math.floor(Date.now() / 1000);
+        const pointsNow = Math.max(1, parseFloat(crawler.points) || 1);
+        const stockMultiplier = parseFloat(crawler.stock_multiplier) || 1.0;
+        // *** بداية التعديل: جلب المضاعف الشخصي للاستخدام في النافذة ***
+        const personalMultiplier = parseFloat(investment.personal_multiplier || 1.0);
+        // *** نهاية التعديل ***
+
+        const lotsArray = Object.entries(lots).map(([lotKey, lotData]) => ({ lotKey, ...lotData }));
+        lotsArray.sort((a, b) => (a.t || 0) - (b.t || 0));
+
+        let tableHtml = `<div class="table-responsive"> <table class="table table-sm table-hover align-middle"> <thead><tr><th>المبلغ المستثمر</th><th>تاريخ الشراء</th><th>القيمة الحالية</th><th>الحالة</th><th></th></tr></thead> <tbody>`;
+        lotsArray.forEach(({ lotKey, sp, p, t }) => {
+            const investedSP = sp || 0;
+            const pointsThen = Math.max(1, p || 1);
+            const lotTimestamp = t || 0;
+            const isLocked = (now - lotTimestamp) < lockSeconds;
+
+            // *** بداية التعديل: تطبيق المضاعف الشخصي هنا أيضاً ***
+            const currentValue = investedSP * (pointsNow / pointsThen) * stockMultiplier * personalMultiplier;
+            // *** نهاية التعديل ***
+
+            const profit = currentValue - investedSP;
+            const profitColor = profit > 0.01 ? 'text-success' : profit < -0.01 ? 'text-danger' : 'text-muted';
+            let statusHtml, actionHtml;
+            if (isLocked) {
+                const unlockTime = lotTimestamp + lockSeconds;
+                const remaining = unlockTime - now;
+                const hours = Math.floor(remaining / 3600);
+                const minutes = Math.floor((remaining % 3600) / 60);
+                statusHtml = `<span class="badge bg-secondary">مقفلة (${hours}س ${minutes}د)</span>`;
+                actionHtml = `<button class="btn btn-sm btn-outline-secondary" disabled>بيع</button>`;
+            } else {
+                statusHtml = `<span class="badge bg-success">متاحة</span>`;
+                actionHtml = `<button class="btn btn-sm btn-danger sell-lot-btn" data-lot-key="${lotKey}" data-crawler-name="${crawlerName}">بيع</button>`;
+            }
+            tableHtml += `<tr id="lot-row-${lotKey}"> <td>${investedSP.toFixed(2)} SP</td> <td>${safeFormatDate(lotTimestamp)}</td> <td class="${profitColor} fw-bold">${currentValue.toFixed(2)} SP</td> <td>${statusHtml}</td> <td class="text-end">${actionHtml}</td> </tr>`;
+        });
+        tableHtml += `</tbody></table></div>`;
+        ui.sellLotsModalBody.innerHTML = tableHtml;
+        ui.sellLotsModalBody.querySelectorAll('.sell-lot-btn').forEach(btn => {
+            btn.addEventListener('click', handleSellSingleLot);
+        });
+    }
 
     async function handleSellSingleLot(e) { const btn = e.target; const { lotKey, crawlerName } = btn.dataset; const row = document.getElementById(`lot-row-${lotKey}`); btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { const data = await apiCall('/api/sell_lot', { method: 'POST', body: new URLSearchParams({ crawler_name: crawlerName, lot_id: lotKey }) }); Toastify({ text: data.message, duration: 3000, gravity: "top", position: "center", style: { background: "linear-gradient(to right, #00b09b, #96c93d)" } }).showToast(); row.style.opacity = '0.4'; row.style.pointerEvents = 'none'; row.querySelector('td:last-child').innerHTML = `<span class="text-muted">تم البيع</span>`; } catch (error) { Swal.fire('فشل!', error.message, 'error'); btn.disabled = false; btn.innerHTML = 'بيع'; } }
 
@@ -662,15 +728,13 @@ function initializeUserView() {
     function handleUserMessage(snapshot) { const getProcessedIds = () => new Set(JSON.parse(sessionStorage.getItem('processedMessageIds') || '[]')); const setProcessedIds = ids => sessionStorage.setItem('processedMessageIds', JSON.stringify([...ids])); const processedIds = getProcessedIds(), messageId = snapshot.key; if (snapshot.val()?.text && !processedIds.has(messageId)) { processedIds.add(messageId); setProcessedIds(processedIds); Swal.fire({ title: 'رسالة من الإدارة!', text: snapshot.val().text, icon: 'info', confirmButtonText: 'تم الاطلاع' }).then(() => snapshot.ref.remove()); } }
 
     async function handleAvatarOrNudgeClick(element) {
-        // <<< بداية التعديل >>>
         if (element.id === 'user-avatar-preview') {
             const modalInstance = bootstrap.Modal.getOrCreateInstance(ui.avatarChooserModal);
             if (modalInstance) {
                 modalInstance.show();
             }
-            return; // Stop further execution
+            return;
         }
-        // <<< نهاية التعديل >>>
 
         const targetName = element.dataset.targetName;
         const targetType = element.dataset.targetType;
