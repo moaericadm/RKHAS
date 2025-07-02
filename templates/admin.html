@@ -105,7 +105,10 @@
             </div>
         </div>
         <div class="card shadow-lg">
-            <div class="card-header"><i class="bi bi-list-stars me-2"></i>قائمة الزواحف</div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-stars me-2"></i>قائمة الزواحف</span>
+                <input type="search" id="crawlerSearchInput" class="form-control form-control-sm" style="width: 250px;" placeholder="🔍 ابحث عن زاحف...">
+            </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-hover align-middle mb-0">
                     <thead>
@@ -152,6 +155,26 @@
         </div>
 
         <div class="card shadow-lg mt-4">
+            <div class="card-header text-white" style="background-color: var(--bs-teal);"><i class="bi bi-cash-stack me-2"></i>طلبات سحب الأرباح المعلقة</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>المستخدم</th>
+                            <th>الزاحف المستثمر فيه</th>
+                            <th class="text-center">المبلغ المطلوب</th>
+                            <th class="text-center">تاريخ الطلب</th>
+                            <th class="text-center">الإجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody id="withdrawal-requests-table-body">
+                        <!-- Content will be loaded here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card shadow-lg mt-4">
             <div class="card-header"><i class="bi bi-gift-fill me-2"></i>طلبات إهداء الأفاتارات</div>
             <div class="card-body p-0 table-responsive">
                 <table class="table mb-0 align-middle">
@@ -170,8 +193,27 @@
             </div>
         </div>
 
-        <div class="card shadow-lg mt-4"><div class="card-header"><i class="bi bi-person-fill-check me-2"></i>الحسابات المسجلة والمعتمدة</div><div class="card-body p-0 table-responsive"><table class="table mb-0"><thead><tr><th>الاسم</th><th>البريد</th><th class="text-center">الدور</th><th class="text-center">تاريخ التسجيل</th><th class="text-center">إجراءات</th></tr></thead><tbody id="approved-users-table-body"></tbody></table></div></div>
-        <div class="card shadow-lg mt-4"><div class="card-header bg-danger text-white"><i class="bi bi-person-fill-slash me-2"></i>المستخدمون المحظورون</div><div class="card-body p-0 table-responsive"><table class="table mb-0"><thead><tr><th>الاسم</th><th>تاريخ الحظر</th><th class="text-center">إجراء</th></tr></thead><tbody id="banned-users-table"></tbody></table></div></div>
+        <div class="card shadow-lg mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-person-fill-check me-2"></i>الحسابات المسجلة والمعتمدة</span>
+                <input type="search" id="approvedUsersSearchInput" class="form-control form-control-sm" style="width: 250px;" placeholder="🔍 ابحث بالاسم أو البريد...">
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>الاسم</th><th>البريد</th><th class="text-center">الدور</th><th class="text-center">تاريخ التسجيل</th><th class="text-center">إجراءات</th></tr></thead>
+                    <tbody id="approved-users-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card shadow-lg mt-4">
+            <div class="card-header bg-danger text-white"><i class="bi bi-person-fill-slash me-2"></i>المستخدمون المحظورون</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>الاسم</th><th>تاريخ الحظر</th><th class="text-center">إجراء</th></tr></thead>
+                    <tbody id="banned-users-table"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Activity Log Panel -->
@@ -269,7 +311,6 @@
                                 <label class="form-check-label" for="rps-game-enabled-toggle">تفعيل لعبة حجر، ورقة، مقص (لاعب ضد لاعب)</label>
                             </div>
                             <div class="row g-3">
-                                <!-- *** بداية التعديل: إضافة حقل مدة القفل *** -->
                                 <div class="col-md-4">
                                     <label for="rps-game-max-bet-input" class="form-label">الحد الأعلى للرهان (SP)</label>
                                     <input type="number" id="rps-game-max-bet-input" class="form-control" min="0">
@@ -281,7 +322,6 @@
                                 <div class="col-md-4 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary w-100">حفظ إعدادات اللعبة</button>
                                 </div>
-                                <!-- *** نهاية التعديل *** -->
                             </div>
                         </form>
                     </div>
@@ -446,6 +486,20 @@
                         <span class="visually-hidden">Loading...</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="manageInvestmentsModal" tabindex="-1" aria-labelledby="manageInvestmentsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="manageInvestmentsModalLabel">إدارة الاستثمارات</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="manageInvestmentsModalBody">
+                <!-- Content will be loaded here by JavaScript -->
             </div>
         </div>
     </div>

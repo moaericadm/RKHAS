@@ -616,9 +616,7 @@ def update_personal_multiplier():
             return jsonify(success=False, message="بيانات ناقصة."), 400
 
         multiplier = float(multiplier_str)
-        if multiplier < 0:
-            return jsonify(success=False, message="المضاعف لا يمكن أن يكون سالباً."), 400
-
+        
         investment_ref = db.reference(f'investments/{investor_id}/{crawler_name}')
         if not investment_ref.get():
             return jsonify(success=False, message="هذا المستخدم ليس لديه استثمار في هذا الزاحف."), 404
@@ -642,6 +640,63 @@ def update_personal_multiplier():
         return jsonify(success=False, message="قيمة المضاعف غير صالحة."), 400
     except Exception as e:
         print(f"!!! Update Personal Multiplier Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
+
+@bp.route('/set_special_multiplier', methods=['POST'])
+@admin_required
+def set_special_multiplier():
+    try:
+        data = request.get_json()
+        investor_id = data.get('user_id')
+        crawler_name = data.get('crawler_name')
+        action = data.get('action')
+
+        if not all([investor_id, crawler_name, action]):
+            return jsonify(success=False, message="بيانات ناقصة."), 400
+        
+        investment_ref = db.reference(f'investments/{investor_id}/{crawler_name}')
+        investment_data = investment_ref.get()
+        crawler_data = db.reference(f'users/{crawler_name}').get()
+
+        if not investment_data or not crawler_data:
+            return jsonify(success=False, message="بيانات الاستثمار أو الزاحف غير موجودة."), 404
+
+        new_multiplier = 1.0
+        if action == 'reset_to_normal':
+            new_multiplier = 1.0
+        elif action == 'total_loss':
+            new_multiplier = 0.0
+        elif action == 'invert_profit':
+            new_multiplier = -1.0
+        elif action == 'reset_profit':
+            points_now = float(max(1, crawler_data.get('points', 1)))
+            stock_multiplier = float(crawler_data.get('stock_multiplier', 1.0))
+            
+            total_invested_sp = 0
+            weighted_market_factor_sum = 0
+            
+            lots = investment_data.get('lots', {})
+            if not lots:
+                new_multiplier = 1.0
+            else:
+                for lot in lots.values():
+                    sp = float(lot.get('sp', 0))
+                    points_then = float(max(1, lot.get('p', 1)))
+                    market_factor = (points_now / points_then) * stock_multiplier
+                    
+                    total_invested_sp += sp
+                    weighted_market_factor_sum += sp * market_factor
+
+                if total_invested_sp > 0 and weighted_market_factor_sum > 0:
+                    new_multiplier = total_invested_sp / weighted_market_factor_sum
+                else:
+                    new_multiplier = 1.0
+
+        investment_ref.update({'personal_multiplier': new_multiplier})
+        return jsonify(success=True, new_multiplier=new_multiplier)
+
+    except Exception as e:
+        print(f"!!! Set Special Multiplier Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
 
 @bp.route('/settings/stock_prediction_game', methods=['POST'])
@@ -680,12 +735,11 @@ def save_rps_game_settings():
         settings = {
             'is_enabled': bool(data.get('is_enabled')),
             'max_bet': int(data.get('max_bet')),
-            'cooldown_seconds': int(data.get('cooldown_seconds', 60)) # *** إضافة جديدة ***
+            'cooldown_seconds': int(data.get('cooldown_seconds', 60))
         }
         if settings['max_bet'] < 0 or settings['cooldown_seconds'] < 0:
             raise ValueError("القيم لا يمكن أن تكون سالبة.")
 
-        # لا نقوم بتحديث lock_until هنا، هو يتحدث تلقائياً عند انتهاء اللعبة
         db.reference('site_settings/rps_game').update(settings)
         return jsonify(success=True, message="تم حفظ إعدادات اللعبة بنجاح!")
 
@@ -694,4 +748,175 @@ def save_rps_game_settings():
     except Exception as e:
         print(f"!!! Save RPS Game Settings Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
+
+@bp.route('/user_investments/<user_id>', methods=['GET'])
+@admin_required
+def get_user_investments(user_id):
+    if not user_id:
+        return jsonify(success=False, message="معرف المستخدم مطلوب."), 400
+    try:
+        investments_ref = db.reference(f'investments/{user_id}')
+        investments = investments_ref.get()
+        return jsonify(success=True, investments=investments or {})
+    except Exception as e:
+        print(f"!!! Get User Investments Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم أثناء جلب البيانات."), 500
+
+@bp.route('/delete_investment_lot', methods=['POST'])
+@admin_required
+def delete_investment_lot():
+    user_id = request.form.get('user_id')
+    crawler_name = request.form.get('crawler_name')
+    lot_id = request.form.get('lot_id')
+
+    if not all([user_id, crawler_name, lot_id]):
+        return jsonify(success=False, message="بيانات غير مكتملة لحذف دفعة الاستثمار."), 400
+    
+    lot_ref = db.reference(f'investments/{user_id}/{crawler_name}/lots/{lot_id}')
+    
+    if lot_ref.get() is None:
+        return jsonify(success=False, message="دفعة الاستثمار هذه غير موجودة بالفعل."), 404
+        
+    try:
+        lot_ref.delete()
+        
+        crawler_investment_ref = db.reference(f'investments/{user_id}/{crawler_name}/lots')
+        if not crawler_investment_ref.get():
+            db.reference(f'investments/{user_id}/{crawler_name}').delete()
+
+        admin_name = session.get('name', 'Admin')
+        user_name = (db.reference(f'registered_users/{user_id}/name').get() or 'مستخدم')
+        log_text = f"الأدمن '{admin_name}' حذف دفعة استثمار للمستخدم '{user_name}' في الزاحف '{crawler_name}'."
+        db.reference('activity_log').push({'type': 'admin_edit', 'text': log_text, 'timestamp': int(time.time())})
+
+        return jsonify(success=True, message="تم حذف دفعة الاستثمار بنجاح.")
+    except Exception as e:
+        print(f"!!! Delete Investment Lot Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم أثناء الحذف."), 500
+
+@bp.route('/force_sell_all_lots', methods=['POST'])
+@admin_required
+def force_sell_all_lots():
+    try:
+        data = request.get_json()
+        investor_id = data.get('user_id')
+        crawler_name = data.get('crawler_name')
+
+        if not all([investor_id, crawler_name]):
+            return jsonify(success=False, message="بيانات ناقصة."), 400
+
+        investment_ref = db.reference(f'investments/{investor_id}/{crawler_name}')
+        investment_data = investment_ref.get()
+        crawler_data = db.reference(f'users/{crawler_name}').get()
+
+        if not investment_data or not crawler_data:
+            return jsonify(success=False, message="لا يوجد استثمار لهذا المستخدم في هذا الزاحف."), 404
+
+        lots = investment_data.get('lots', {})
+        if not lots:
+            return jsonify(success=False, message="لا توجد دفعات استثمار لبيعها."), 404
+
+        settings = db.reference('site_settings/investment_settings').get() or {}
+        sell_tax_percent = settings.get('sell_tax_percent', 0.0)
+        sell_fee_sp = settings.get('sell_fee_sp', 0.0)
+
+        current_points = float(max(1, crawler_data.get('points', 1)))
+        stock_multiplier = float(crawler_data.get('stock_multiplier', 1.0))
+        personal_multiplier = float(investment_data.get('personal_multiplier', 1.0))
+        
+        total_sp_to_return = 0
+
+        for lot_data in lots.values():
+            invested_sp = float(lot_data.get('sp', 0))
+            points_at_inv = float(max(1, lot_data.get('p', 1)))
+            
+            value_of_lot = invested_sp * (current_points / points_at_inv) * stock_multiplier * personal_multiplier
+            
+            profit = value_of_lot - invested_sp
+            tax_amount = max(0, profit * (sell_tax_percent / 100.0))
+            
+            final_value_of_lot = value_of_lot - tax_amount
+            total_sp_to_return += final_value_of_lot
+
+        # إزالة max(0, ...) للسماح بالقيم السالبة وخصم الرسوم
+        total_sp_to_return -= sell_fee_sp
+
+        db.reference(f'wallets/{investor_id}/sp').transaction(lambda current: (current or 0) + total_sp_to_return)
+        
+        investment_ref.delete()
+        
+        admin_name = session.get('name', 'Admin')
+        investor_name = (db.reference(f'registered_users/{investor_id}/name').get() or 'مستخدم')
+        log_text = f"الأدمن '{admin_name}' قام بتصفية استثمارات '{investor_name}' في '{crawler_name}' بقيمة {total_sp_to_return:,.2f} SP."
+        
+        db.reference('activity_log').push({
+            'type': 'admin_edit', 
+            'text': log_text, 
+            'timestamp': int(time.time())
+        })
+        
+        db.reference(f'user_messages/{investor_id}').push({
+            'text': f"تمت تصفية استثماراتك في '{crawler_name}'. تم إضافة/خصم {total_sp_to_return:,.2f} SP إلى/من محفظتك.",
+            'timestamp': int(time.time())
+        })
+
+        return jsonify(success=True, message=f"تمت تصفية جميع استثمارات {investor_name} في {crawler_name} بنجاح.")
+
+    except Exception as e:
+        print(f"!!! Force Sell All Lots Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message="خطأ في الخادم."), 500
+# ### نهاية التعديل ###
+
+@bp.route('/handle_withdrawal_request/<request_id>/<action>', methods=['POST'])
+@admin_required
+def handle_withdrawal_request(request_id, action):
+    if action not in ['approve', 'reject']:
+        return jsonify(success=False, message="إجراء غير صالح."), 400
+
+    req_ref = db.reference(f'withdrawal_requests/{request_id}')
+    request_data = req_ref.get()
+
+    if not request_data or request_data.get('status') != 'pending':
+        return jsonify(success=False, message="الطلب غير موجود أو تمت معالجته بالفعل."), 404
+
+    user_id = request_data.get('user_id')
+    
+    if action == 'reject':
+        try:
+            lot_ref = db.reference(f"investments/{user_id}/{request_data['crawler_name']}/lots/{request_data['lot_id']}")
+            lot_ref.set(request_data['lot_data'])
+            req_ref.update({'status': 'rejected', 'processed_by': session.get('name')})
+            db.reference(f'user_messages/{user_id}').push({'text': f"تم رفض طلب سحب الأرباح الخاص بك من استثمار '{request_data['crawler_name']}'.", 'timestamp': int(time.time())})
+            return jsonify(success=True, message="تم رفض طلب السحب بنجاح.")
+        except Exception as e:
+            return jsonify(success=False, message=f"خطأ في الخادم: {e}"), 500
+
+    try:
+        settings = db.reference('site_settings/investment_settings').get() or {}
+        sell_tax_percent = settings.get('sell_tax_percent', 0.0)
+        sell_fee_sp = settings.get('sell_fee_sp', 0.0)
+        
+        value_of_lot_before_tax = float(request_data.get('amount_to_withdraw', 0))
+        invested_sp = float(request_data.get('lot_data', {}).get('sp', 0))
+
+        profit = value_of_lot_before_tax - invested_sp
+        tax_amount = max(0, profit * (sell_tax_percent / 100.0))
+        final_sp_to_return = max(0, value_of_lot_before_tax - tax_amount - sell_fee_sp)
+
+        db.reference(f'wallets/{user_id}/sp').transaction(lambda current: (current or 0) + final_sp_to_return)
+        
+        req_ref.update({'status': 'approved', 'processed_by': session.get('name')})
+
+        db.reference(f'user_messages/{user_id}').push({'text': f"تمت الموافقة على طلب سحب الأرباح الخاص بك! تم إضافة {final_sp_to_return:,.2f} SP إلى محفظتك.", 'timestamp': int(time.time())})
+        
+        db.reference('investment_log').push({
+            'investor_id': user_id, 'investor_name': request_data.get('user_name'),
+            'target_name': request_data.get('crawler_name'), 'action': 'sell',
+            'sp_amount': final_sp_to_return, 'timestamp': int(time.time())
+        })
+        
+        return jsonify(success=True, message="تمت الموافقة على الطلب بنجاح.")
+    except Exception as e:
+        return jsonify(success=False, message=f"خطأ في الخادم: {e}"), 500
+
 # --- END OF FILE project/admin_api.py ---

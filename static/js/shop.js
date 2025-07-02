@@ -344,6 +344,7 @@ function initializeShopPage() {
         }
     }
 
+    // ### بداية التعديل: استبدال دالة handlePointsProductPurchase ###
     async function handlePointsProductPurchase(e) {
         const btn = e.target.closest('button');
         const { productId, spPrice, title } = btn.dataset;
@@ -361,9 +362,10 @@ function initializeShopPage() {
 
         const targetCrawler = selectionResult.value;
 
+        // تغيير نص التأكيد ليصبح أكثر عمومية
         const confirmResult = await Swal.fire({
             title: `تأكيد استخدام المنتج`,
-            html: `هل تريد بالتأكيد إنفاق <strong>${formatNumber(spPrice)} SP</strong> لتطبيق تأثير "${title}" على <strong>${targetCrawler}</strong>؟`,
+            html: `هل أنت متأكد أنك تريد إنفاق <strong>${formatNumber(spPrice)} SP</strong> لتطبيق تأثير "${title}" على <strong>${targetCrawler}</strong>؟<br><small class="text-muted">سيقوم النظام بحساب عدد النقاط المضافة بذكاء لضمان عدم تجاوز المنافس التالي.</small>`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'نعم، تأكيد!',
@@ -372,16 +374,19 @@ function initializeShopPage() {
 
         if (confirmResult.isConfirmed) {
             try {
-                await apiCall('/api/shop/buy_points_product', {
+                // سنستقبل الرسالة الديناميكية من الخادم
+                const data = await apiCall('/api/shop/buy_points_product', {
                     method: 'POST',
                     body: new URLSearchParams({ product_id: productId, target_crawler: targetCrawler })
                 });
-                Swal.fire('تم بنجاح!', 'لقد تم استخدام المنتج بنجاح.', 'success');
+                // عرض الرسالة التي جاءت من الخادم
+                Swal.fire('تم بنجاح!', data.message, 'success');
             } catch (error) {
                 Swal.fire('فشل!', error.message, 'error');
             }
         }
     }
+    // ### نهاية التعديل ###
 
     async function handleAvatarPurchase(e) {
         const btn = e.target.closest('button');
