@@ -1,4 +1,4 @@
-﻿# START OF FILE project/user_interactions_api.py
+﻿# --- START OF FILE project/user_interactions_api.py ---
 import time
 import re
 import sys
@@ -140,6 +140,9 @@ def vote_in_contest():
 
     if voted_for not in [contest_data.get('contestant1_name'), contest_data.get('contestant2_name')]:
         return jsonify(success=False, message="لا يمكنك التصويت لزاحف ليس في المنافسة الحالية."), 400
+    
+    if user_name.lower() == voted_for.lower():
+        return jsonify(success=False, message="لا يمكنك التصويت لنفسك."), 400
 
     if (contest_ref.child(f"votes/{contest_data.get('contestant1_name')}/{user_id}").get() or
             contest_ref.child(f"votes/{contest_data.get('contestant2_name')}/{user_id}").get()):
@@ -237,8 +240,7 @@ def buy_spin_attempt():
         print(f"!!! Atomic Spin Purchase Error for user {user_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء الشراء."), 500
 
-
-# ### بداية التعديل: استبدال دالة buy_points_product بالكامل ###
+# <<< بداية التعديل: تعديل شامل لمنطق شراء تأثير الأسهم >>>
 @bp.route('/shop/buy_points_product', methods=['POST'])
 @login_required
 def buy_points_product():
@@ -277,11 +279,11 @@ def buy_points_product():
         product_type = product.get('type')
         base_points_change = product.get('points_amount', 0)
         
-        sorted_crawlers = sorted(all_crawlers.values(), key=lambda x: x.get('points', 0), reverse=True)
+        sorted_crawlers = sorted(all_crawlers.items(), key=lambda item: item[1].get('points', 0), reverse=True)
         
         target_rank = -1
-        for i, crawler in enumerate(sorted_crawlers):
-            if crawler.get('name') == target_crawler_name:
+        for i, (name, data) in enumerate(sorted_crawlers):
+            if name == target_crawler_name:
                 target_rank = i
                 break
         
@@ -294,46 +296,39 @@ def buy_points_product():
             if target_rank == 0:
                 points_change = base_points_change 
             else:
-                crawler_ahead = sorted_crawlers[target_rank - 1]
-                points_ahead = crawler_ahead.get('points', 0)
-                points_to_reach_next_rank = (points_ahead - target_current_points) - 1
-
-                # الشرط الحاسم: إذا كانت الفجوة قد أُغلقت بالفعل، لا تفعل شيئاً
-                if points_to_reach_next_rank <= 0:
-                    points_change = 0
-                else:
-                    points_change = min(base_points_change, points_to_reach_next_rank)
-
+                _ , crawler_ahead_data = sorted_crawlers[target_rank - 1]
+                points_ahead = crawler_ahead_data.get('points', 0)
+                # الهدف الجديد هو أن يكون أقل بنقطة واحدة من المنافس
+                new_target_points = points_ahead - 1
+                # التغيير الفعلي هو الفارق المطلوب للوصول لهذه النقطة
+                points_change = max(0, new_target_points - target_current_points)
+                    
         elif product_type == 'drop':
             if target_rank == len(sorted_crawlers) - 1:
                 points_change = -base_points_change
             else:
-                crawler_behind = sorted_crawlers[target_rank + 1]
-                points_behind = crawler_behind.get('points', 0)
-                
-                points_to_drop_to_next_rank = (target_current_points - points_behind) - 1
-
-                # الشرط الحاسم: إذا كانت الفجوة قد أُغلقت بالفعل، لا تفعل شيئاً
-                if points_to_drop_to_next_rank <= 0:
-                    points_change = 0
-                else:
-                    points_to_drop = min(base_points_change, points_to_drop_to_next_rank)
-                    points_change = -points_to_drop
+                _ , crawler_behind_data = sorted_crawlers[target_rank + 1]
+                points_behind = crawler_behind_data.get('points', 0)
+                # الهدف الجديد هو أن يكون أعلى بنقطة واحدة من المنافس
+                new_target_points = points_behind + 1
+                # التغيير الفعلي هو الفارق المطلوب للوصول لهذه النقطة
+                points_change = min(0, new_target_points - target_current_points)
         
-        # تنفيذ التغييرات
+        # إذا لم يكن هناك تغيير ممكن، لا تخصم الرصيد وأبلغ المستخدم
+        if points_change == 0:
+            return jsonify(success=False, message=f"الزاحف '{target_crawler_name}' في أفضل مركز ممكن حالياً ولا يمكن تحريكه بهذا المنتج.")
+        
+        # تطبيق التغييرات
         wallet_ref.child('sp').set(current_sp - sp_price)
-        if points_change != 0:
-             db.reference(f'users/{target_crawler_name}/points').transaction(lambda p: max(1, (p or 0) + points_change))
+        db.reference(f'users/{target_crawler_name}/points').transaction(lambda p: max(1, (p or 0) + points_change))
         
         limit_ref.set({'count': current_count + 1, 'date': today_str})
         
         log_type = 'item_effect_raise' if product_type == 'raise' else 'item_effect_drop'
         action_text = "رفع أسهم" if product_type == 'raise' else "أسقط أسهم"
         
-        message = f"تمت العملية بنجاح! تم تغيير نقاط الزاحف بمقدار {points_change:,} نقطة."
-        if points_change == 0:
-            message = "تمت العملية. الزاحف قريب جداً من منافسه، لم يتم تغيير النقاط."
-
+        message = f"تمت العملية بنجاح! تم تغيير نقاط الزاحف '{target_crawler_name}' بمقدار {points_change:,} نقطة."
+        
         db.reference('activity_log').push({
             'type': log_type, 
             'text': f"'{user_name}' أثر على '{target_crawler_name}' بـ{points_change:,} نقطة.",
@@ -349,6 +344,7 @@ def buy_points_product():
     except Exception as e:
         print(f"!!! Buy Points Product Error for user {user_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم."), 500
+# <<< نهاية التعديل >>>
 
 @bp.route('/like/<username>', methods=['POST'])
 @login_required 
@@ -428,13 +424,17 @@ def invest_in_crawler():
     investment_ref = db.reference(f'investments/{user_id}/{crawler_name}')
     current_investment = investment_ref.get()
 
+    all_user_investments = db.reference(f'investments/{user_id}').get() or {}
+    num_current_investments = len(all_user_investments.keys())
+    
     if not current_investment and max_investments and max_investments > 0:
-        all_user_investments = db.reference(f'investments/{user_id}').get()
-        num_current_investments = len(all_user_investments.keys()) if all_user_investments else 0
         if num_current_investments >= max_investments:
             return jsonify(success=False, message=f"لقد وصلت للحد الأقصى وهو {max_investments} استثمارات مختلفة."), 403
 
-    crawler_data = db.reference(f'users/{crawler_name}').get()
+    all_crawlers_ref = db.reference('users')
+    all_crawlers = all_crawlers_ref.get()
+    crawler_data = all_crawlers.get(crawler_name)
+
     if not crawler_data:
         return jsonify(success=False, message="هذا الزاحف غير موجود."), 404
 
@@ -449,14 +449,69 @@ def invest_in_crawler():
     points_at_investment = crawler_data.get('points', 0)
     now_timestamp = int(time.time())
     
-    new_lot = {
-        'sp': sp_to_invest,
-        'p': points_at_investment,
-        't': now_timestamp
-    }
+    governor_settings = db.reference('site_settings/market_governor').get() or {}
+    final_sp_for_lot = sp_to_invest
+    instant_bonus_details = ""
 
-    investment_ref.child('lots').push().set(new_lot)
+    if governor_settings.get('instant_bonus_enabled'):
+        win_chance = governor_settings.get('instant_win_chance', 0)
+        loss_chance = governor_settings.get('instant_loss_chance', 0)
+        
+        roll = random.uniform(0, 100)
+        if roll < win_chance:
+            max_percent = governor_settings.get('instant_win_max_percent', 10)
+            bonus_percent = random.uniform(1.0, max_percent)
+            bonus_amount = sp_to_invest * (bonus_percent / 100.0)
+            final_sp_for_lot += bonus_amount
+            instant_bonus_details = (f"<br>مكافأة فورية: <strong class='text-success'>+{bonus_amount:.2f} SP</strong> "
+                                     f"({bonus_percent:.1f}%)")
+        elif roll < win_chance + loss_chance:
+            max_percent = governor_settings.get('instant_loss_max_percent', 5)
+            loss_percent = random.uniform(1.0, max_percent)
+            loss_amount = sp_to_invest * (loss_percent / 100.0)
+            final_sp_for_lot -= loss_amount
+            instant_bonus_details = (f"<br>خسارة فورية: <strong class='text-danger'>-{loss_amount:.2f} SP</strong> "
+                                     f"({loss_percent:.1f}%)")
+
+    new_lot = {
+        'sp': final_sp_for_lot,
+        'p': points_at_investment,
+        't': now_timestamp,
+        'original_sp': sp_to_invest
+    }
     
+    new_lot_ref = investment_ref.child('lots').push()
+    new_lot_key = new_lot_ref.key
+    new_lot_ref.set(new_lot)
+
+    bonus_message = ""
+    bonus_sp_applied = 0
+    if governor_settings.get('deal_bonus_enabled'):
+        
+        rank_threshold = governor_settings.get('underdog_rank_threshold', 0)
+        if rank_threshold > 0:
+            sorted_crawlers = sorted(all_crawlers.values(), key=lambda x: x.get('points', 0), reverse=True)
+            try:
+                rank = [c.get('name') for c in sorted_crawlers].index(crawler_name) + 1
+                if rank > rank_threshold:
+                    bonus_percent = governor_settings.get('underdog_bonus_percent', 0)
+                    bonus_sp_applied += sp_to_invest * (bonus_percent / 100.0)
+                    bonus_message += f"<br>تمت إضافة مكافأة 'المستثمر المغامر' بقيمة {bonus_sp_applied:.2f} SP!"
+            except (ValueError, AttributeError):
+                pass
+
+        milestones = governor_settings.get('diversify_milestones', [])
+        if not current_investment and (num_current_investments + 1) in milestones:
+            bonus_percent = governor_settings.get('diversify_bonus_percent', 0)
+            diversify_bonus_sp = sp_to_invest * (bonus_percent / 100.0)
+            bonus_sp_applied += diversify_bonus_sp
+            bonus_message += f"<br>تمت إضافة مكافأة 'التنويع' بقيمة {diversify_bonus_sp:.2f} SP!"
+
+        if bonus_sp_applied > 0:
+            new_lot_ref.child('sp').transaction(lambda current_val: (current_val or 0) + bonus_sp_applied)
+            new_lot_ref.child('bonus_applied').set(True)
+            final_sp_for_lot += bonus_sp_applied
+
     _log_public_notification(f"استثمر في '{crawler_name}' بمبلغ {sp_to_invest:,.2f} SP.")
     db.reference('investment_log').push({
         'investor_id': user_id, 'investor_name': user_name,
@@ -464,7 +519,19 @@ def invest_in_crawler():
         'sp_amount': sp_to_invest, 'timestamp': now_timestamp
     })
     
-    return jsonify(success=True, message=f"تم استثمار {sp_to_invest:,.2f} SP بنجاح في {crawler_name}!")
+    final_message = (f"تم استثمار <strong>{sp_to_invest:,.2f} SP</strong> في {crawler_name} بنجاح!"
+                     f"{instant_bonus_details}"
+                     f"<hr>القيمة النهائية للدُفعة: <strong>{final_sp_for_lot:,.2f} SP</strong>"
+                     f"{bonus_message}")
+
+    return jsonify(
+        success=True, 
+        message=final_message,
+        new_lot={
+            'id': new_lot_key,
+            'data': new_lot
+        }
+    )
 
 @bp.route('/sell_lot', methods=['POST'])
 @login_required
@@ -494,16 +561,18 @@ def sell_lot():
 
     if now - lot_timestamp < lock_seconds:
         return jsonify(success=False, message="لا يمكن بيع هذه الدفعة، فهي لا تزال تحت مدة القفل."), 403
-
+    
+    withdrawal_approval_limit = settings.get('withdrawal_approval_limit', 500000)
+    
     invested_sp = float(lot_data.get('sp', 0))
+    original_invested_sp = float(lot_data.get('original_sp', invested_sp))
     points_at_inv = float(max(1, lot_data.get('p', 1)))
     current_points = float(max(1, crawler_data.get('points', 1)))
     stock_multiplier = float(crawler_data.get('stock_multiplier', 1.0))
     personal_multiplier = float(investment_data.get('personal_multiplier', 1.0))
     value_of_lot_before_tax = invested_sp * (current_points / points_at_inv) * stock_multiplier * personal_multiplier
 
-    WITHDRAWAL_APPROVAL_LIMIT = 500000
-    if value_of_lot_before_tax > WITHDRAWAL_APPROVAL_LIMIT:
+    if value_of_lot_before_tax > withdrawal_approval_limit:
         withdrawal_request_ref = db.reference('withdrawal_requests').push()
         withdrawal_request_ref.set({
             'user_id': user_id,
@@ -520,10 +589,11 @@ def sell_lot():
 
     sell_tax_percent = settings.get('sell_tax_percent', 0.0)
     sell_fee_sp = settings.get('sell_fee_sp', 0.0)
-    profit = value_of_lot_before_tax - invested_sp
+    
+    profit = value_of_lot_before_tax - original_invested_sp
+    
     tax_amount = max(0, profit * (sell_tax_percent / 100.0))
     
-    # إزالة max(0, ...) للسماح بالقيم السالبة
     final_sp_to_return = value_of_lot_before_tax - tax_amount - sell_fee_sp
 
     try:
@@ -541,14 +611,13 @@ def sell_lot():
         _log_public_notification(f"باع حصة من أسهمه في '{crawler_name}' مقابل {final_sp_to_return:,.2f} SP.")
         
         message = f"تم بيع الدفعة بنجاح! لقد حصلت على {final_sp_to_return:.2f} SP."
-        if final_sp_to_return < 0:
-            message = f"تم بيع الدفعة بخسارة! تم خصم {abs(final_sp_to_return):.2f} SP من رصيدك."
+        if final_sp_to_return < original_invested_sp:
+            message = f"تم بيع الدفعة بخسارة! تم إرجاع {final_sp_to_return:.2f} SP."
 
         return jsonify(success=True, status='completed', message=message)
     except Exception as e:
         print(f"!!! Sell Lot Error (direct): {e}", file=sys.stderr)
         return jsonify(success=False, message="حدث خطأ في الخادم أثناء البيع."), 500
-# ### نهاية التعديل ###
 
 @bp.route('/shop/buy_avatar', methods=['POST'])
 @login_required
@@ -771,4 +840,5 @@ def send_nudge():
     except Exception as e:
         print(f"!!! Send Nudge Error by {sender_id}: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم أثناء إرسال النكزة."), 500
-# --- END OF FILE project/user_interactions_api.py -
+
+# --- END OF FILE project/user_interactions_api.py ---

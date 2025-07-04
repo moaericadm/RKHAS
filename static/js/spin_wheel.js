@@ -7,6 +7,7 @@ document.addEventListener('firebase-ready', () => {
     const ui = {
         spinWheelCard: document.getElementById('spin-wheel-card'),
         purchasedSpinsCard: document.getElementById('purchased-spins-card'),
+        purchasedSpinsSeparator: document.getElementById('purchased-spins-separator'), // <<< الإضافة الجديدة
         spinBtn: document.getElementById('spin-wheel-btn'),
         usePurchasedBtn: document.getElementById('use-purchased-spin-btn'),
         freeAttemptsText: document.getElementById('free-attempts-text'),
@@ -116,7 +117,9 @@ document.addEventListener('firebase-ready', () => {
         const timeSinceLastUpdate = Math.floor(Date.now() / 1000) - (userState.lastFreeUpdateTimestamp || 0);
         const timeRemaining = cooldownSeconds - timeSinceLastUpdate;
 
-        if ((userState.freeAttempts || 0) > 0) {
+        const hasFreeSpins = (userState.freeAttempts || 0) > 0;
+
+        if (hasFreeSpins) {
             if (ui.spinTimerContainer) ui.spinTimerContainer.style.display = 'none';
             if (ui.spinBtn) ui.spinBtn.disabled = isSpinning;
         } else {
@@ -130,9 +133,19 @@ document.addEventListener('firebase-ready', () => {
         }
 
         const purchasedCount = userState.purchasedAttempts || 0;
-        if (ui.purchasedSpinsCard) ui.purchasedSpinsCard.style.display = purchasedCount > 0 ? 'block' : 'none';
+        const hasPurchasedSpins = purchasedCount > 0;
+
+        if (ui.purchasedSpinsCard) ui.purchasedSpinsCard.style.display = hasPurchasedSpins ? 'block' : 'none';
         if (ui.purchasedAttemptsText) ui.purchasedAttemptsText.textContent = `لديك ${purchasedCount} محاولات مشتراة.`;
-        if (ui.usePurchasedBtn) ui.usePurchasedBtn.disabled = (purchasedCount < 1) || isSpinning;
+        if (ui.usePurchasedBtn) ui.usePurchasedBtn.disabled = !hasPurchasedSpins || isSpinning;
+
+        // --- بداية التعديل: إظهار وإخفاء الفاصل ---
+        if (ui.purchasedSpinsSeparator) {
+            // يظهر الفاصل فقط إذا كان هناك محاولات مجانية (أو مؤقت يعمل) ومحاولات مشتراة
+            const freeSectionVisible = hasFreeSpins || (timeRemaining > 0);
+            ui.purchasedSpinsSeparator.style.display = (freeSectionVisible && hasPurchasedSpins) ? 'block' : 'none';
+        }
+        // --- نهاية التعديل ---
     }
 
     function startTimer(duration) {
@@ -160,7 +173,6 @@ document.addEventListener('firebase-ready', () => {
         updateUI(userState);
     }
 
-    // *** بداية التعديل: تعديل دالة بدء الدوران ***
     async function performSpin(attemptType, button) {
         if (!wheel || button.disabled || isSpinning) return;
 
@@ -170,7 +182,6 @@ document.addEventListener('firebase-ready', () => {
 
         button.disabled = true;
 
-        // الخطوة 1: طلب بدء الدوران من الخادم
         const apiEndpoint = `/api/spin_wheel/initiate_spin/${attemptType}`;
         try {
             const response = await fetch(apiEndpoint, { method: 'POST' });
@@ -184,9 +195,8 @@ document.addEventListener('firebase-ready', () => {
                 spinWheelModal.show();
             }
 
-            // إعادة تصفير العجلة قبل الدوران الفعلي
             resetWheel();
-            isSpinning = true; // إعادة تفعيل القفل بعد التصفير
+            isSpinning = true;
             ui.spinBtn.disabled = true;
             ui.usePurchasedBtn.disabled = true;
 
@@ -199,16 +209,13 @@ document.addEventListener('firebase-ready', () => {
 
         } catch (error) {
             Swal.fire({ icon: 'error', title: 'فشل!', text: error.message });
-            resetWheel(); // إعادة تصفير في حالة الفشل
+            resetWheel();
         }
     }
-    // *** نهاية التعديل ***
 
-    // *** بداية التعديل: تعديل دالة انتهاء الدوران ***
     async function handleSpinFinished(indicatedSegment) {
-        const prizeWon = indicatedSegment.text; // القيمة موجودة كنص في الشريحة
+        const prizeWon = indicatedSegment.text;
 
-        // الخطوة 2: المطالبة بالجائزة من الخادم
         try {
             const response = await fetch('/api/spin_wheel/claim_prize', { method: 'POST' });
             const data = await response.json();
@@ -234,7 +241,6 @@ document.addEventListener('firebase-ready', () => {
             resetWheel();
         }
     }
-    // *** نهاية التعديل ***
 
 
     ui.spinBtn?.addEventListener('click', () => performSpin('free', ui.spinBtn));

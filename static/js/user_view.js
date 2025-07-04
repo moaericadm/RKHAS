@@ -1,4 +1,6 @@
 ﻿// --- START OF FILE static/js/user_view.js ---
+
+// --- START OF FILE static/js/user_view.js ---
 let isDomReady = false;
 let isFirebaseReady = false;
 
@@ -42,9 +44,7 @@ function initializeUserView() {
         userAvatarPreview: document.getElementById('user-avatar-preview'),
         avatarChooserModal: document.getElementById('avatarChooserModal'),
         ownedAvatarsContainer: document.getElementById('owned-avatars-container'),
-        // *** بداية التعديل: تحديث معرّف رأس الجدول ***
         investmentReturnHeader: document.getElementById('investment-return-header'),
-        // *** نهاية التعديل ***
         contestCard: document.getElementById('popularity-contest-card'),
         contestContainer: document.getElementById('contest-container'),
         contestTimer: document.getElementById('contest-timer'),
@@ -386,11 +386,9 @@ function initializeUserView() {
     function renderUserTable() {
         if (!ui.tableBody) return;
         const userHasAnyInvestment = Object.keys(userInvestments).length > 0;
-        // *** بداية التعديل: تحديث معرّف رأس الجدول ***
         if (ui.investmentReturnHeader) {
             ui.investmentReturnHeader.style.display = userHasAnyInvestment ? '' : 'none';
         }
-        // *** نهاية التعديل ***
 
         const term = ui.searchInput.value.toLowerCase();
         const usersToRender = allUsersCache.filter(u => u?.name?.toLowerCase().includes(term));
@@ -414,40 +412,38 @@ function initializeUserView() {
 
             const nudgeButtonHtml = `<button class="btn btn-sm btn-link text-secondary nudge-btn nudge-btn-table" data-username="${user.name}" title="نكز الزاحف"><i class="bi bi-hand-index-thumb-fill"></i></button>`;
 
-            let returnPercentageHtml = '<td></td>';
-            let totalInvestedSP = 0;
-            let currentValue = 0;
-
-            if (hasInvestment) {
-                totalInvestedSP = Object.values(lots).reduce((sum, lot) => sum + (lot.sp || 0), 0);
-
-                // *** بداية التعديل: تطبيق المضاعف الشخصي هنا ***
-                const personalMultiplier = parseFloat(investment.personal_multiplier || 1.0);
-                currentValue = Object.values(lots).reduce((sum, lot) => {
-                    const pointsThen = Math.max(1, lot.p || 1);
-                    return sum + ((lot.sp || 0) * (Math.max(1, pointsNow) / pointsThen) * stockMultiplier * personalMultiplier);
-                }, 0);
-                // *** نهاية التعديل ***
-
-                const returnPercentage = totalInvestedSP > 0 ? ((currentValue / totalInvestedSP) - 1) * 100 : 0;
-                const percentageColor = returnPercentage > 0.01 ? 'text-success' : returnPercentage < -0.01 ? 'text-danger' : 'text-muted';
-
-                returnPercentageHtml = `<td class="text-center align-middle">
-                                          <div class="fw-bold ${percentageColor}">${returnPercentage.toFixed(1)}%</div>
-                                        </td>`;
-            } else if (userHasAnyInvestment) {
-                returnPercentageHtml = '<td></td>';
-            }
-
+            let returnHtml = '<td></td>';
             let actionHtml;
+
+            // *** بداية التعديل الكامل لمنطق حساب الربح والعرض ***
             if (hasInvestment) {
-                const profit = currentValue - totalInvestedSP;
-                const profitColor = profit > 0.005 ? 'text-success' : profit < -0.005 ? 'text-danger' : 'text-muted';
+                let totalOriginalInvestedSP = 0;
+                let currentValue = 0;
+                const personalMultiplier = parseFloat(investment.personal_multiplier || 1.0);
+
+                Object.values(lots).forEach(lot => {
+                    // استخدام `original_sp` كأساس للحساب
+                    const originalSp = lot.original_sp !== undefined ? parseFloat(lot.original_sp) : parseFloat(lot.sp || 0);
+                    totalOriginalInvestedSP += originalSp;
+
+                    const pointsThen = Math.max(1, lot.p || 1);
+                    // المعادلة الكاملة لحساب القيمة الحالية للدُفعة
+                    currentValue += (parseFloat(lot.sp || 0) * (pointsNow / pointsThen) * stockMultiplier * personalMultiplier);
+                });
+
+                // الربح هو الفرق بين القيمة الحالية والمبلغ الأصلي المستثمر
+                const profit = currentValue - totalOriginalInvestedSP;
+                const profitColor = profit > 0.01 ? 'text-success' : profit < -0.01 ? 'text-danger' : 'text-muted';
+                const profitSign = profit >= 0 ? '+' : '';
+
+                returnHtml = `<td class="text-center align-middle">
+                                <div class="fw-bold ${profitColor}">${profitSign}${profit.toFixed(2)} SP</div>
+                              </td>`;
 
                 actionHtml = `<div class="d-flex align-items-center justify-content-center">
                                 <div class="text-center flex-grow-1">
                                     <div class="fw-bold">${currentValue.toFixed(2)} SP</div>
-                                    <div class="small ${profitColor}">${profit >= 0 ? '+' : ''}${profit.toFixed(2)} SP</div>
+                                    <div class="small text-muted">أصلي: ${totalOriginalInvestedSP.toFixed(2)}</div>
                                 </div>
                                 <div class="btn-group-vertical ms-2 btn-group-sm" role="group">
                                     <button class="btn btn-outline-success invest-btn" data-username="${user.name}" title="استثمار إضافي"><i class="bi bi-plus-lg"></i></button>
@@ -455,6 +451,10 @@ function initializeUserView() {
                                 </div>
                               </div>`;
             } else {
+                // *** نهاية التعديل ***
+                if (userHasAnyInvestment) {
+                    returnHtml = '<td></td>';
+                }
                 actionHtml = `<button class="btn btn-success invest-btn w-100 d-flex flex-column justify-content-center" style="min-height:58px" data-username="${user.name}"><span><i class="bi bi-graph-up me-1"></i> استثمار</span></button>`;
             }
 
@@ -472,7 +472,7 @@ function initializeUserView() {
                             </div>
                         </td>
                         <td class="text-center align-middle">${nudgeButtonHtml}</td>
-                        ${userHasAnyInvestment ? returnPercentageHtml : ''}
+                        ${userHasAnyInvestment ? returnHtml : ''}
                         <td class="text-center align-middle investment-actions-col">${actionHtml}</td>
                     </tr>`;
         }).join('') || `<tr><td colspan="${userHasAnyInvestment ? 7 : 6}" class="text-center py-4">${term ? 'لا يوجد زاحف يطابق البحث' : 'لا يوجد بيانات حالياً'}</td></tr>`;
@@ -536,7 +536,46 @@ function initializeUserView() {
 
     function showInvestmentModal(crawlerName) { if (!ui.investmentModal) return; const crawler = allUsersCache.find(u => u.name === crawlerName); if (!crawler) return; ui.investCrawlerName.textContent = crawlerName; ui.investCrawlerNameHidden.value = crawlerName; ui.spAmountInput.value = ''; ui.investModalTitle.textContent = `الاستثمار في `; const points = crawler.points || 0; const multiplier = crawler.stock_multiplier || 1.0; const subtitleHtml = `<div class="mb-2">النقاط الحالية: <strong>${formatNumber(points, false)}</strong></div><div>مضاعف السهم الحالي: <strong class="text-info">x${multiplier.toFixed(2)}</strong></div>`; ui.investModalSubtitle.innerHTML = subtitleHtml; bootstrap.Modal.getOrCreateInstance(ui.investmentModal).show(); ui.investmentModal.addEventListener('shown.bs.modal', () => ui.spAmountInput.focus(), { once: true }); }
 
-    async function handleInvestment(e) { e.preventDefault(); const form = e.target, btn = form.querySelector('button[type="submit"]'), originalHTML = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { const data = await apiCall('/api/invest', { method: 'POST', body: new FormData(form) }); Swal.fire('تم الاستثمار!', data.message, 'success'); bootstrap.Modal.getInstance(ui.investmentModal)?.hide(); form.reset(); } catch (err) { Swal.fire('فشل!', err.message, 'error'); } finally { btn.disabled = false; btn.innerHTML = originalHTML; } }
+    // <<< بداية التعديل: تحديث منطق ما بعد الاستثمار >>>
+    async function handleInvestment(e) {
+        e.preventDefault();
+        const form = e.target, btn = form.querySelector('button[type="submit"]'), originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+
+        try {
+            const data = await apiCall('/api/invest', { method: 'POST', body: new FormData(form) });
+
+            // تحديث الكاش المحلي فوراً
+            const crawlerName = form.crawler_name.value;
+            if (!userInvestments[crawlerName]) {
+                userInvestments[crawlerName] = { lots: {} };
+            }
+            if (!userInvestments[crawlerName].lots) {
+                userInvestments[crawlerName].lots = {};
+            }
+            userInvestments[crawlerName].lots[data.new_lot.id] = data.new_lot.data;
+
+            // إعادة رسم الجدول بالبيانات المحدثة فوراً
+            renderUserTable();
+
+            // عرض رسالة التأكيد
+            Swal.fire({
+                title: 'تم الاستثمار!',
+                html: data.message, // الرسالة المفصلة من الخادم
+                icon: 'success'
+            });
+
+            bootstrap.Modal.getInstance(ui.investmentModal)?.hide();
+            form.reset();
+        } catch (err) {
+            Swal.fire('فشل!', err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    }
+    // <<< نهاية التعديل >>>
 
     async function showSellLotsModal(crawlerName) {
         if (!ui.sellLotsModal) return;
@@ -557,25 +596,20 @@ function initializeUserView() {
         const now = Math.floor(Date.now() / 1000);
         const pointsNow = Math.max(1, parseFloat(crawler.points) || 1);
         const stockMultiplier = parseFloat(crawler.stock_multiplier) || 1.0;
-        // *** بداية التعديل: جلب المضاعف الشخصي للاستخدام في النافذة ***
         const personalMultiplier = parseFloat(investment.personal_multiplier || 1.0);
-        // *** نهاية التعديل ***
 
         const lotsArray = Object.entries(lots).map(([lotKey, lotData]) => ({ lotKey, ...lotData }));
         lotsArray.sort((a, b) => (a.t || 0) - (b.t || 0));
 
         let tableHtml = `<div class="table-responsive"> <table class="table table-sm table-hover align-middle"> <thead><tr><th>المبلغ المستثمر</th><th>تاريخ الشراء</th><th>القيمة الحالية</th><th>الحالة</th><th></th></tr></thead> <tbody>`;
-        lotsArray.forEach(({ lotKey, sp, p, t }) => {
+        lotsArray.forEach(({ lotKey, sp, p, t, original_sp }) => {
             const investedSP = sp || 0;
             const pointsThen = Math.max(1, p || 1);
             const lotTimestamp = t || 0;
             const isLocked = (now - lotTimestamp) < lockSeconds;
 
-            // *** بداية التعديل: تطبيق المضاعف الشخصي هنا أيضاً ***
             const currentValue = investedSP * (pointsNow / pointsThen) * stockMultiplier * personalMultiplier;
-            // *** نهاية التعديل ***
-
-            const profit = currentValue - investedSP;
+            const profit = currentValue - (original_sp !== undefined ? original_sp : investedSP);
             const profitColor = profit > 0.01 ? 'text-success' : profit < -0.01 ? 'text-danger' : 'text-muted';
             let statusHtml, actionHtml;
             if (isLocked) {

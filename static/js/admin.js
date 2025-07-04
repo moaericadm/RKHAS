@@ -1,5 +1,28 @@
 // --- START OF FILE static/js/admin.js ---
 
+function enforceEnglishNumbers() {
+    const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    const englishNumerals = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+    document.querySelectorAll('input[type="number"]').forEach(input => {
+        input.addEventListener('input', (event) => {
+            let value = event.target.value;
+            let originalValue = value;
+
+            for (let i = 0; i < arabicNumerals.length; i++) {
+                const regex = new RegExp(arabicNumerals[i], 'g');
+                value = value.replace(regex, englishNumerals[i]);
+            }
+
+            if (value !== originalValue) {
+                event.target.value = value;
+            }
+        });
+    });
+    console.log("English number enforcement has been applied to all number inputs.");
+}
+
+
 let isDomReady = false, isFirebaseReady = false;
 function tryToStartApp() { if (isDomReady && isFirebaseReady) initializeAdminPanel(); }
 document.addEventListener('DOMContentLoaded', () => { isDomReady = true; tryToStartApp(); });
@@ -57,34 +80,46 @@ function renderUserTable() {
 
     const usersArray = Object.entries(usersCache)
         .map(([key, value]) => ({ ...value, name: key }))
-        .filter(user => user.name.toLowerCase().includes(searchTerm)) // فلترة النتائج
+        .filter(user => user.name.toLowerCase().includes(searchTerm))
         .sort((a, b) => (b.points || 0) - (a.points || 0));
 
-    ui.tableBody.innerHTML = usersArray.map((user, index) => {
+    if (!Array.isArray(usersArray)) {
+        ui.tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">خطأ في تحميل بيانات المستخدمين.</td></tr>';
+        return;
+    }
+
+    const tableRowsHtml = usersArray.map((user, index) => {
         const investorCount = countInvestorsForCrawler(user.name);
         const multiplier = parseFloat(user.stock_multiplier || 1.0);
         const mClass = multiplier > 1.0 ? 'trend-up' : multiplier < 1.0 ? 'trend-down' : 'trend-neutral';
         const mText = `x${multiplier.toFixed(2)}`;
         const avatarImg = user.avatar_url ? `<img src="${user.avatar_url}" class="avatar-preview me-2">` : `<span class="avatar-preview d-inline-block me-2" style="background-color: var(--card-border);"></span>`;
 
-        return `<tr>
-                    <th class="align-middle rank">#${index + 1}</th>
-                    <td class="align-middle fw-bold">${avatarImg}${user.name}</td>
-                    <td class="text-center align-middle">${formatNumber(user.points)}</td>
-                    <td class="text-center align-middle ${mClass}">${mText}</td>
-                    <td class="text-center align-middle"><i class="bi bi-heart-fill text-danger"></i> ${formatNumber(user.likes || 0)}</td>
-                    <td class="text-center align-middle"><i class="bi bi-people-fill text-primary"></i> ${investorCount}</td>
-                    <td class="text-center align-middle">
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-primary" data-action="show-investors" data-username="${user.name}" title="عرض المستثمرين"><i class="bi bi-people-fill"></i></button>
-                            <button class="btn btn-warning" data-action="show-profit-editor" data-username="${user.name}" title="تعديل أرباح المستثمرين"><i class="bi bi-sliders"></i></button>
-                            <button class="btn btn-info" data-action="edit-user" data-username="${user.name}"><i class="bi bi-pencil-fill"></i></button>
-                            <button class="btn btn-danger" data-action="delete-user" data-username="${user.name}"><i class="bi bi-trash-fill"></i></button>
-                        </div>
-                    </td>
-                </tr>`;
+        const actionButtons = `
+            <div class="btn-group btn-group-sm" role="group">
+                <button class="btn btn-primary" data-action="show-investors" data-username="${user.name}" title="عرض المستثمرين"><i class="bi bi-people-fill"></i></button>
+                <button class="btn btn-warning" data-action="show-profit-editor" data-username="${user.name}" title="تعديل أرباح المستثمرين"><i class="bi bi-sliders"></i></button>
+                <button class="btn btn-success" data-action="adjust-points-percent" data-direction="increase" data-username="${user.name}" title="رفع النقاط بنسبة"><i class="bi bi-graph-up-arrow"></i></button>
+                <button class="btn btn-danger" data-action="adjust-points-percent" data-direction="decrease" data-username="${user.name}" title="خفض النقاط بنسبة"><i class="bi bi-graph-down-arrow"></i></button>
+                <button class="btn btn-info" data-action="edit-user" data-username="${user.name}" title="تعديل بيانات الزاحف"><i class="bi bi-pencil-fill"></i></button>
+                <button class="btn btn-outline-danger" data-action="delete-user" data-username="${user.name}" title="حذف الزاحف"><i class="bi bi-trash-fill"></i></button>
+            </div>
+        `;
 
-    }).join('') || `<tr><td colspan="7" class="text-center py-4">${searchTerm ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد زواحف.'}</td></tr>`;
+        return `
+            <tr>
+                <th class="align-middle rank">#${index + 1}</th>
+                <td class="align-middle fw-bold">${avatarImg}${user.name}</td>
+                <td class="text-center align-middle">${formatNumber(user.points)}</td>
+                <td class="text-center align-middle ${mClass}">${mText}</td>
+                <td class="text-center align-middle"><i class="bi bi-heart-fill text-danger"></i> ${formatNumber(user.likes || 0)}</td>
+                <td class="text-center align-middle"><i class="bi bi-people-fill text-primary"></i> ${investorCount}</td>
+                <td class="text-center align-middle">${actionButtons}</td>
+            </tr>
+        `;
+    }).join('');
+
+    ui.tableBody.innerHTML = tableRowsHtml || `<tr><td colspan="7" class="text-center py-4">${searchTerm ? 'لا يوجد زاحف يطابق البحث.' : 'لا يوجد زواحف.'}</td></tr>`;
 }
 
 function initializeApprovalPanel(allUsers) {
@@ -188,9 +223,25 @@ function loadSpinWheelSettings(data) {
     (data.prizes && data.prizes.length ? data.prizes : [{ value: 100, weight: 1 }]).forEach(p => addPrizeRow(p.value, p.weight))
 }
 
+// <<< بداية التعديل: تحميل القيمة الجديدة >>>
+function loadContestSettings(data) {
+    if (!ui.contestSettingsForm) return;
+    ui.contestEnabledToggle.checked = data.is_enabled || false;
+    ui.winnerPointsRewardInput.value = data.winner_points_reward || 0;
+    ui.voterSpRewardInput.value = data.voter_sp_reward || 0;
+    ui.contestMultiplierBoostInput.value = data.multiplier_boost || 0.2;
+}
+// <<< نهاية التعديل >>>
+
 function loadGamblingSettings(data) { if (ui.gamblingEnabledToggle) ui.gamblingEnabledToggle.checked = data.is_enabled || false; if (ui.gamblingMaxBetInput) ui.gamblingMaxBetInput.value = data.max_bet || 1000; if (ui.gamblingWinChanceInput) ui.gamblingWinChanceInput.value = data.win_chance_percent || 49.5; }
-function loadContestSettings(data) { if (ui.contestEnabledToggle) ui.contestEnabledToggle.checked = data.is_enabled || false; if (ui.winnerPointsRewardInput) ui.winnerPointsRewardInput.value = data.winner_points_reward || 0; if (ui.voterSpRewardInput) ui.voterSpRewardInput.value = data.voter_sp_reward || 0; }
-function loadInvestmentSettings(data) { if (ui.maxInvestmentsInput) ui.maxInvestmentsInput.value = data.max_investments || '0'; if (ui.investmentLockHoursInput) ui.investmentLockHoursInput.value = data.investment_lock_hours || '0'; if (ui.sellTaxPercentInput) ui.sellTaxPercentInput.value = data.sell_tax_percent || '0'; if (ui.sellFeeSpInput) ui.sellFeeSpInput.value = data.sell_fee_sp || '0'; }
+
+function loadInvestmentSettings(data) {
+    if (ui.maxInvestmentsInput) ui.maxInvestmentsInput.value = data.max_investments || '0';
+    if (ui.investmentLockHoursInput) ui.investmentLockHoursInput.value = data.investment_lock_hours || '0';
+    if (ui.sellTaxPercentInput) ui.sellTaxPercentInput.value = data.sell_tax_percent || '0';
+    if (ui.sellFeeSpInput) ui.sellFeeSpInput.value = data.sell_fee_sp || '0';
+    if (ui.withdrawalApprovalLimitInput) ui.withdrawalApprovalLimitInput.value = data.withdrawal_approval_limit || '500000';
+}
 function renderShopAvatars(data) { if (!ui.shopAvatarsList) return; ui.shopAvatarsList.innerHTML = Object.entries(data).map(([id, avatar]) => ` <tr> <td><img src="${avatar.image_url}" alt="${avatar.name}" class="avatar-preview"></td> <td>${avatar.name}</td> <td>${formatNumber(avatar.price_sp_personal || 0)} / ${formatNumber(avatar.price_sp_gift || 0)} SP</td> <td><button class="btn btn-sm btn-outline-info" data-action="edit-avatar" data-avatar-id="${id}" data-avatar-name="${avatar.name}" data-price-personal="${avatar.price_sp_personal || 0}" data-price-gift="${avatar.price_sp_gift || 0}"><i class="bi bi-pencil"></i></button> <button class="btn btn-sm btn-outline-danger ms-1" data-action="delete-avatar" data-avatar-id="${id}"><i class="bi bi-trash"></i></button> </td> </tr> `).join('') || '<tr><td colspan="4" class="text-center text-muted p-3">لا توجد أفاتارات.</td></tr>'; }
 const renderListItemWithEdit = (id, text, deleteAction, editAction, editArgs) => { const editButton = editAction ? `<button class="btn btn-sm btn-outline-info me-1" data-action="${editAction}" data-id="${id}" ${editArgs}><i class="bi bi-pencil"></i></button>` : ''; return `<li class="list-group-item d-flex justify-content-between align-items-center"> ${text} <div> ${editButton} <button class="btn btn-sm btn-outline-danger" data-action="${deleteAction}" data-id="${id}"><i class="bi bi-trash"></i></button> </div> </li>`; };
 const renderShopProducts = data => ui.shopProductsList.innerHTML = Object.entries(data).map(([id, p]) => renderListItemWithEdit(id, `حزمة ${formatNumber(p.sp_amount)} SP مقابل ${formatNumber(p.cc_price)} CC`, 'delete-product', 'edit-product', `data-sp-amount="${p.sp_amount}" data-cc-price="${p.cc_price}"`)).join('') || '<li class="list-group-item text-muted">لا توجد منتجات.</li>';
@@ -201,6 +252,36 @@ const renderAnnouncements = data => ui.announcementsList.innerHTML = Object.entr
 const renderHonorRoll = data => ui.honorRollList.innerHTML = Object.entries(data).map(([id, item]) => renderListItemWithEdit(id, item.name, 'delete-honor-roll')).join('') || '<li class="list-group-item text-muted">القائمة فارغة.</li>';
 function renderGiftRequestsTable(requests) { if (!ui.giftRequestsTable) return; const requestsArray = Object.entries(requests).filter(([id, req]) => req.status === 'pending'); if (requestsArray.length === 0) { ui.giftRequestsTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">لا توجد طلبات إهداء حالياً.</td></tr>'; return; } ui.giftRequestsTable.innerHTML = requestsArray.map(([id, req]) => ` <tr> <td>${req.gifter_name}</td> <td>${req.target_user_name}</td> <td> <img src="${req.avatar_image_url}" class="avatar-preview me-2" alt="${req.avatar_name}"> ${req.avatar_name} </td> <td class="text-center">${formatNumber(req.price_sp)} SP</td> <td class="text-center"> <button class="btn btn-sm btn-success" data-action="handle-gift" data-request-id="${id}" data-gift-action="approve">قبول</button> <button class="btn btn-sm btn-danger ms-2" data-action="handle-gift" data-request-id="${id}" data-gift-action="reject">رفض</button> </td> </tr> `).join(''); }
 function populateCrawlerAvatarDropdown(avatars) { if (!ui.avatarUrlInput) return; const currentSelection = ui.avatarUrlInput.value; ui.avatarUrlInput.innerHTML = '<option value="">-- بلا أفاتار --</option>'; Object.values(avatars).forEach(avatar => { const option = new Option(`${avatar.name}`, avatar.image_url); ui.avatarUrlInput.add(option); }); ui.avatarUrlInput.value = currentSelection; }
+
+function renderMarketWatchlist(data) {
+    if (!ui.marketWatchlistBody) return;
+    const watchlist = Object.entries(data || {});
+
+    ui.watchlistCount.textContent = watchlist.length;
+    ui.watchlistCount.style.display = watchlist.length > 0 ? 'inline' : 'none';
+
+    if (watchlist.length === 0) {
+        ui.marketWatchlistBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">قائمة المراقبة فارغة حالياً. كل شيء مستقر.</td></tr>';
+        return;
+    }
+
+    ui.marketWatchlistBody.innerHTML = watchlist.map(([userId, item]) => {
+        let reasonClass = '';
+        if (item.reason.includes('ربح مفرط')) reasonClass = 'text-danger';
+        if (item.reason.includes('خسارة قاسية')) reasonClass = 'text-success';
+
+        const displayName = item.name || (registeredUsersCache[userId] ? registeredUsersCache[userId].name : userId);
+
+        return `<tr>
+                    <td>${displayName}</td>
+                    <td><strong class="${reasonClass}">${item.reason}</strong><br><small class="text-muted">${item.details || ''}</small></td>
+                    <td class="text-center fw-bold">${item.value || 'N/A'}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-info" data-action="manage-investments" data-user-id="${userId}" data-user-name="${displayName}" title="إدارة استثمارات المستخدم"><i class="bi bi-briefcase-fill"></i></button>
+                    </td>
+                </tr>`;
+    }).join('');
+}
 
 function initializeAdminPanel() {
     Object.assign(ui, {
@@ -243,6 +324,7 @@ function initializeAdminPanel() {
         investmentLockHoursInput: document.getElementById('investment-lock-hours-input'),
         sellTaxPercentInput: document.getElementById('sell-tax-percent-input'),
         sellFeeSpInput: document.getElementById('sell-fee-sp-input'),
+        withdrawalApprovalLimitInput: document.getElementById('withdrawal-approval-limit-input'),
         addProductForm: document.getElementById('add-product-form'),
         shopProductsList: document.getElementById('shop-products-list'),
         addSpinProductForm: document.getElementById('add-spin-product-form'),
@@ -255,6 +337,9 @@ function initializeAdminPanel() {
         contestEnabledToggle: document.getElementById('contest-enabled-toggle'),
         winnerPointsRewardInput: document.getElementById('winner-points-reward-input'),
         voterSpRewardInput: document.getElementById('voter-sp-reward-input'),
+        // <<< بداية التعديل: إضافة الحقل الجديد >>>
+        contestMultiplierBoostInput: document.getElementById('contest-multiplier-boost-input'),
+        // <<< نهاية التعديل >>>
         gamblingSettingsForm: document.getElementById('gambling-settings-form'),
         gamblingEnabledToggle: document.getElementById('gambling-enabled-toggle'),
         gamblingMaxBetInput: document.getElementById('gambling-max-bet-input'),
@@ -274,11 +359,51 @@ function initializeAdminPanel() {
         crawlerSearchInput: document.getElementById('crawlerSearchInput'),
         approvedUsersSearchInput: document.getElementById('approvedUsersSearchInput'),
         manageInvestmentsModalBody: document.getElementById('manageInvestmentsModalBody'),
-
+        investorsModal: bootstrap.Modal.getOrCreateInstance(document.getElementById('investorsModal')),
+        profitEditorModal: bootstrap.Modal.getOrCreateInstance(document.getElementById('profitEditorModal')),
+        governorSettingsForm: document.getElementById('governor-settings-form'),
+        governorEnabledToggle: document.getElementById('governor-enabled-toggle'),
+        governorIntervalHours: document.getElementById('governor-interval-hours'),
+        governorIntervalMinutes: document.getElementById('governor-interval-minutes'),
+        governorIntervalSeconds: document.getElementById('governor-interval-seconds'),
+        balanceProfitThreshold: document.getElementById('balance-profit-threshold'),
+        balanceValueThreshold: document.getElementById('balance-value-threshold'),
+        rescueWalletThreshold: document.getElementById('rescue-wallet-threshold'),
+        rescueLossThreshold: document.getElementById('rescue-loss-threshold'),
+        jackpotChancePercent: document.getElementById('jackpot-chance-percent'),
+        jackpotMultiplier: document.getElementById('jackpot-multiplier'),
+        dealBonusEnabledToggle: document.getElementById('deal-bonus-enabled-toggle'),
+        underdogRankThreshold: document.getElementById('underdog-rank-threshold'),
+        underdogBonusPercent: document.getElementById('underdog-bonus-percent'),
+        diversifyMilestones: document.getElementById('diversify-milestones'),
+        diversifyBonusPercent: document.getElementById('diversify-bonus-percent'),
+        marketWatchlistBody: document.getElementById('market-watchlist-body'),
+        watchlistCount: document.getElementById('watchlist-count'),
+        instantBonusEnabledToggle: document.getElementById('instant-bonus-enabled-toggle'),
+        instantWinChance: document.getElementById('instant-win-chance'),
+        instantLossChance: document.getElementById('instant-loss-chance'),
+        instantNeutralChance: document.getElementById('instant-neutral-chance'),
+        instantWinMaxPercent: document.getElementById('instant-win-max-percent'),
+        instantLossMaxPercent: document.getElementById('instant-loss-max-percent'),
+        volatilityEnabledToggle: document.getElementById('volatility-enabled-toggle'),
+        volatilityChancePercent: document.getElementById('volatility-chance-percent'),
+        volatilityUpChance: document.getElementById('volatility-up-chance'),
+        volatilityUpMinPercent: document.getElementById('volatility-up-min-percent'),
+        volatilityUpMaxPercent: document.getElementById('volatility-up-max-percent'),
+        volatilityDownChance: document.getElementById('volatility-down-chance'),
+        volatilityDownMinPercent: document.getElementById('volatility-down-min-percent'),
+        volatilityDownMaxPercent: document.getElementById('volatility-down-max-percent'),
+        volatilityStrongUpChance: document.getElementById('volatility-strong-up-chance'),
+        volatilityStrongUpMinPercent: document.getElementById('volatility-strong-up-min-percent'),
+        volatilityStrongUpMaxPercent: document.getElementById('volatility-strong-up-max-percent'),
+        volatilityCrashChance: document.getElementById('volatility-crash-chance'),
+        volatilityCrashMinPercent: document.getElementById('volatility-crash-min-percent'),
+        volatilityCrashMaxPercent: document.getElementById('volatility-crash-max-percent'),
     });
     db = firebase.database();
     firebase.auth().signInWithCustomToken(sessionStorage.getItem('firebaseToken')).then(initializeDataListeners).catch(e => console.error("Admin Auth Error:", e));
     setupEventListeners();
+    enforceEnglishNumbers();
 }
 
 function initializeDataListeners() {
@@ -298,13 +423,7 @@ function initializeDataListeners() {
     onValue('site_settings/shop_products_nudges', renderShopNudges);
     onValue('site_settings/stock_prediction_game', loadStockPredictionSettings);
     onValue('site_settings/rps_game', loadRpsGameSettings);
-
-    onValue('registered_users', data => {
-        registeredUsersCache = data;
-        initializeApprovalPanel(data);
-        initializeApprovedUsersPanel(data);
-    });
-
+    onValue('registered_users', data => { registeredUsersCache = data; initializeApprovalPanel(data); initializeApprovedUsersPanel(data); });
     onValue('gift_requests', renderGiftRequestsTable);
     onValue('withdrawal_requests', renderWithdrawalRequestsTable);
     onValue('site_settings/contest_settings', loadContestSettings);
@@ -312,12 +431,12 @@ function initializeDataListeners() {
     db.ref('activity_log').orderByChild('timestamp').limitToLast(50).on('value', s => renderGeneralActivityLog(Object.values(s.val() || {}).reverse()));
     db.ref('investment_log').orderByChild('timestamp').limitToLast(100).on('value', s => renderInvestmentLog(Object.values(s.val() || {}).reverse()));
     onValue('online_visitors', renderActiveUsers);
+    onValue('site_settings/market_governor', loadGovernorSettings);
+    onValue('market_watchlist', renderMarketWatchlist);
 }
 
 function setupEventListeners() {
     const listen = (el, event, handler) => el?.addEventListener(event, handler);
-
-    // Forms
     listen(ui.userForm, "submit", handleUserFormSubmit);
     listen(ui.addCandidateForm, 'submit', handleAddCandidate);
     listen(ui.announcementForm, 'submit', e => { e.preventDefault(); apiCall('/api/admin/announcements/add', { method: 'POST', body: new FormData(e.target) }, 'تم إضافة الإعلان.').then(() => e.target.reset()); });
@@ -337,8 +456,10 @@ function setupEventListeners() {
     listen(ui.rpsGameSettingsForm, 'submit', handleRpsGameSettingsSubmit);
     listen(ui.crawlerSearchInput, 'input', renderUserTable);
     listen(ui.approvedUsersSearchInput, 'input', () => initializeApprovedUsersPanel(registeredUsersCache));
-    // Buttons and dynamic content
     listen(ui.clearFormBtn, "click", resetUserForm);
+    listen(ui.governorSettingsForm, 'submit', handleGovernorSettingsSubmit);
+    listen(ui.instantWinChance, 'input', updateNeutralChance);
+    listen(ui.instantLossChance, 'input', updateNeutralChance);
 
     const handleActionClick = (e) => {
         const button = e.target.closest('button[data-action]');
@@ -351,13 +472,10 @@ function setupEventListeners() {
         const userName = button.dataset.userName;
 
         switch (action) {
-            // Crawlers Table Actions
             case 'show-investors': adminActions.showInvestors(username); break;
             case 'show-profit-editor': adminActions.showProfitEditor(username); break;
             case 'edit-user': adminActions.editUser(username); break;
             case 'delete-user': adminActions.confirmDelete(username); break;
-
-            // Registered Users Table Actions
             case 'manage-user': adminActions.manageUser(userId, button.dataset.userAction, button); break;
             case 'edit-wallet': adminActions.editUserWallet(userId, userName); break;
             case 'manage-avatars': adminActions.manageUserAvatars(userId, userName); break;
@@ -365,17 +483,13 @@ function setupEventListeners() {
             case 'manage-investments': adminActions.manageUserInvestments(userId, userName); break;
             case 'edit-attempts': adminActions.editPurchasedAttempts(userId, userName); break;
             case 'ban-user': adminActions.confirmBanUser(userId, userName); break;
-
-            // Other Tables
             case 'unban-user': adminActions.unbanUser(userId); break;
             case 'approve-candidate': adminActions.approveCandidate(username); break;
             case 'reject-candidate': adminActions.rejectCandidate(username); break;
             case 'handle-gift': adminActions.handleGiftRequest(button.dataset.requestId, button.dataset.giftAction, button); break;
             case 'send-message': adminActions.sendUserMessage(userId, userName); break;
-
             case 'handle-withdrawal': adminActions.handleWithdrawalRequest(button.dataset.requestId, button.dataset.withdrawalAction, button); break;
-
-            // Shop Settings
+            case 'adjust-points-percent': adminActions.adjustPointsByPercent(username, button.dataset.direction); break;
             case 'delete-product': apiCall(`/api/admin/shop/delete_product/${button.dataset.id}`, { method: 'POST' }); break;
             case 'edit-product': adminActions.editProduct(button.dataset.id, button.dataset.spAmount, button.dataset.ccPrice); break;
             case 'delete-spin-product': apiCall(`/api/admin/shop/delete_spin_product/${button.dataset.id}`, { method: 'POST' }); break;
@@ -386,8 +500,6 @@ function setupEventListeners() {
             case 'edit-avatar': adminActions.editAvatar(button.dataset.avatarId, button.dataset.avatarName, button.dataset.pricePersonal, button.dataset.priceGift); break;
             case 'delete-nudge': apiCall(`/api/admin/shop/delete_nudge/${button.dataset.id}`, { method: 'POST' }); break;
             case 'edit-nudge': adminActions.editNudge(button.dataset.id, button.dataset.text, button.dataset.price); break;
-
-            // Site Management
             case 'delete-announcement': apiCall(`/api/admin/announcements/delete/${button.dataset.id}`, { method: 'POST' }); break;
             case 'delete-honor-roll': apiCall(`/api/admin/honor_roll/delete/${button.dataset.id}`, { method: 'POST' }); break;
         }
@@ -400,8 +512,33 @@ function setupEventListeners() {
 }
 
 async function handleGamblingSettingsSubmit(e) { e.preventDefault(); const settings = { is_enabled: ui.gamblingEnabledToggle.checked, max_bet: parseInt(ui.gamblingMaxBetInput.value) || 1000, win_chance_percent: parseFloat(ui.gamblingWinChanceInput.value) || 49.5 }; await apiCall('/api/admin/settings/gambling', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }, 'تم حفظ إعدادات الرهان!'); }
-async function handleContestSettingsSubmit(e) { e.preventDefault(); const settings = { is_enabled: ui.contestEnabledToggle.checked, winner_points_reward: parseInt(ui.winnerPointsRewardInput.value) || 0, voter_sp_reward: parseInt(ui.voterSpRewardInput.value) || 0 }; await apiCall('/api/admin/settings/contest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }, 'تم حفظ إعدادات المنافسة!'); }
-async function handleInvestmentSettingsSubmit(e) { e.preventDefault(); const settings = { max_investments: ui.maxInvestmentsInput.value, investment_lock_hours: ui.investmentLockHoursInput.value, sell_tax_percent: ui.sellTaxPercentInput.value, sell_fee_sp: ui.sellFeeSpInput.value, }; await apiCall('/api/admin/settings/investment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }, 'تم حفظ إعدادات الاستثمار!'); }
+// <<< بداية التعديل: حفظ القيمة الجديدة >>>
+async function handleContestSettingsSubmit(e) {
+    e.preventDefault();
+    const settings = {
+        is_enabled: ui.contestEnabledToggle.checked,
+        winner_points_reward: parseInt(ui.winnerPointsRewardInput.value) || 0,
+        voter_sp_reward: parseInt(ui.voterSpRewardInput.value) || 0,
+        multiplier_boost: parseFloat(ui.contestMultiplierBoostInput.value) || 0.2
+    };
+    await apiCall('/api/admin/settings/contest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }, 'تم حفظ إعدادات المنافسة!');
+}
+// <<< نهاية التعديل >>>
+async function handleInvestmentSettingsSubmit(e) {
+    e.preventDefault();
+    const settings = {
+        max_investments: ui.maxInvestmentsInput.value,
+        investment_lock_hours: ui.investmentLockHoursInput.value,
+        sell_tax_percent: ui.sellTaxPercentInput.value,
+        sell_fee_sp: ui.sellFeeSpInput.value,
+        withdrawal_approval_limit: ui.withdrawalApprovalLimitInput.value
+    };
+    await apiCall('/api/admin/settings/investment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    }, 'تم حفظ إعدادات الاستثمار!');
+}
 async function handleAddAvatar(e) { e.preventDefault(); const form = e.target; const btn = form.querySelector('button[type="submit"]'); const originalHTML = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> جارِ الرفع...`; try { await apiCall('/api/admin/shop/add_avatar', { method: 'POST', body: new FormData(form) }, 'تمت إضافة الأفاتار بنجاح!'); form.reset(); } catch (err) { } finally { btn.disabled = false; btn.innerHTML = originalHTML; } }
 async function handleAddCandidate(e) { e.preventDefault(); const form = e.target; const btn = form.querySelector('button[type="submit"]'); if (!form.name.value.trim()) return; const originalHTML = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { await apiCall('/api/admin/candidate/add', { method: 'POST', body: new FormData(form) }, 'تمت إضافة المرشح.'); form.reset(); } catch (err) { } finally { btn.disabled = false; btn.innerHTML = originalHTML; } }
 async function handleUserFormSubmit(e) { e.preventDefault(); const btn = ui.saveUserBtn; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; try { await apiCall('/api/admin/add_user', { method: 'POST', body: new FormData(e.target) }, 'تم حفظ البيانات.'); resetUserForm(); } catch (err) { } finally { btn.disabled = false; btn.innerHTML = ui.originalNameInput.value ? 'حفظ التعديل' : 'إضافة'; } }
@@ -471,6 +608,130 @@ function loadRpsGameSettings(data) {
     ui.rpsGameCooldownInput.value = data.cooldown_seconds || 60;
 }
 
+function updateNeutralChance() {
+    if (!ui.instantWinChance || !ui.instantLossChance || !ui.instantNeutralChance) return;
+    const win = parseFloat(ui.instantWinChance.value) || 0;
+    const loss = parseFloat(ui.instantLossChance.value) || 0;
+    const neutral = 100 - win - loss;
+    ui.instantNeutralChance.value = neutral.toFixed(1);
+}
+
+function loadGovernorSettings(data) {
+    if (!ui.governorSettingsForm || !data) return;
+    ui.governorEnabledToggle.checked = data.enabled || false;
+    ui.governorIntervalHours.value = data.interval_hours || 0;
+    ui.governorIntervalMinutes.value = data.interval_minutes || 10;
+    ui.governorIntervalSeconds.value = data.interval_seconds || 0;
+
+    const volatility = data.market_volatility || {};
+    ui.volatilityEnabledToggle.checked = volatility.enabled || false;
+    ui.volatilityChancePercent.value = volatility.chance_percent || 25;
+
+    ui.volatilityUpChance.value = volatility.up_chance || 45;
+    ui.volatilityUpMinPercent.value = volatility.up_min_percent || 1.0;
+    ui.volatilityUpMaxPercent.value = volatility.up_max_percent || 5.0;
+
+    ui.volatilityDownChance.value = volatility.down_chance || 40;
+    ui.volatilityDownMinPercent.value = volatility.down_min_percent || 1.0;
+    ui.volatilityDownMaxPercent.value = volatility.down_max_percent || 3.0;
+
+    ui.volatilityStrongUpChance.value = volatility.strong_up_chance || 7.5;
+    ui.volatilityStrongUpMinPercent.value = volatility.strong_up_min_percent || 10.0;
+    ui.volatilityStrongUpMaxPercent.value = volatility.strong_up_max_percent || 25.0;
+
+    ui.volatilityCrashChance.value = volatility.crash_chance || 7.5;
+    ui.volatilityCrashMinPercent.value = volatility.crash_min_percent || 8.0;
+    ui.volatilityCrashMaxPercent.value = volatility.crash_max_percent || 20.0;
+
+    ui.balanceProfitThreshold.value = data.balance_profit_threshold || 350;
+    ui.balanceValueThreshold.value = data.balance_value_threshold || 75000;
+    ui.rescueWalletThreshold.value = data.rescue_wallet_threshold || 500;
+    ui.rescueLossThreshold.value = data.rescue_loss_threshold || 70;
+    ui.jackpotChancePercent.value = data.jackpot_chance_percent || 0.5;
+    ui.jackpotMultiplier.value = data.jackpot_multiplier || 10;
+    ui.dealBonusEnabledToggle.checked = data.deal_bonus_enabled || false;
+    ui.underdogRankThreshold.value = data.underdog_rank_threshold || 10;
+    ui.underdogBonusPercent.value = data.underdog_bonus_percent || 5;
+    ui.diversifyMilestones.value = (data.diversify_milestones || []).join(', ');
+    ui.diversifyBonusPercent.value = data.diversify_bonus_percent || 3;
+    ui.instantBonusEnabledToggle.checked = data.instant_bonus_enabled || false;
+    ui.instantWinChance.value = data.instant_win_chance || 20;
+    ui.instantLossChance.value = data.instant_loss_chance || 15;
+    ui.instantWinMaxPercent.value = data.instant_win_max_percent || 10;
+    ui.instantLossMaxPercent.value = data.instant_loss_max_percent || 5;
+    ui.instantNeutralChance.value = data.instant_neutral_chance || 65;
+}
+
+async function handleGovernorSettingsSubmit(e) {
+    e.preventDefault();
+    const winChance = parseFloat(ui.instantWinChance.value) || 0;
+    const lossChance = parseFloat(ui.instantLossChance.value) || 0;
+    const neutralChance = parseFloat(ui.instantNeutralChance.value) || 0;
+
+    if (Math.abs(winChance + lossChance + neutralChance - 100) > 0.01) {
+        Swal.fire('خطأ في الإدخال', 'مجموع احتمالات (الربح، الخسارة، لا شيء) يجب أن يساوي 100% بالضبط.', 'error');
+        return;
+    }
+    const h = parseInt(ui.governorIntervalHours.value) || 0;
+    const m = parseInt(ui.governorIntervalMinutes.value) || 0;
+    const s = parseInt(ui.governorIntervalSeconds.value) || 0;
+    if ((h * 3600 + m * 60 + s) < 10) {
+        Swal.fire('خطأ في الإدخال', 'أقل تردد مسموح به هو 10 ثوانٍ.', 'error');
+        return;
+    }
+
+    const settings = {
+        enabled: ui.governorEnabledToggle.checked,
+        interval_hours: h,
+        interval_minutes: m,
+        interval_seconds: s,
+
+        market_volatility: {
+            enabled: ui.volatilityEnabledToggle.checked,
+            chance_percent: parseFloat(ui.volatilityChancePercent.value || 25),
+
+            up_chance: parseFloat(ui.volatilityUpChance.value || 45),
+            up_min_percent: parseFloat(ui.volatilityUpMinPercent.value || 1.0),
+            up_max_percent: parseFloat(ui.volatilityUpMaxPercent.value || 5.0),
+
+            down_chance: parseFloat(ui.volatilityDownChance.value || 40),
+            down_min_percent: parseFloat(ui.volatilityDownMinPercent.value || 1.0),
+            down_max_percent: parseFloat(ui.volatilityDownMaxPercent.value || 3.0),
+
+            strong_up_chance: parseFloat(ui.volatilityStrongUpChance.value || 7.5),
+            strong_up_min_percent: parseFloat(ui.volatilityStrongUpMinPercent.value || 10.0),
+            strong_up_max_percent: parseFloat(ui.volatilityStrongUpMaxPercent.value || 25.0),
+
+            crash_chance: parseFloat(ui.volatilityCrashChance.value || 7.5),
+            crash_min_percent: parseFloat(ui.volatilityCrashMinPercent.value || 8.0),
+            crash_max_percent: parseFloat(ui.volatilityCrashMaxPercent.value || 20.0),
+        },
+
+        balance_profit_threshold: ui.balanceProfitThreshold.value,
+        balance_value_threshold: ui.balanceValueThreshold.value,
+        rescue_wallet_threshold: ui.rescueWalletThreshold.value,
+        rescue_loss_threshold: ui.rescueLossThreshold.value,
+        jackpot_chance_percent: ui.jackpotChancePercent.value,
+        jackpot_multiplier: ui.jackpotMultiplier.value,
+        deal_bonus_enabled: ui.dealBonusEnabledToggle.checked,
+        underdog_rank_threshold: ui.underdogRankThreshold.value,
+        underdog_bonus_percent: ui.underdogBonusPercent.value,
+        diversify_milestones: ui.diversifyMilestones.value,
+        diversify_bonus_percent: ui.diversifyBonusPercent.value,
+        instant_bonus_enabled: ui.instantBonusEnabledToggle.checked,
+        instant_win_chance: ui.instantWinChance.value,
+        instant_loss_chance: ui.instantLossChance.value,
+        instant_neutral_chance: ui.instantNeutralChance.value,
+        instant_win_max_percent: ui.instantWinMaxPercent.value,
+        instant_loss_max_percent: ui.instantLossMaxPercent.value
+    };
+
+    await apiCall('/api/admin/settings/market_governor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    }, 'تم حفظ إعدادات حاكم السوق وإعادة جدولة المهمة!');
+}
 
 window.adminActions = {
     editUser: (name) => { const u = usersCache[name]; if (u) { ui.nameInput.value = name; ui.pointsInput.value = u.points || 0; ui.stockMultiplierInput.value = u.stock_multiplier || 1.0; ui.originalNameInput.value = name; ui.avatarUrlInput.value = u.avatar_url || ""; ui.formTitle.innerText = `تعديل: ${name}`; ui.saveUserBtn.innerText = 'حفظ'; ui.saveUserBtn.classList.replace('btn-primary', 'btn-warning'); ui.clearFormBtn.style.display = 'inline-block'; window.scrollTo({ top: 0, behavior: 'smooth' }); } },
@@ -559,7 +820,7 @@ window.adminActions = {
         }
     },
     manageUserInvestments: async (userId, userName) => {
-        const modal = new bootstrap.Modal(ui.manageInvestmentsModal);
+        const modal = bootstrap.Modal.getOrCreateInstance(ui.manageInvestmentsModal);
         ui.manageInvestmentsModalLabel.textContent = `إدارة استثمارات: ${userName}`;
         ui.manageInvestmentsModalBody.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-info"></div></div>`;
         modal.show();
@@ -641,14 +902,12 @@ window.adminActions = {
         });
     },
     showInvestors: (crawlerName) => {
-        const modalElement = document.getElementById('investorsModal');
+        ui.investorsModal.show();
         const modalTitle = document.getElementById('investorsModalLabel');
         const modalBody = document.getElementById('investorsModalBody');
-        const modal = new bootstrap.Modal(modalElement);
 
         modalTitle.textContent = `المستثمرون في: ${crawlerName}`;
         modalBody.innerHTML = `<div class="text-center py-5"><div class="spinner-border"></div></div>`;
-        modal.show();
 
         const crawlerData = usersCache[crawlerName];
         if (!crawlerData) {
@@ -688,14 +947,12 @@ window.adminActions = {
         modalBody.innerHTML = `<ul class="list-group list-group-flush">${investorsList.map(investor => { const profitClass = investor.profit > 0.01 ? 'text-success' : investor.profit < -0.01 ? 'text-danger' : 'text-muted'; const profitIcon = investor.profit > 0.01 ? 'bi-arrow-up' : investor.profit < -0.01 ? 'bi-arrow-down' : 'bi-dash'; const formattedProfit = `${investor.profit >= 0 ? '+' : ''}${investor.profit.toFixed(2)}%`; return ` <li class="list-group-item d-flex justify-content-between align-items-center"> <div> <strong>${investor.name}</strong> <div class="small text-muted"> المستثمر: ${investor.invested.toFixed(2)} SP | القيمة الحالية: ${investor.currentValue.toFixed(2)} SP </div> </div> <span class="fw-bold fs-5 ${profitClass}"> <i class="bi ${profitIcon}"></i> ${formattedProfit} </span> </li>`; }).join('')}</ul>`;
     },
     showProfitEditor: (crawlerName) => {
-        const modalElement = document.getElementById('profitEditorModal');
+        ui.profitEditorModal.show();
         const modalTitle = document.getElementById('profitEditorModalLabel');
         const modalBody = document.getElementById('profitEditorModalBody');
-        const modal = new bootstrap.Modal(modalElement);
 
         modalTitle.textContent = `تعديل أرباح المستثمرين في: ${crawlerName}`;
         modalBody.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-warning"></div></div>`;
-        modal.show();
 
         const investorsList = [];
         for (const investorId in investmentsCache) {
@@ -829,5 +1086,31 @@ window.adminActions = {
             }
         });
     },
+    adjustPointsByPercent: async (username, direction) => {
+        const actionText = direction === 'increase' ? 'رفع' : 'خفض';
+        const { value: percent } = await Swal.fire({
+            title: `${actionText} نقاط ${username} بنسبة`,
+            input: 'number',
+            inputLabel: `أدخل النسبة المئوية (%) لـ ${actionText}`,
+            inputPlaceholder: 'مثال: 10',
+            showCancelButton: true,
+            inputValidator: (value) => {
+                if (!value || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
+                    return 'الرجاء إدخال نسبة مئوية موجبة وصحيحة!';
+                }
+            }
+        });
+
+        if (percent) {
+            await apiCall('/api/admin/adjust_points_percent', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    username: username,
+                    percent: percent,
+                    direction: direction
+                })
+            }, `تم ${actionText} نقاط ${username} بنجاح.`);
+        }
+    }
 };
 // --- END OF FILE static/js/admin.js ---
