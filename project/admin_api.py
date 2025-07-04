@@ -17,14 +17,22 @@ bp = Blueprint('admin_api', __name__)
 
 E_ARABIC_TO_W_ARABIC = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
 
+# --- بداية التعديل: تحسين دالة تحويل الأرقام ---
 def _to_float(value, default=0.0):
     if value is None:
         return default
     try:
-        s_value = str(value).translate(E_ARABIC_TO_W_ARABIC).strip()
+        # 1. تحويل القيمة إلى نص وإزالة المسافات
+        s_value = str(value).strip()
+        # 2. ترجمة الأرقام العربية إلى إنجليزية
+        s_value = s_value.translate(E_ARABIC_TO_W_ARABIC)
+        # 3. استبدال الفاصلة العربية والفاصلة العادية بنقطة عشرية
+        s_value = s_value.replace('٫', '.').replace(',', '.')
+        # 4. محاولة التحويل إلى float
         return float(s_value) if s_value else default
     except (ValueError, TypeError):
         return default
+# --- نهاية التعديل ---
 
 def _to_int(value, default=0):
     return int(_to_float(value, float(default)))
@@ -353,7 +361,6 @@ def add_points_product():
 def delete_points_product(pid):
     if pid: db.reference(f'site_settings/shop_products_points/{pid}').delete(); return jsonify(success=True)
 
-# <<< بداية التعديل: تطبيق الإصلاح على هذه الدالة >>>
 @bp.route('/reset_all_free_spins', methods=['POST'])
 @admin_required
 def reset_all_free_spins():
@@ -363,9 +370,8 @@ def reset_all_free_spins():
         updates[f'user_spin_state/{uid}/freeAttempts'] = atts; 
         updates[f'user_spin_state/{uid}/lastFreeUpdateTimestamp'] = now
     if updates: 
-        db.reference().update(updates) # استدعاء update على مرجع فارغ آمن
+        db.reference().update(updates)
     return jsonify(success=True)
-# <<< نهاية التعديل >>>
 
 @bp.route('/shop/add_avatar', methods=['POST'])
 @admin_required
@@ -726,9 +732,15 @@ def force_sell_all_lots():
 @bp.route('/handle_withdrawal_request/<request_id>/<action>', methods=['POST'])
 @admin_required
 def handle_withdrawal_request(request_id, action):
-    if action not in ['approve', 'reject']: return jsonify(success=False, message="إجراء غير صالح."), 400
-    req_ref, request_data = db.reference(f'withdrawal_requests/{request_id}'), req_ref.get()
-    if not request_data or request_data.get('status') != 'pending': return jsonify(success=False, message="الطلب غير موجود أو تمت معالجته بالفعل."), 404
+    if action not in ['approve', 'reject']:
+        return jsonify(success=False, message="إجراء غير صالح."), 400
+
+    req_ref = db.reference(f'withdrawal_requests/{request_id}')
+    request_data = req_ref.get()
+
+    if not request_data or request_data.get('status') != 'pending':
+        return jsonify(success=False, message="الطلب غير موجود أو تمت معالجته بالفعل."), 404
+    
     user_id = request_data.get('user_id')
     if action == 'reject':
         try:
@@ -736,20 +748,36 @@ def handle_withdrawal_request(request_id, action):
             req_ref.update({'status': 'rejected', 'processed_by': session.get('name')})
             db.reference(f'user_messages/{user_id}').push({'text': f"تم رفض طلب سحب الأرباح الخاص بك من استثمار '{request_data['crawler_name']}'.", 'timestamp': int(time.time())})
             return jsonify(success=True, message="تم رفض طلب السحب بنجاح.")
-        except Exception as e: return jsonify(success=False, message=f"خطأ في الخادم: {e}"), 500
+        except Exception as e:
+            return jsonify(success=False, message=f"خطأ في الخادم: {e}"), 500
+    
     try:
-        settings = db.reference('site_settings/investment_settings').get() or {}
-        sell_tax_percent, sell_fee_sp = settings.get('sell_tax_percent', 0.0), settings.get('sell_fee_sp', 0.0)
-        value_of_lot_before_tax, invested_sp = _to_float(request_data.get('amount_to_withdraw')), _to_float(request_data.get('lot_data', {}).get('sp', 0))
-        profit = value_of_lot_before_tax - invested_sp
-        tax_amount = max(0, profit * (sell_tax_percent / 100.0))
-        final_sp_to_return = max(0, value_of_lot_before_tax - tax_amount - sell_fee_sp)
+        final_amount_str = request.form.get('final_amount')
+        if final_amount_str is None:
+            return jsonify(success=False, message="المبلغ النهائي للسحب مطلوب."), 400
+        
+        final_sp_to_return = _to_float(final_amount_str)
+
         db.reference(f'wallets/{user_id}/sp').transaction(lambda current: (current or 0) + final_sp_to_return)
-        req_ref.update({'status': 'approved', 'processed_by': session.get('name')})
+        
+        req_ref.update({'status': 'approved', 'processed_by': session.get('name'), 'final_amount': final_sp_to_return})
+        
         db.reference(f'user_messages/{user_id}').push({'text': f"تمت الموافقة على طلب سحب الأرباح الخاص بك! تم إضافة {final_sp_to_return:,.2f} SP إلى محفظتك.", 'timestamp': int(time.time())})
-        db.reference('investment_log').push({'investor_id': user_id, 'investor_name': request_data.get('user_name'), 'target_name': request_data.get('crawler_name'), 'action': 'sell', 'sp_amount': final_sp_to_return, 'timestamp': int(time.time())})
+        db.reference('investment_log').push({
+            'investor_id': user_id, 
+            'investor_name': request_data.get('user_name'), 
+            'target_name': request_data.get('crawler_name'), 
+            'action': 'sell', 
+            'sp_amount': final_sp_to_return, 
+            'timestamp': int(time.time())
+        })
+        
         return jsonify(success=True, message="تمت الموافقة على الطلب بنجاح.")
-    except Exception as e: return jsonify(success=False, message=f"خطأ في الخادم: {e}"), 500
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="صيغة المبلغ النهائي غير صالحة."), 400
+    except Exception as e:
+        print(f"!!! Handle Withdrawal (Approve) Error: {e}", file=sys.stderr)
+        return jsonify(success=False, message=f"خطأ في الخادم: {e}"), 500
 
 @bp.route('/settings/market_governor', methods=['POST'])
 @admin_required

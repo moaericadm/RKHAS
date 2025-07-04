@@ -1,26 +1,52 @@
 // --- START OF FILE static/js/admin.js ---
 
-function enforceEnglishNumbers() {
-    const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    const englishNumerals = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+// --- بداية التعديل الشامل: نظام فرض الأرقام الإنجليزية ---
 
-    document.querySelectorAll('input[type="number"]').forEach(input => {
-        input.addEventListener('input', (event) => {
-            let value = event.target.value;
-            let originalValue = value;
-
-            for (let i = 0; i < arabicNumerals.length; i++) {
-                const regex = new RegExp(arabicNumerals[i], 'g');
-                value = value.replace(regex, englishNumerals[i]);
-            }
-
-            if (value !== originalValue) {
-                event.target.value = value;
-            }
-        });
-    });
-    console.log("English number enforcement has been applied to all number inputs.");
+/**
+ * دالة مساعدة لتحويل أي سلسلة نصية تحتوي على أرقام عربية أو فواصل عربية إلى إنجليزية.
+ * @param {string | number} str - النص أو الرقم المراد تحويله.
+ * @returns {string} - النص المحوّل بالأرقام الإنجليزية.
+ */
+function toEnglishNumerals(str) {
+    if (str === null || str === undefined) return '';
+    let s = String(str);
+    const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '٫'];
+    const englishNumerals = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.'];
+    for (let i = 0; i < arabicNumerals.length; i++) {
+        s = s.replace(new RegExp(arabicNumerals[i], 'g'), englishNumerals[i]);
+    }
+    // استبدال الفاصلة العادية (comma) بنقطة عشرية أيضاً
+    return s.replace(/,/g, '.');
 }
+
+/**
+ * يطبّق منطق تحويل الأرقام على حقل إدخال معين.
+ * يتم التحويل فوراً عند الاستدعاء، ويتم إضافة مستمع لضمان التحويل أثناء الكتابة.
+ * @param {HTMLElement} inputElement - حقل الإدخال الذي سيتم تعديله.
+ */
+function setupNumberInput(inputElement) {
+    if (!inputElement) return;
+
+    const convertValue = () => {
+        const originalValue = inputElement.value;
+        const englishValue = toEnglishNumerals(originalValue);
+        if (englishValue !== originalValue) {
+            // حفظ موقع المؤشر قبل التغيير
+            const selectionStart = inputElement.selectionStart;
+            const selectionEnd = inputElement.selectionEnd;
+            inputElement.value = englishValue;
+            // استعادة موقع المؤشر
+            inputElement.setSelectionRange(selectionStart, selectionEnd);
+        }
+    };
+
+    // التحويل الفوري عند الربط
+    convertValue();
+    // إضافة المستمع للتحويل أثناء الكتابة
+    inputElement.addEventListener('input', convertValue);
+}
+
+// --- نهاية التعديل الشامل ---
 
 
 let isDomReady = false, isFirebaseReady = false;
@@ -32,6 +58,7 @@ const ui = {};
 let db, usersCache = {};
 let investmentsCache = {};
 let registeredUsersCache = {};
+let withdrawalRequestsCache = {};
 
 const formatNumber = (num) => new Intl.NumberFormat('en-US').format(parseInt(num || 0));
 
@@ -186,7 +213,8 @@ function renderCandidatesManagement(data) {
 
 function renderWithdrawalRequestsTable(requests) {
     if (!ui.withdrawalRequestsTable) return;
-    const requestsArray = Object.entries(requests || {}).filter(([id, req]) => req.status === 'pending');
+    withdrawalRequestsCache = requests || {};
+    const requestsArray = Object.entries(withdrawalRequestsCache).filter(([id, req]) => req.status === 'pending');
 
     if (requestsArray.length === 0) {
         ui.withdrawalRequestsTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">لا توجد طلبات سحب حالياً.</td></tr>';
@@ -223,7 +251,6 @@ function loadSpinWheelSettings(data) {
     (data.prizes && data.prizes.length ? data.prizes : [{ value: 100, weight: 1 }]).forEach(p => addPrizeRow(p.value, p.weight))
 }
 
-// <<< بداية التعديل: تحميل القيمة الجديدة >>>
 function loadContestSettings(data) {
     if (!ui.contestSettingsForm) return;
     ui.contestEnabledToggle.checked = data.is_enabled || false;
@@ -231,7 +258,6 @@ function loadContestSettings(data) {
     ui.voterSpRewardInput.value = data.voter_sp_reward || 0;
     ui.contestMultiplierBoostInput.value = data.multiplier_boost || 0.2;
 }
-// <<< نهاية التعديل >>>
 
 function loadGamblingSettings(data) { if (ui.gamblingEnabledToggle) ui.gamblingEnabledToggle.checked = data.is_enabled || false; if (ui.gamblingMaxBetInput) ui.gamblingMaxBetInput.value = data.max_bet || 1000; if (ui.gamblingWinChanceInput) ui.gamblingWinChanceInput.value = data.win_chance_percent || 49.5; }
 
@@ -337,9 +363,7 @@ function initializeAdminPanel() {
         contestEnabledToggle: document.getElementById('contest-enabled-toggle'),
         winnerPointsRewardInput: document.getElementById('winner-points-reward-input'),
         voterSpRewardInput: document.getElementById('voter-sp-reward-input'),
-        // <<< بداية التعديل: إضافة الحقل الجديد >>>
         contestMultiplierBoostInput: document.getElementById('contest-multiplier-boost-input'),
-        // <<< نهاية التعديل >>>
         gamblingSettingsForm: document.getElementById('gambling-settings-form'),
         gamblingEnabledToggle: document.getElementById('gambling-enabled-toggle'),
         gamblingMaxBetInput: document.getElementById('gambling-max-bet-input'),
@@ -403,7 +427,10 @@ function initializeAdminPanel() {
     db = firebase.database();
     firebase.auth().signInWithCustomToken(sessionStorage.getItem('firebaseToken')).then(initializeDataListeners).catch(e => console.error("Admin Auth Error:", e));
     setupEventListeners();
-    enforceEnglishNumbers();
+
+    // --- بداية التعديل: تطبيق الدالة على جميع حقول الأرقام في الصفحة ---
+    document.querySelectorAll('input[type="number"]').forEach(setupNumberInput);
+    // --- نهاية التعديل ---
 }
 
 function initializeDataListeners() {
@@ -441,7 +468,7 @@ function setupEventListeners() {
     listen(ui.addCandidateForm, 'submit', handleAddCandidate);
     listen(ui.announcementForm, 'submit', e => { e.preventDefault(); apiCall('/api/admin/announcements/add', { method: 'POST', body: new FormData(e.target) }, 'تم إضافة الإعلان.').then(() => e.target.reset()); });
     listen(ui.honorRollForm, 'submit', e => { e.preventDefault(); apiCall('/api/admin/honor_roll/add', { method: 'POST', body: new FormData(e.target) }, 'تمت الإضافة للقائمة.').then(() => e.target.reset()); });
-    listen(ui.addPrizeBtn, 'click', () => addPrizeRow());
+    listen(ui.addPrizeBtn, 'click', () => { addPrizeRow(); document.querySelectorAll('input[type="number"]').forEach(setupNumberInput); });
     listen(ui.spinWheelSettingsForm, 'submit', handleSpinWheelSettingsSubmit);
     listen(ui.investmentSettingsForm, 'submit', handleInvestmentSettingsSubmit);
     listen(ui.addProductForm, 'submit', e => handleShopProductForm(e, '/api/admin/shop/add_product'));
@@ -512,7 +539,6 @@ function setupEventListeners() {
 }
 
 async function handleGamblingSettingsSubmit(e) { e.preventDefault(); const settings = { is_enabled: ui.gamblingEnabledToggle.checked, max_bet: parseInt(ui.gamblingMaxBetInput.value) || 1000, win_chance_percent: parseFloat(ui.gamblingWinChanceInput.value) || 49.5 }; await apiCall('/api/admin/settings/gambling', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }, 'تم حفظ إعدادات الرهان!'); }
-// <<< بداية التعديل: حفظ القيمة الجديدة >>>
 async function handleContestSettingsSubmit(e) {
     e.preventDefault();
     const settings = {
@@ -523,7 +549,6 @@ async function handleContestSettingsSubmit(e) {
     };
     await apiCall('/api/admin/settings/contest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }, 'تم حفظ إعدادات المنافسة!');
 }
-// <<< نهاية التعديل >>>
 async function handleInvestmentSettingsSubmit(e) {
     e.preventDefault();
     const settings = {
@@ -744,25 +769,203 @@ window.adminActions = {
     deleteAvatar: id => { Swal.fire({ title: 'هل أنت متأكد؟', text: "سيتم حذف الأفاتار نهائياً من المتجر والتخزين!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم, احذفه!', cancelButtonText: 'إلغاء' }).then(result => { if (result.isConfirmed) { apiCall(`/api/admin/shop/delete_avatar/${id}`, { method: 'POST' }, 'تم حذف الأفاتار.'); } }); },
     manageUserAvatars: async (userId, userName) => { Swal.fire({ title: `جلب أفاتارات ${userName}...`, didOpen: () => Swal.showLoading() }); try { const ownedAvatarsSnap = await db.ref(`user_avatars/${userId}/owned`).once('value'); const ownedAvatars = ownedAvatarsSnap.val() || {}; const avatarIds = Object.keys(ownedAvatars); if (avatarIds.length === 0) { Swal.fire('فارغ', `المستخدم ${userName} لا يمتلك أي أفاتارات.`, 'info'); return; } const allAvatarsSnap = await db.ref('site_settings/shop_avatars').once('value'); const allAvatars = allAvatarsSnap.val() || {}; const listHtml = avatarIds.map(id => { const avatar = allAvatars[id]; if (!avatar) return ''; return ` <li class="list-group-item d-flex justify-content-between align-items-center" id="user-avatar-li-${id}"> <div> <img src="${avatar.image_url}" class="avatar-preview me-2"> <span>${avatar.name}</span> </div> <button class="btn btn-sm btn-outline-danger" data-avatar-id="${id}" data-avatar-name="${avatar.name}">إزالة</button> </li> `; }).join(''); Swal.fire({ title: `أفاتارات ${userName}`, html: `<ul class="list-group" style="max-height: 40vh; overflow-y: auto;">${listHtml}</ul>`, width: '500px', didOpen: () => { document.querySelectorAll('.swal2-container .btn-outline-danger').forEach(btn => { btn.addEventListener('click', (e) => { const avatarId = e.currentTarget.dataset.avatarId; const avatarName = e.currentTarget.dataset.avatarName; Swal.fire({ title: `تأكيد الإزالة`, text: `هل أنت متأكد من إزالة أفاتار "${avatarName}" من المستخدم ${userName}؟`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'نعم، قم بالإزالة!', cancelButtonText: 'إلغاء' }).then(async (result) => { if (result.isConfirmed) { try { await apiCall('/api/admin/user_avatar/remove', { method: 'POST', body: new URLSearchParams({ user_id: userId, avatar_id: avatarId }) }, `تمت إزالة الأفاتار.`); document.getElementById(`user-avatar-li-${id}`).remove(); } catch (err) { } } }); }); }); } }); } catch (error) { console.error("Error fetching user avatars:", error); Swal.fire('خطأ', 'فشل في جلب بيانات أفاتارات المستخدم.', 'error'); } },
     handleGiftRequest: (requestId, action, btn) => { btn.disabled = true; const otherBtn = action === 'approve' ? btn.nextElementSibling : btn.previousElementSibling; if (otherBtn) otherBtn.disabled = true; apiCall(`/api/admin/gift_request/${requestId}/${action}`, { method: 'POST' }).then(response => { Swal.fire('تم!', response.message, 'success'); }).catch(err => { btn.disabled = false; if (otherBtn) otherBtn.disabled = false; }); },
-    handleWithdrawalRequest: (requestId, action, btn) => {
-        btn.disabled = true;
-        const otherBtn = action === 'approve' ? btn.nextElementSibling : btn.previousElementSibling;
+    handleWithdrawalRequest: async (requestId, action, button) => {
+        button.disabled = true;
+        const otherBtn = action === 'approve' ? button.nextElementSibling : button.previousElementSibling;
         if (otherBtn) otherBtn.disabled = true;
-        apiCall(`/api/admin/handle_withdrawal_request/${requestId}/${action}`, { method: 'POST' })
-            .then(response => { Swal.fire('تم!', response.message, 'success'); })
-            .catch(err => {
-                btn.disabled = false;
+
+        if (action === 'reject') {
+            try {
+                await apiCall(`/api/admin/handle_withdrawal_request/${requestId}/reject`, { method: 'POST' }, 'تم رفض الطلب بنجاح.');
+            } catch (e) {
+                button.disabled = false;
                 if (otherBtn) otherBtn.disabled = false;
-            });
+            }
+            return;
+        }
+
+        const requestData = withdrawalRequestsCache[requestId];
+        if (!requestData) {
+            Swal.fire('خطأ!', 'لم يتم العثور على بيانات الطلب.', 'error');
+            button.disabled = false;
+            if (otherBtn) otherBtn.disabled = false;
+            return;
+        }
+
+        const initialAmount = parseFloat(requestData.amount_to_withdraw || 0);
+
+        const { value: formValues } = await Swal.fire({
+            title: `الموافقة على سحب لـ ${requestData.user_name}`,
+            html: `
+                <p>المبلغ المطلوب: <strong class="text-warning">${initialAmount.toFixed(2)} SP</strong></p>
+                <hr>
+                <label for="swal-final-amount" class="swal2-label">أدخل المبلغ النهائي للموافقة عليه:</label>
+                <input id="swal-final-amount" type="number" step="0.01" class="swal2-input" value="${initialAmount.toFixed(2)}">
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'تأكيد الموافقة',
+            cancelButtonText: 'إلغاء',
+            // --- بداية التعديل: تطبيق دالة الإدخال على النافذة المنبثقة ---
+            didOpen: () => {
+                const input = document.getElementById('swal-final-amount');
+                setupNumberInput(input);
+            },
+            // --- نهاية التعديل ---
+            preConfirm: () => {
+                const finalAmount = document.getElementById('swal-final-amount').value;
+                if (!finalAmount || isNaN(parseFloat(finalAmount))) {
+                    Swal.showValidationMessage('الرجاء إدخال مبلغ صحيح.');
+                    return false;
+                }
+                return { final_amount: parseFloat(finalAmount) };
+            }
+        });
+
+        if (formValues && formValues.final_amount !== undefined) {
+            try {
+                const payload = new URLSearchParams({ final_amount: formValues.final_amount });
+                await apiCall(`/api/admin/handle_withdrawal_request/${requestId}/approve`, { method: 'POST', body: payload }, "تمت الموافقة على الطلب بنجاح!");
+            } catch (e) {
+                button.disabled = false;
+                if (otherBtn) otherBtn.disabled = false;
+            }
+        } else {
+            button.disabled = false;
+            if (otherBtn) otherBtn.disabled = false;
+        }
     },
     sendUserMessage: async (id, name) => { const { value: msg } = await Swal.fire({ title: `رسالة إلى ${name}`, input: 'textarea', inputPlaceholder: 'اكتب رسالتك هنا...' }); if (msg) apiCall('/api/admin/user_message/send', { method: 'POST', body: new URLSearchParams({ user_id: id, message: msg }) }) },
-    editUserWallet: async (id, name) => { const walletSnapshot = await db.ref(`wallets/${id}`).once('value'); const wallet = walletSnapshot.val() || { cc: 0, sp: 0 }; const { value: formValues } = await Swal.fire({ title: `تعديل محفظة ${name}`, html: ` <label for="swal-cc" class="swal2-label">زاحف كوين (CC)</label> <input id="swal-cc" type="number" class="swal2-input" value="${wallet.cc || 0}"> <label for="swal-sp" class="swal2-label">نقاط الدعم (SP)</label> <input id="swal-sp" type="number" step="0.01" class="swal2-input" value="${(wallet.sp || 0).toFixed(2)}"> `, focusConfirm: false, showCancelButton: true, confirmButtonText: 'حفظ التغييرات', cancelButtonText: 'إلغاء', preConfirm: () => ({ cc: document.getElementById('swal-cc').value, sp: document.getElementById('swal-sp').value }) }); if (formValues) { apiCall('/api/admin/update_wallet', { method: 'POST', body: new URLSearchParams({ user_id: id, user_name: name, cc: formValues.cc, sp: formValues.sp }) }, 'تم تحديث المحفظة بنجاح.'); } },
-    editPurchasedAttempts: async (id, name) => { const state = (await db.ref(`user_spin_state/${id}`).once('value')).val() || {}; const current = state.purchasedAttempts || 0; const { value: newVal } = await Swal.fire({ title: `تعديل محاولات ${name}`, input: 'number', inputValue: current }); if (newVal !== undefined && newVal !== null) { apiCall('/api/admin/update_purchased_attempts', { method: 'POST', body: new URLSearchParams({ user_id: id, attempts: newVal }) }, 'تم تحديث الرصيد.') } },
-    editProduct: (id, sp, cc) => { Swal.fire({ title: 'تعديل منتج SP', html: `<input id="swal-sp" class="swal2-input" placeholder="كمية SP" value="${sp}" type="number"><input id="swal-cc" class="swal2-input" placeholder="سعر CC" value="${cc}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ sp_amount: document.getElementById('swal-sp').value, cc_price: document.getElementById('swal-cc').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') }); },
-    editSpinProduct: (id, attempts, sp) => { Swal.fire({ title: 'تعديل منتج المحاولات', html: `<input id="swal-attempts" class="swal2-input" placeholder="عدد المحاولات" value="${attempts}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ attempts_amount: document.getElementById('swal-attempts').value, sp_price: document.getElementById('swal-sp').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_spin_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') }); },
-    editPointsProduct: (id, points, sp, limit) => { Swal.fire({ title: 'تعديل منتج الأسهم', html: `<input id="swal-points" class="swal2-input" placeholder="كمية النقاط" value="${points}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number"><input id="swal-limit" class="swal2-input" placeholder="الحد اليومي" value="${limit}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ points_amount: document.getElementById('swal-points').value, sp_price: document.getElementById('swal-sp').value, daily_limit: document.getElementById('swal-limit').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_points_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') }); },
-    editAvatar: (id, name, personalPrice, giftPrice) => { Swal.fire({ title: 'تعديل بيانات الأفاتار', html: `<input id="swal-name" class="swal2-input" placeholder="اسم الأفاتار" value="${name}"> <input id="swal-personal" class="swal2-input" placeholder="السعر الشخصي (SP)" value="${personalPrice}" type="number"> <input id="swal-gift" class="swal2-input" placeholder="سعر الهدية (SP)" value="${giftPrice}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ avatar_name: document.getElementById('swal-name').value, price_sp_personal: document.getElementById('swal-personal').value, price_sp_gift: document.getElementById('swal-gift').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_avatar/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل الأفاتار بنجاح.') }); },
-    editNudge: (id, text, price) => { Swal.fire({ title: 'تعديل النكزة', html: `<textarea id="swal-text" class="swal2-textarea" placeholder="نص النكزة">${text}</textarea><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${price}" type="number">`, showCancelButton: true, confirmButtonText: 'حفظ التعديل', preConfirm: () => ({ nudge_text: document.getElementById('swal-text').value, sp_price: document.getElementById('swal-sp').value }) }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_nudge/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل النكزة بنجاح.') }); },
+    // --- بداية التعديل: تطبيق الدالة على النوافذ المنبثقة الأخرى ---
+    editUserWallet: async (id, name) => {
+        const walletSnapshot = await db.ref(`wallets/${id}`).once('value');
+        const wallet = walletSnapshot.val() || { cc: 0, sp: 0 };
+        const { value: formValues } = await Swal.fire({
+            title: `تعديل محفظة ${name}`,
+            html: ` <label for="swal-cc" class="swal2-label">زاحف كوين (CC)</label> <input id="swal-cc" type="number" class="swal2-input" value="${wallet.cc || 0}"> <label for="swal-sp" class="swal2-label">نقاط الدعم (SP)</label> <input id="swal-sp" type="number" step="0.01" class="swal2-input" value="${(wallet.sp || 0).toFixed(2)}"> `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التغييرات',
+            cancelButtonText: 'إلغاء',
+            didOpen: () => {
+                setupNumberInput(document.getElementById('swal-cc'));
+                setupNumberInput(document.getElementById('swal-sp'));
+            },
+            preConfirm: () => ({ cc: document.getElementById('swal-cc').value, sp: document.getElementById('swal-sp').value })
+        });
+        if (formValues) {
+            apiCall('/api/admin/update_wallet', { method: 'POST', body: new URLSearchParams({ user_id: id, user_name: name, cc: formValues.cc, sp: formValues.sp }) }, 'تم تحديث المحفظة بنجاح.');
+        }
+    },
+    editPurchasedAttempts: async (id, name) => {
+        const state = (await db.ref(`user_spin_state/${id}`).once('value')).val() || {};
+        const current = state.purchasedAttempts || 0;
+        const { value: newVal } = await Swal.fire({
+            title: `تعديل محاولات ${name}`,
+            input: 'number',
+            inputValue: current,
+            didOpen: (modal) => {
+                setupNumberInput(Swal.getInput());
+            }
+        });
+        if (newVal !== undefined && newVal !== null) {
+            apiCall('/api/admin/update_purchased_attempts', { method: 'POST', body: new URLSearchParams({ user_id: id, attempts: newVal }) }, 'تم تحديث الرصيد.')
+        }
+    },
+    editProduct: (id, sp, cc) => {
+        Swal.fire({
+            title: 'تعديل منتج SP',
+            html: `<input id="swal-sp" class="swal2-input" placeholder="كمية SP" value="${sp}" type="number"><input id="swal-cc" class="swal2-input" placeholder="سعر CC" value="${cc}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            didOpen: () => {
+                setupNumberInput(document.getElementById('swal-sp'));
+                setupNumberInput(document.getElementById('swal-cc'));
+            },
+            preConfirm: () => ({ sp_amount: document.getElementById('swal-sp').value, cc_price: document.getElementById('swal-cc').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') });
+    },
+    editSpinProduct: (id, attempts, sp) => {
+        Swal.fire({
+            title: 'تعديل منتج المحاولات',
+            html: `<input id="swal-attempts" class="swal2-input" placeholder="عدد المحاولات" value="${attempts}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            didOpen: () => {
+                setupNumberInput(document.getElementById('swal-attempts'));
+                setupNumberInput(document.getElementById('swal-sp'));
+            },
+            preConfirm: () => ({ attempts_amount: document.getElementById('swal-attempts').value, sp_price: document.getElementById('swal-sp').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_spin_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') });
+    },
+    editPointsProduct: (id, points, sp, limit) => {
+        Swal.fire({
+            title: 'تعديل منتج الأسهم',
+            html: `<input id="swal-points" class="swal2-input" placeholder="كمية النقاط" value="${points}" type="number"><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${sp}" type="number"><input id="swal-limit" class="swal2-input" placeholder="الحد اليومي" value="${limit}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            didOpen: () => {
+                setupNumberInput(document.getElementById('swal-points'));
+                setupNumberInput(document.getElementById('swal-sp'));
+                setupNumberInput(document.getElementById('swal-limit'));
+            },
+            preConfirm: () => ({ points_amount: document.getElementById('swal-points').value, sp_price: document.getElementById('swal-sp').value, daily_limit: document.getElementById('swal-limit').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_points_product/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل المنتج بنجاح.') });
+    },
+    editAvatar: (id, name, personalPrice, giftPrice) => {
+        Swal.fire({
+            title: 'تعديل بيانات الأفاتار',
+            html: `<input id="swal-name" class="swal2-input" placeholder="اسم الأفاتار" value="${name}"> <input id="swal-personal" class="swal2-input" placeholder="السعر الشخصي (SP)" value="${personalPrice}" type="number"> <input id="swal-gift" class="swal2-input" placeholder="سعر الهدية (SP)" value="${giftPrice}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            didOpen: () => {
+                setupNumberInput(document.getElementById('swal-personal'));
+                setupNumberInput(document.getElementById('swal-gift'));
+            },
+            preConfirm: () => ({ avatar_name: document.getElementById('swal-name').value, price_sp_personal: document.getElementById('swal-personal').value, price_sp_gift: document.getElementById('swal-gift').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_avatar/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل الأفاتار بنجاح.') });
+    },
+    editNudge: (id, text, price) => {
+        Swal.fire({
+            title: 'تعديل النكزة',
+            html: `<textarea id="swal-text" class="swal2-textarea" placeholder="نص النكزة">${text}</textarea><input id="swal-sp" class="swal2-input" placeholder="سعر SP" value="${price}" type="number">`,
+            showCancelButton: true,
+            confirmButtonText: 'حفظ التعديل',
+            didOpen: () => {
+                setupNumberInput(document.getElementById('swal-sp'));
+            },
+            preConfirm: () => ({ nudge_text: document.getElementById('swal-text').value, sp_price: document.getElementById('swal-sp').value })
+        }).then(r => { if (r.isConfirmed) apiCall(`/api/admin/shop/edit_nudge/${id}`, { method: 'POST', body: new URLSearchParams(r.value) }, 'تم تعديل النكزة بنجاح.') });
+    },
+    adjustPointsByPercent: async (username, direction) => {
+        const actionText = direction === 'increase' ? 'رفع' : 'خفض';
+        const { value: percent } = await Swal.fire({
+            title: `${actionText} نقاط ${username} بنسبة`,
+            input: 'number',
+            inputLabel: `أدخل النسبة المئوية (%) لـ ${actionText}`,
+            inputPlaceholder: 'مثال: 10',
+            showCancelButton: true,
+            didOpen: () => {
+                setupNumberInput(Swal.getInput());
+            },
+            inputValidator: (value) => {
+                if (!value || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
+                    return 'الرجاء إدخال نسبة مئوية موجبة وصحيحة!';
+                }
+            }
+        });
+        if (percent) {
+            await apiCall('/api/admin/adjust_points_percent', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    username: username,
+                    percent: percent,
+                    direction: direction
+                })
+            }, `تم ${actionText} نقاط ${username} بنجاح.`);
+        }
+    },
+    // --- نهاية التعديل ---
     manageUserNudges: async (userId, userName) => {
         Swal.fire({ title: `جلب نكزات ${userName}...`, didOpen: () => Swal.showLoading() });
         try {
@@ -1022,6 +1225,7 @@ window.adminActions = {
         };
 
         modalBody.querySelectorAll('.personal-multiplier-input').forEach(input => {
+            setupNumberInput(input); // تطبيق دالة التحويل
             input.addEventListener('blur', (e) => applyMultiplierUpdate(e.target, e.target.value));
         });
 
@@ -1094,13 +1298,15 @@ window.adminActions = {
             inputLabel: `أدخل النسبة المئوية (%) لـ ${actionText}`,
             inputPlaceholder: 'مثال: 10',
             showCancelButton: true,
+            didOpen: () => {
+                setupNumberInput(Swal.getInput());
+            },
             inputValidator: (value) => {
                 if (!value || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
                     return 'الرجاء إدخال نسبة مئوية موجبة وصحيحة!';
                 }
             }
         });
-
         if (percent) {
             await apiCall('/api/admin/adjust_points_percent', {
                 method: 'POST',
