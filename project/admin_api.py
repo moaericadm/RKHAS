@@ -17,22 +17,16 @@ bp = Blueprint('admin_api', __name__)
 
 E_ARABIC_TO_W_ARABIC = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
 
-# --- بداية التعديل: تحسين دالة تحويل الأرقام ---
 def _to_float(value, default=0.0):
     if value is None:
         return default
     try:
-        # 1. تحويل القيمة إلى نص وإزالة المسافات
         s_value = str(value).strip()
-        # 2. ترجمة الأرقام العربية إلى إنجليزية
         s_value = s_value.translate(E_ARABIC_TO_W_ARABIC)
-        # 3. استبدال الفاصلة العربية والفاصلة العادية بنقطة عشرية
         s_value = s_value.replace('٫', '.').replace(',', '.')
-        # 4. محاولة التحويل إلى float
         return float(s_value) if s_value else default
     except (ValueError, TypeError):
         return default
-# --- نهاية التعديل ---
 
 def _to_int(value, default=0):
     return int(_to_float(value, float(default)))
@@ -796,9 +790,12 @@ def save_governor_settings():
         if scheduler.get_job('market_justice_job'):
             scheduler.remove_job('market_justice_job')
             print(">> Removed old 'market_justice_job'.")
-        scheduler.add_job(id='market_justice_job',func=scheduled_tasks.automated_market_balance,trigger='interval',seconds=total_seconds,args=[current_app._get_current_object()])
-        print(f">> Rescheduled 'market_justice_job' to run every {total_seconds} seconds.")
-        return jsonify(success=True, message="تم حفظ الإعدادات وإعادة جدولة المهمة بنجاح.")
+        if settings['enabled']:
+            scheduler.add_job(id='market_justice_job',func=scheduled_tasks.automated_market_balance,trigger='interval',seconds=total_seconds,args=[current_app._get_current_object()])
+            print(f">> Rescheduled 'market_justice_job' to run every {total_seconds} seconds.")
+        else:
+            print(">> Market Governor is now disabled. Job not scheduled.")
+        return jsonify(success=True, message="تم حفظ إعدادات حاكم السوق وإعادة جدولة المهمة بنجاح.")
     except Exception as e:
         print(f"!!! Save Governor Settings Error (General): {e}", file=sys.stderr)
         return jsonify(success=False, message=f"خطأ في الخادم: {e}"), 500
