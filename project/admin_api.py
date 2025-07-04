@@ -292,40 +292,24 @@ def save_gambling_settings():
         print(f"!!! Save Gambling Settings Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
 
-# <<< بداية التعديل: حفظ القيمة الجديدة >>>
 @bp.route('/settings/contest', methods=['POST'])
 @admin_required
 def save_contest_settings():
     data = request.get_json()
-    if not data:
-        return jsonify(success=False, message="لم يتم استلام أي بيانات."), 400
-    
+    if not data: return jsonify(success=False, message="لم يتم استلام أي بيانات."), 400
     try:
         is_enabled = bool(data.get('is_enabled'))
         winner_points = _to_int(data.get('winner_points_reward'))
         voter_sp = _to_int(data.get('voter_sp_reward'))
         multiplier_boost = _to_float(data.get('multiplier_boost', 0.2))
-
-        if winner_points < 0 or voter_sp < 0 or multiplier_boost < 0:
-            raise ValueError("لا يمكن أن تكون القيم سالبة.")
-
-        settings = {
-            'is_enabled': is_enabled,
-            'winner_points_reward': winner_points,
-            'voter_sp_reward': voter_sp,
-            'multiplier_boost': multiplier_boost
-        }
-
+        if winner_points < 0 or voter_sp < 0 or multiplier_boost < 0: raise ValueError("لا يمكن أن تكون القيم سالبة.")
+        settings = {'is_enabled': is_enabled,'winner_points_reward': winner_points,'voter_sp_reward': voter_sp, 'multiplier_boost': multiplier_boost}
         db.reference('site_settings/contest_settings').set(settings)
         return jsonify(success=True, message="تم حفظ إعدادات المنافسة بنجاح!")
-
-    except (ValueError, TypeError) as e:
-        return jsonify(success=False, message=f"بيانات غير صالحة. {e}"), 400
+    except (ValueError, TypeError) as e: return jsonify(success=False, message=f"بيانات غير صالحة. {e}"), 400
     except Exception as e:
         print(f"!!! Save Contest Settings Error: {e}", file=sys.stderr)
         return jsonify(success=False, message="خطأ في الخادم."), 500
-# <<< نهاية التعديل >>>
-
 
 @bp.route('/shop/add_product', methods=['POST'])
 @admin_required
@@ -369,14 +353,19 @@ def add_points_product():
 def delete_points_product(pid):
     if pid: db.reference(f'site_settings/shop_products_points/{pid}').delete(); return jsonify(success=True)
 
+# <<< بداية التعديل: تطبيق الإصلاح على هذه الدالة >>>
 @bp.route('/reset_all_free_spins', methods=['POST'])
 @admin_required
 def reset_all_free_spins():
     settings = db.reference('site_settings/spin_wheel_settings').get() or {}; atts = settings.get('maxAttempts', 1); now = int(time.time()); updates = {}
     users_approved = (db.reference('registered_users').order_by_child('status').equal_to('approved').get() or {})
-    for uid in users_approved: updates[f'user_spin_state/{uid}/freeAttempts'] = atts; updates[f'user_spin_state/{uid}/lastFreeUpdateTimestamp'] = now
-    if updates: db.reference('/').update(updates)
+    for uid in users_approved: 
+        updates[f'user_spin_state/{uid}/freeAttempts'] = atts; 
+        updates[f'user_spin_state/{uid}/lastFreeUpdateTimestamp'] = now
+    if updates: 
+        db.reference().update(updates) # استدعاء update على مرجع فارغ آمن
     return jsonify(success=True)
+# <<< نهاية التعديل >>>
 
 @bp.route('/shop/add_avatar', methods=['POST'])
 @admin_required
